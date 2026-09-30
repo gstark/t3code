@@ -5,11 +5,13 @@
  */
 import { assert, it } from "@effect/vitest";
 import {
+  CheckpointId,
   MessageId,
   NodeId,
   ProviderInstanceId,
   ProviderSessionId,
   ProviderThreadId,
+  ProviderTurnId,
   RunAttemptId,
   RunId,
   ThreadId,
@@ -1197,6 +1199,76 @@ describe("OpenCode2 adapter", () => {
     Effect.gen(function* () {
       const runtime = yield* openCode2ReplayRuntime([...opening]);
       assert.equal(runtime.getModelContextWindow?.(bigPickle), 160000);
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect("clears a staged revert whose commit failed, before the next prompt too", () =>
+    Effect.gen(function* () {
+      const kept = "msg_t3_turn_run-attempt:kept:1";
+      const dropped = "msg_t3_turn_run-attempt:dropped:1";
+      const { runtime, thread } = yield* resumed([
+        out("message.list", "<any>"),
+        reply("message.list", {
+          data: [
+            { id: dropped, time: { created: 2 }, text: "second", type: "user" },
+            { id: kept, time: { created: 1 }, text: "first", type: "user" },
+          ],
+          cursor: {},
+        }),
+        out("session.revert.stage", { sessionID: SESSION, messageID: dropped, files: false }),
+        replyData("session.revert.stage", { messageID: dropped, files: [] }),
+        out("session.revert.commit", { sessionID: SESSION }),
+        reply("session.revert.commit", {
+          status: 500,
+          body: { _tag: "UnknownError", message: "disk I/O error" },
+        }),
+        // Uncleared, OpenCode would commit the stage on the next prompt.
+        out("session.revert.clear", { sessionID: SESSION }),
+        reply("session.revert.clear", {
+          status: 500,
+          body: { _tag: "UnknownError", message: "busy" },
+        }),
+        // The next turn clears it first, then waits out the empty execution `clear` runs.
+        out("session.revert.clear", { sessionID: SESSION }),
+        reply("session.revert.clear", null),
+        event("session.execution.started", { sessionID: SESSION }),
+        event("session.execution.succeeded", { sessionID: SESSION }),
+        out("session.prompt", { sessionID: SESSION, id: "<any>", text: "<any>" }),
+        promptAccepted,
+        event("session.execution.started", { sessionID: SESSION }),
+        event("session.execution.succeeded", { sessionID: SESSION }),
+      ]);
+      const now = yield* DateTime.now;
+      const turn = (attempt: string, ordinal: number) => ({
+        id: ProviderTurnId.make(`provider-turn:${attempt}`),
+        providerThreadId: thread.id,
+        nodeId: NodeId.make(`node:${attempt}`),
+        runAttemptId: RunAttemptId.make(`run-attempt:${attempt}:1`),
+        nativeTurnRef: {
+          driver: OPENCODE_PROVIDER,
+          nativeId: `msg_t3_turn_run-attempt:${attempt}:1`,
+          strength: "weak" as const,
+        },
+        ordinal,
+        status: "completed" as const,
+        startedAt: now,
+        completedAt: now,
+      });
+      const rollback = yield* runtime
+        .rollbackThread({
+          providerThread: thread,
+          target: {
+            type: "provider_turn",
+            checkpointId: CheckpointId.make("checkpoint:kept"),
+            appRunOrdinal: 1,
+            providerTurn: turn("kept", 1),
+          },
+          providerThreadTurns: [turn("kept", 1), turn("dropped", 2)],
+        })
+        .pipe(Effect.exit);
+      assert.isTrue(Exit.isFailure(rollback));
+      yield* runtime.startTurn(turnInput(thread));
+      assert.equal((yield* terminalOf(runtime))?.status, "completed");
     }).pipe(Effect.scoped),
   );
 });
