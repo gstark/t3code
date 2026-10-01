@@ -3222,6 +3222,28 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
     }),
   );
 
+  it.effect("cleans up a worktree with nothing to land, even beside a dirty main checkout", () =>
+    Effect.gen(function* () {
+      const { repoDir, remoteDir, worktreeDir } = yield* makeLandableWorktree();
+      NodeFS.writeFileSync(NodePath.join(repoDir, "README.md"), "edited\n");
+      const remoteMainBefore = (yield* runGit(remoteDir, ["rev-parse", "main"])).stdout.trim();
+
+      const { manager } = yield* makeManager();
+      const result = yield* runStackedAction(manager, { cwd: worktreeDir, action: "land" });
+
+      expect(result.commit.status).toBe("skipped_not_requested");
+      expect(result.push.status).toBe("skipped_not_requested");
+      expect(result.land).toMatchObject({ branch: "feature/land", baseBranch: "main" });
+      expect(result.land?.fromSha).toBeUndefined();
+      expect(result.toast.title).toBe("Cleaned up worktree");
+      expect(NodeFS.existsSync(worktreeDir)).toBe(false);
+      expect((yield* runGit(repoDir, ["branch", "--list", "feature/land"])).stdout.trim()).toBe("");
+      expect((yield* runGit(remoteDir, ["rev-parse", "main"])).stdout.trim()).toBe(
+        remoteMainBefore,
+      );
+    }),
+  );
+
   it.effect("refuses to land into a dirty main checkout before committing", () =>
     Effect.gen(function* () {
       const { repoDir, worktreeDir } = yield* makeLandableWorktree();

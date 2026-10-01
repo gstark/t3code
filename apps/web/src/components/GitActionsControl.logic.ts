@@ -10,7 +10,7 @@ import {
   type ChangeRequestTerminology,
 } from "../sourceControlPresentation";
 
-export type GitActionIconName = "commit" | "push" | "pr" | "land";
+export type GitActionIconName = "commit" | "push" | "pr" | "land" | "cleanup";
 
 export type GitDialogAction =
   | "commit"
@@ -61,6 +61,7 @@ export function buildGitActionProgressStages(input: {
   action: GitStackedAction;
   hasCustomCommitMessage: boolean;
   hasWorkingTreeChanges: boolean;
+  hasDefaultBranchDelta?: boolean;
   pushTarget?: string;
   featureBranch?: boolean;
   shouldPushBeforePr?: boolean;
@@ -92,13 +93,18 @@ export function buildGitActionProgressStages(input: {
     return [...branchStages, ...commitStages];
   }
   if (input.action === "land") {
-    return [...commitStages, "Landing worktree..."];
+    return input.hasWorkingTreeChanges || input.hasDefaultBranchDelta
+      ? [...commitStages, "Landing worktree..."]
+      : ["Removing worktree..."];
   }
   if (input.action === "commit_push") {
     return [...branchStages, ...commitStages, pushStage];
   }
   return [...branchStages, ...commitStages, pushStage, ...prStages];
 }
+
+/** Label of the land action when the worktree has nothing to merge. */
+export const CLEANUP_WORKTREE_LABEL = "Cleanup worktree";
 
 /**
  * The commit path a project prefers. Without one, worktree threads land and
@@ -207,9 +213,10 @@ export function buildMenuItems(
       : [
           {
             id: "land",
-            label: "Land worktree",
-            disabled: isBusy || !(hasChanges || hasDefaultBranchDelta),
-            icon: "land",
+            ...(hasChanges || hasDefaultBranchDelta
+              ? { label: "Land worktree", icon: "land" as const }
+              : { label: CLEANUP_WORKTREE_LABEL, icon: "cleanup" as const }),
+            disabled: isBusy,
             kind: "open_dialog",
             dialogAction: "land",
           } satisfies GitActionMenuItem,
@@ -292,8 +299,14 @@ export function resolveQuickAction(
   }
 
   // Landing commits first when needed, so it also covers already-committed work.
-  if (commitAction === "land" && (hasChanges || hasDefaultBranchDelta)) {
-    return { label: "Land worktree", disabled: false, kind: "run_action", action: "land" };
+  // With nothing to merge, the same action only removes the worktree.
+  if (commitAction === "land") {
+    return {
+      label: hasChanges || hasDefaultBranchDelta ? "Land worktree" : CLEANUP_WORKTREE_LABEL,
+      disabled: false,
+      kind: "run_action",
+      action: "land",
+    };
   }
 
   if (hasChanges) {

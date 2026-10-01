@@ -38,6 +38,7 @@ import {
   InfoIcon,
   LockIcon,
   GlobeIcon,
+  Trash2Icon,
 } from "lucide-react";
 import { Radio as RadioPrimitive } from "@base-ui/react/radio";
 import {
@@ -53,6 +54,7 @@ import { Toggle, ToggleGroup } from "~/components/ui/toggle-group";
 import { cn } from "~/lib/utils";
 import {
   buildGitActionProgressStages,
+  CLEANUP_WORKTREE_LABEL,
   buildMenuItems,
   type GitActionIconName,
   type GitActionMenuItem,
@@ -328,10 +330,6 @@ function getMenuActionDisabledReason({
     return "Commit is currently unavailable.";
   }
 
-  if (item.id === "land") {
-    return "Nothing to land. Make changes or commits first.";
-  }
-
   if (item.id === "push") {
     if (!hasBranch) {
       return "Detached HEAD: check out a branch before pushing.";
@@ -390,6 +388,7 @@ function GitActionItemIcon({
   if (icon === "commit") return <GitCommitIcon />;
   if (icon === "push") return <CloudUploadIcon />;
   if (icon === "land") return <PullRequestGlyph.merged />;
+  if (icon === "cleanup") return <Trash2Icon />;
   return <SourceControlIcon />;
 }
 
@@ -407,7 +406,13 @@ function GitQuickActionIcon({
   if (quickAction.kind === "run_pull") return <CloudDownloadIcon className={className} />;
   if (quickAction.kind === "run_action") {
     if (quickAction.action === "commit") return <GitCommitIcon className={className} />;
-    if (quickAction.action === "land") return <PullRequestGlyph.merged className={className} />;
+    if (quickAction.action === "land") {
+      return quickAction.label === CLEANUP_WORKTREE_LABEL ? (
+        <Trash2Icon className={className} />
+      ) : (
+        <PullRequestGlyph.merged className={className} />
+      );
+    }
     if (quickAction.action === "push" || quickAction.action === "commit_push") {
       return <CloudUploadIcon className={className} />;
     }
@@ -1323,6 +1328,8 @@ export default function GitActionsControl({
         action,
         hasCustomCommitMessage: !!commitMessage?.trim(),
         hasWorkingTreeChanges: !!actionStatus?.hasWorkingTreeChanges,
+        hasDefaultBranchDelta:
+          (actionStatus?.aheadOfDefaultCount ?? actionStatus?.aheadCount ?? 0) > 0,
         featureBranch,
         terminology: changeRequestTerminology,
         shouldPushBeforePr:
