@@ -141,6 +141,8 @@ export type SidebarListMarker =
   | "settled-placeholder"
   /** The boundary between pinned and active rows. */
   | "pinned-divider"
+  /** The open new-thread draft, in the slot its thread takes once sent. */
+  | "new-thread"
   | "snoozed-header"
   | "settled-header";
 

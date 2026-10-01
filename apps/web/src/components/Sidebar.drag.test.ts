@@ -500,6 +500,29 @@ describe("sidebar drag projection", () => {
     expect(result.get(sidebarMarkerId("settled-header"))?.y).toBe(0);
   });
 
+  it("keeps the new-thread row at the top of Active above an arriving row", () => {
+    const newThread = sidebarMarkerId("new-thread");
+    const items = [
+      pinnedHeader,
+      thread("p", "pinned"),
+      divider,
+      marker("new-thread"),
+      marker("active-placeholder"),
+      thread("a1", "active"),
+      settledHeader,
+      thread("s", "settled"),
+    ];
+    expect(resolveSidebarDropTarget(items, "p", newThread)).toEqual({
+      section: "active",
+      pinnedOrder: [],
+      activeOrder: ["p", "a1"],
+    });
+    const result = preview({ items, settledOrder: [], settledExpanded: true }, "p", newThread);
+    expect(result.get(newThread)).toEqual({ ...stationary, y: -83 });
+    // The hidden Active placeholder gives up its 1px gap.
+    expect(result.get("a1")).toEqual({ ...stationary, y: -1 });
+  });
+
   it.each([
     ["p", -83, -1],
     ["s", 0, 82],
