@@ -185,7 +185,12 @@ import {
   useOpenChangeRequestLink,
 } from "~/lib/openPullRequestLink";
 import { useOpenLink } from "../browser/useOpenLink";
-import { writeTextToClipboard } from "../hooks/useCopyToClipboard";
+import { useCopyToClipboard, writeTextToClipboard } from "../hooks/useCopyToClipboard";
+import {
+  ANCHORED_COPY_TOAST_TIMEOUT_MS,
+  showAnchoredCopyErrorToast,
+  showAnchoredCopySuccessToast,
+} from "./ui/anchoredCopyToast";
 import { isPreviewSupportedInRuntime } from "../previewStateStore";
 import { isAbsolutePath, resolvePathLinkTarget } from "../terminal-links";
 import {
@@ -1384,6 +1389,41 @@ const CHAT_MARKDOWN_WORKSPACE_IMAGE_CLASS_NAME = cn(
   CHAT_MARKDOWN_MEDIA_FRAME_CLASS_NAME,
 );
 const MarkdownLinkContext = React.createContext(false);
+
+/** Inline code that copies its text on click. A drag that selects text does not copy. */
+function CopyableInlineCode({
+  text,
+  className,
+  children,
+  ...props
+}: ComponentProps<"code"> & { text: string }) {
+  const ref = useRef<HTMLElement>(null);
+  const { copyToClipboard } = useCopyToClipboard<void>({
+    onCopy: () => showAnchoredCopySuccessToast(ref),
+    onError: (error: Error) => showAnchoredCopyErrorToast(ref, error),
+    timeout: ANCHORED_COPY_TOAST_TIMEOUT_MS,
+  });
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <code
+            {...props}
+            ref={ref}
+            className={cn("cursor-copy", className)}
+            onClick={() => {
+              if (window.getSelection()?.isCollapsed === false) return;
+              copyToClipboard(text);
+            }}
+          />
+        }
+      >
+        {children}
+      </TooltipTrigger>
+      <TooltipPopup side="top">Click to copy</TooltipPopup>
+    </Tooltip>
+  );
+}
 
 function expandableMarkdownImageProps(
   onImageExpand: ((preview: ExpandedImagePreview) => void) | undefined,
@@ -3111,6 +3151,7 @@ const CHAT_MARKDOWN_COMPONENTS = {
     const { cwd, imageBaseDir, inlineCodeFileLinkMetaByText, fileLinkChip } = use(
       ChatMarkdownRendererContext,
     );
+    const insideLink = use(MarkdownLinkContext);
     if (node?.properties?.dataInlineCode != null) {
       const codeText = nodeToPlainText(children);
       const fileLinkMeta =
@@ -3121,6 +3162,13 @@ const CHAT_MARKDOWN_COMPONENTS = {
           fileLinkMeta,
           `\`${codeText}\``,
           inlineCodeFilePathCandidate(codeText) ?? codeText.trim(),
+        );
+      }
+      if (!insideLink) {
+        return (
+          <CopyableInlineCode {...props} className={className} text={codeText}>
+            {children}
+          </CopyableInlineCode>
         );
       }
     }

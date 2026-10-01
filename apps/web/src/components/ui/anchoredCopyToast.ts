@@ -3,7 +3,7 @@ import { anchoredToastManager } from "./toast";
 
 export const ANCHORED_COPY_TOAST_TIMEOUT_MS = 1000;
 
-export function showAnchoredCopySuccessToast(ref: RefObject<HTMLButtonElement | null>) {
+export function showAnchoredCopySuccessToast(ref: RefObject<HTMLElement | null>) {
   if (!ref.current) return;
   anchoredToastManager.add({
     data: {
@@ -17,7 +17,7 @@ export function showAnchoredCopySuccessToast(ref: RefObject<HTMLButtonElement | 
   });
 }
 
-export function showAnchoredCopyErrorToast(ref: RefObject<HTMLButtonElement | null>, error: Error) {
+export function showAnchoredCopyErrorToast(ref: RefObject<HTMLElement | null>, error: Error) {
   if (!ref.current) return;
   anchoredToastManager.add({
     data: {
