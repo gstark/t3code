@@ -1242,14 +1242,14 @@ describe("resolveAutoFeatureBranchName", () => {
   });
 });
 
-describe("when: the branch prefers commit & push without a PR", () => {
+describe("when: the project prefers commit & push without a PR", () => {
   it("resolveQuickAction commits and pushes local changes", () => {
     const quick = resolveQuickAction(
       status({ hasWorkingTreeChanges: true }),
       false,
       false,
       true,
-      true,
+      "commit_push",
     );
     assert.deepInclude(quick, {
       kind: "run_action",
@@ -1259,19 +1259,34 @@ describe("when: the branch prefers commit & push without a PR", () => {
   });
 
   it("resolveQuickAction pushes ahead commits without creating a PR", () => {
-    const quick = resolveQuickAction(status({ aheadCount: 2 }), false, false, true, true);
+    const quick = resolveQuickAction(status({ aheadCount: 2 }), false, false, true, "commit_push");
     assert.deepInclude(quick, { kind: "run_action", action: "push", label: "Push" });
   });
 
   it("resolveQuickAction does not suggest a PR for a synced branch", () => {
-    const quick = resolveQuickAction(status({ aheadOfDefaultCount: 2 }), false, false, true, true);
+    const quick = resolveQuickAction(
+      status({ aheadOfDefaultCount: 2 }),
+      false,
+      false,
+      true,
+      "commit_push",
+    );
     assert.deepInclude(quick, { kind: "show_hint", disabled: true });
   });
 
   it("buildMenuItems offers commit, push & PR to switch back", () => {
-    const items = buildMenuItems(status({ hasWorkingTreeChanges: true }), false, true, false, true);
+    const items = buildMenuItems(
+      status({ hasWorkingTreeChanges: true }),
+      false,
+      true,
+      false,
+      "commit_push",
+    );
+    assert.deepEqual(
+      items.map((item) => item.id),
+      ["commit", "commit_push_pr", "push", "pr"],
+    );
     assert.deepInclude(items[1], {
-      id: "commit_push",
       label: "Commit, push & PR",
       dialogAction: "commit_push_pr",
       disabled: false,
@@ -1298,6 +1313,63 @@ describe("when: the branch prefers commit & push without a PR", () => {
     assert.notInclude(
       items.map((item) => item.id),
       "commit_push",
+    );
+  });
+});
+
+describe("when: the project prefers commit only", () => {
+  it("resolveQuickAction commits local changes without pushing", () => {
+    const quick = resolveQuickAction(
+      status({ hasWorkingTreeChanges: true }),
+      false,
+      false,
+      true,
+      "commit",
+    );
+    assert.deepInclude(quick, { kind: "run_action", action: "commit", label: "Commit" });
+  });
+
+  it("resolveQuickAction commits on the default ref", () => {
+    const quick = resolveQuickAction(
+      status({ hasWorkingTreeChanges: true, isDefaultRef: true }),
+      false,
+      true,
+      true,
+      "commit",
+    );
+    assert.deepInclude(quick, { kind: "run_action", action: "commit", label: "Commit" });
+  });
+
+  it("resolveQuickAction pushes ahead commits without creating a PR", () => {
+    const quick = resolveQuickAction(status({ aheadCount: 2 }), false, false, true, "commit");
+    assert.deepInclude(quick, { kind: "run_action", action: "push", label: "Push" });
+  });
+
+  it("buildMenuItems offers both push paths to switch away", () => {
+    const items = buildMenuItems(
+      status({ hasWorkingTreeChanges: true }),
+      false,
+      true,
+      false,
+      "commit",
+    );
+    assert.deepEqual(
+      items.map((item) => item.id),
+      ["commit", "commit_push", "commit_push_pr", "push", "pr"],
+    );
+  });
+
+  it("buildMenuItems offers only commit & push on the default ref", () => {
+    const items = buildMenuItems(
+      status({ hasWorkingTreeChanges: true, isDefaultRef: true }),
+      false,
+      true,
+      true,
+      "commit",
+    );
+    assert.deepEqual(
+      items.map((item) => item.id),
+      ["commit", "commit_push", "push", "pr"],
     );
   });
 });

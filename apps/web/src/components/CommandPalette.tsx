@@ -665,7 +665,7 @@ function CommandPaletteDialog(props: {
             ? "Search project contents"
             : "Command palette"
       }
-      className={cn("overflow-hidden", props.mode === "content" && "h-105")}
+      className={cn("max-w-2xl overflow-hidden", props.mode === "content" && "h-105")}
       data-command-palette="true"
       data-palette-mode={props.mode}
       data-testid="command-palette"
@@ -3022,9 +3022,8 @@ function OpenCommandPaletteDialog(props: {
       <div className="flex items-center gap-3">
         {hasWorktreeItems ? (
           <KbdGroup>
-            <span>Hold</span>
             <Kbd>Shift</Kbd>
-            <span>to open in worktree</span>
+            <span>New worktree</span>
           </KbdGroup>
         ) : null}
         {canOpenProjectFromFileManager ? (
