@@ -2,7 +2,11 @@ import {
   requestKindFromRequestType,
   type PendingApproval,
 } from "@t3tools/client-runtime/pending-requests";
-import { UserInputAttachmentAnswerPayload } from "@t3tools/contracts";
+import {
+  GIT_ACTION_ACTIVITY_KIND,
+  GitActionActivityPayload,
+  UserInputAttachmentAnswerPayload,
+} from "@t3tools/contracts";
 import { foldUserInputActivities } from "@t3tools/client-runtime/work-log/user-input";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
@@ -55,6 +59,8 @@ export {
 
 export interface WorkLogEntry {
   questionAnswer?: UserInputAttachmentAnswerPayload;
+  /** Present on rows for a commit, push, or pull request made from the git controls. */
+  gitAction?: GitActionActivityPayload;
   id: string;
   createdAt: string;
   turnId?: TurnId | null;
@@ -538,6 +544,7 @@ function isPlanBoundaryToolActivity(activity: OrchestrationThreadActivity): bool
 }
 
 const decodeQuestionAttachmentAnswer = Schema.decodeUnknownOption(UserInputAttachmentAnswerPayload);
+const decodeGitActionActivityPayload = Schema.decodeUnknownOption(GitActionActivityPayload);
 
 function toDerivedWorkLogEntry(activity: OrchestrationThreadActivity): DerivedWorkLogEntry {
   const cachedEntry = derivedWorkLogEntryByActivity.get(activity);
@@ -593,6 +600,10 @@ function toDerivedWorkLogEntry(activity: OrchestrationThreadActivity): DerivedWo
   if (activity.kind === "user-input.answer-submitted") {
     const answer = decodeQuestionAttachmentAnswer(payload);
     if (Option.isSome(answer)) entry.questionAnswer = answer.value;
+  }
+  if (activity.kind === GIT_ACTION_ACTIVITY_KIND) {
+    const gitAction = decodeGitActionActivityPayload(payload);
+    if (Option.isSome(gitAction)) entry.gitAction = gitAction.value;
   }
   const itemType = extractWorkLogItemType(payload);
   const requestKind = extractWorkLogRequestKind(payload);

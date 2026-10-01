@@ -564,6 +564,26 @@ describe("deriveWorkLogEntries", () => {
     ).toEqual(["first-turn-tool", "later-turn-tool"]);
   });
 
+  it("decodes git action activities into a gitAction entry", () => {
+    const payload = {
+      action: "commit",
+      branch: { status: "skipped_not_requested" },
+      commit: { status: "created", commitSha: "abc1234", subject: "Fix it" },
+      push: { status: "skipped_not_requested" },
+      pr: { status: "skipped_not_requested" },
+    };
+    const [entry] = deriveWorkLogEntries([
+      makeActivity({
+        kind: "git.action.completed",
+        summary: "Committed abc1234",
+        tone: "info",
+        payload,
+      }),
+    ]);
+    expect(entry?.label).toBe("Committed abc1234");
+    expect(entry?.gitAction).toEqual(payload);
+  });
+
   it("preserves setup failures and unrelated info without a turn id", () => {
     const entries = deriveWorkLogEntries([
       makeActivity({

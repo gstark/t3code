@@ -38,6 +38,7 @@ import {
   type OrchestrationClientOrigin,
   type OrchestrationCommand,
   type GitActionProgressEvent,
+  type GitRunStackedActionResult,
   type GitManagerServiceError,
   OrchestrationDispatchCommandError,
   type OrchestrationEvent,
@@ -139,6 +140,7 @@ import * as WorkspacePaths from "./workspace/WorkspacePaths.ts";
 import * as VcsStatusBroadcaster from "./vcs/VcsStatusBroadcaster.ts";
 import * as VcsProvisioningService from "./vcs/VcsProvisioningService.ts";
 import * as GitWorkflowService from "./git/GitWorkflowService.ts";
+import { gitActionActivity } from "./git/gitActionActivity.ts";
 import { linkCreatedPullRequest } from "./git/linkCreatedPullRequest.ts";
 import * as ReviewService from "./review/ReviewService.ts";
 import * as ProjectSetupScriptRunner from "./project/ProjectSetupScriptRunner.ts";
@@ -753,6 +755,40 @@ const makeWsRpcLayer = (
               }),
           ),
         );
+
+      // Records a completed git action in its thread's timeline. Never fails:
+      // the action already succeeded, so a lost record is only logged.
+      const appendGitActionActivity = (threadId: ThreadId, result: GitRunStackedActionResult) => {
+        const activity = gitActionActivity(result);
+        if (activity === null) return Effect.void;
+        return Effect.all({
+          commandId: serverCommandId("git-action-activity"),
+          activityId: serverEventId,
+          createdAt: nowIso,
+        }).pipe(
+          Effect.flatMap(({ commandId, activityId, createdAt }) =>
+            dispatchFromClient({
+              type: "thread.activity.append",
+              commandId,
+              threadId,
+              activity: {
+                id: activityId,
+                tone: "info",
+                ...activity,
+                turnId: null,
+                createdAt,
+              },
+              createdAt,
+            }),
+          ),
+          Effect.asVoid,
+          Effect.catchCause((cause) =>
+            Cause.hasInterruptsOnly(cause)
+              ? Effect.failCause(cause as Cause.Cause<never>)
+              : Effect.logWarning("failed to record git action in thread", { threadId, cause }),
+          ),
+        );
+      };
 
       const appendSetupScriptActivity = (input: {
         readonly threadId: ThreadId;
@@ -3359,6 +3395,11 @@ const makeWsRpcLayer = (
                             ),
                           )
                       ).pipe(
+                        Effect.andThen(
+                          input.threadId === undefined
+                            ? Effect.void
+                            : appendGitActionActivity(input.threadId, result),
+                        ),
                         Effect.andThen(refreshGitStatus(input.cwd)),
                         Effect.andThen(Queue.end(queue).pipe(Effect.asVoid)),
                       ),

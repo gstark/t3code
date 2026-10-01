@@ -1362,6 +1362,55 @@ describe("deriveMessagesTimelineRows", () => {
     ]);
   });
 
+  it("renders a git action as its own row between grouped tool work", () => {
+    const gitAction = {
+      action: "commit_push",
+      branch: { status: "skipped_not_requested" },
+      commit: { status: "created", commitSha: "abc1234", subject: "Fix it" },
+      push: { status: "pushed", branch: "feature/x" },
+      pr: { status: "skipped_not_requested" },
+    } as const;
+    const tool = (id: string, createdAt: string) =>
+      ({
+        id: `${id}-entry`,
+        kind: "work",
+        createdAt,
+        entry: { id, createdAt, label: "Ran command", tone: "tool", command: "ls" },
+      }) as const;
+    const rows = deriveMessagesTimelineRows({
+      timelineEntries: [
+        tool("tool-1", "2026-01-01T00:00:00Z"),
+        {
+          id: "git-entry",
+          kind: "work",
+          createdAt: "2026-01-01T00:00:01Z",
+          entry: {
+            id: "git",
+            createdAt: "2026-01-01T00:00:01Z",
+            label: "Pushed abc1234 to feature/x",
+            tone: "info",
+            sourceActivityKind: "git.action.completed",
+            gitAction,
+          },
+        },
+        tool("tool-2", "2026-01-01T00:00:02Z"),
+      ],
+      isWorking: false,
+      activeTurnStartedAt: null,
+      turnDiffSummaries: [],
+      supportsConversationRollback: false,
+    });
+
+    expect(rows.map((row) => row.kind)).toEqual(["work", "git-action", "work"]);
+    expect(rows[1]).toEqual({
+      kind: "git-action",
+      id: "git-entry",
+      createdAt: "2026-01-01T00:00:01Z",
+      label: "Pushed abc1234 to feature/x",
+      gitAction,
+    });
+  });
+
   it("keeps subagent spawn rows outside turn folds even after they settle", () => {
     const firstMessage: ChatMessage = {
       id: MessageId.make("assistant-first-entry"),

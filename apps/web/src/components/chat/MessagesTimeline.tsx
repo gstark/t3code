@@ -209,6 +209,7 @@ import { Popover, PopoverPopup, PopoverTrigger } from "../ui/popover";
 import { Spinner } from "../ui/spinner";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { WorktreeSetupCard } from "./WorktreeSetupCard";
+import { GitActionCard } from "./GitActionCard";
 import {
   ContextChipPopover as UserMessageContextPopover,
   ContextChipShell,
@@ -1704,7 +1705,8 @@ const TimelineRowContent = memo(function TimelineRowContent({ row }: { row: Time
                   row.kind === "work-toggle" ||
                   row.kind === "activity-group" ||
                   row.kind === "thinking" ||
-                  row.kind === "worktree-setup"
+                  row.kind === "worktree-setup" ||
+                  row.kind === "git-action"
                 ? "pb-2"
                 : "pb-4",
         (row.kind === "message" && row.message.role === "assistant") ||
@@ -1732,6 +1734,7 @@ const TimelineRowContent = memo(function TimelineRowContent({ row }: { row: Time
       {row.kind === "work-toggle" ? <WorkGroupToggleTimelineRow row={row} /> : null}
       {row.kind === "turn-fold" ? <TurnFoldTimelineRow row={row} /> : null}
       {row.kind === "context-compaction" ? <ContextCompactionTimelineRow row={row} /> : null}
+      {row.kind === "git-action" ? <GitActionTimelineRow row={row} /> : null}
       {row.kind === "message" && row.message.role === "user" ? <UserTimelineRow row={row} /> : null}
       {row.kind === "message" && row.message.role === "assistant" ? (
         <AssistantTimelineRow row={row} />
@@ -1875,6 +1878,11 @@ function QueuedMessageTimelineRow({
       </div>
     </div>
   );
+}
+
+function GitActionTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "git-action" }> }) {
+  const { openPullRequest } = use(TimelineRowCtx);
+  return <GitActionCard label={row.label} gitAction={row.gitAction} onOpenPr={openPullRequest} />;
 }
 
 function ContextCompactionTimelineRow({
