@@ -5,6 +5,7 @@ set shell := ["bash", "-euo", "pipefail", "-c"]
 fork_repo := "gstark/t3code"
 tap := "gstark/tap"
 cask := "t3-code-mine"
+signing_identity := "Gavin Stark (JBRC9C74U7)"
 
 default:
     @just --list
@@ -83,7 +84,8 @@ release: _require-mine
 
     rm -rf "$out"
     pnpm install --frozen-lockfile
-    node scripts/build-desktop-artifact.ts --platform mac --target dmg --arch arm64 \
+    CSC_NAME="{{ signing_identity }}" \
+      node scripts/build-desktop-artifact.ts --platform mac --target dmg --arch arm64 --signed \
       --build-version "$version" --output-dir "$out"
 
     dmg="$out/T3-Code-${version}-arm64.dmg"
@@ -115,7 +117,7 @@ release: _require-mine
 
       app "T3 Code (Alpha).app"
 
-      # The build is unsigned, so remove the quarantine flag to let it open.
+      # The build is signed but not notarized, so remove the quarantine flag to let it open.
       postflight do
         system_command "/usr/bin/xattr",
                        args: ["-dr", "com.apple.quarantine", "#{appdir}/T3 Code (Alpha).app"]

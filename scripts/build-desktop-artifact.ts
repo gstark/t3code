@@ -3612,10 +3612,13 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
   const stageProdResourcesDir = path.join(stageAppDir, "apps/desktop/prod-resources");
   yield* fs.copy(stageResourcesDir, stageProdResourcesDir);
 
+  // Fork builds sign with a personal Developer ID and have no provisioning
+  // profile for com.t3tools.t3code, so they skip the passkey entitlements.
+  const repoEnv = loadRepoEnv({ repoRoot });
   const configuredMacPasskeySigning =
-    options.platform === "mac" && options.signed
+    options.platform === "mac" && options.signed && repoEnv.T3CODE_MACOS_PROVISIONING_PROFILE
       ? yield* Effect.try({
-          try: () => resolveMacPasskeySigningConfiguration(loadRepoEnv({ repoRoot })),
+          try: () => resolveMacPasskeySigningConfiguration(repoEnv),
           catch: MacPasskeySigningConfigurationResolutionError.fromCause,
         })
       : undefined;
