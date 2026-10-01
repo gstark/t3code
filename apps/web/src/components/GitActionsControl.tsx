@@ -21,6 +21,7 @@ import type {
 } from "@t3tools/contracts";
 import { useNavigate } from "@tanstack/react-router";
 import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
 import { type MouseEvent, useEffect, useEffectEvent, useRef, useState } from "react";
 import { useDeadlinePassed } from "../hooks/useDeadline";
 import { useNowSecond } from "../hooks/useNowSecond";
@@ -93,6 +94,7 @@ import { Textarea } from "~/components/ui/textarea";
 import { stackedThreadToast, toastManager } from "~/components/ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { useOpenInPreferredEditor } from "~/editorPreferences";
+import { useLocalStorage } from "~/hooks/useLocalStorage";
 import {
   useGitStackedAction,
   useSourceControlActionRunning,
@@ -246,7 +248,7 @@ function getMenuActionDisabledReason({
   const isBehind = gitStatus.behindCount > 0;
   const terminology = getSourceControlPresentation(gitStatus.sourceControlProvider).terminology;
 
-  if (item.id === "commit") {
+  if (item.id === "commit" || item.id === "commit_push") {
     if (!hasChanges) {
       return "Worktree is clean. Make changes before committing.";
     }
@@ -286,6 +288,8 @@ function getMenuActionDisabledReason({
   }
   return `Create ${terminology.singular} is currently unavailable.`;
 }
+
+const SkipPrPreference = Schema.NullOr(Schema.Boolean);
 
 const COMMIT_DIALOG_TITLE = "Commit changes";
 const COMMIT_DIALOG_DESCRIPTION =
@@ -1132,16 +1136,28 @@ export default function GitActionsControl({
 
   const isDefaultRef = gitStatusForActions?.isDefaultRef ?? false;
 
+  // Remembers, per checkout and branch, that the user wants "Commit & push"
+  // without opening a PR.
+  const [skipPr, setSkipPr] = useLocalStorage(
+    `t3code:git-skip-pr:${gitCwd}:${gitStatusForActions?.refName ?? ""}`,
+    null,
+    SkipPrPreference,
+  );
+  const isSkippingPr = skipPr === true;
+
   const gitActionMenuItems = buildMenuItems(
     gitStatusForActions,
     isGitActionRunning,
     hasPrimaryRemote,
+    isDefaultRef,
+    isSkippingPr,
   );
   const quickAction = resolveQuickAction(
     gitStatusForActions,
     isGitActionRunning,
     isDefaultRef,
     hasPrimaryRemote,
+    isSkippingPr,
   );
   const quickActionDisabledReason = !canWriteSourceControl
     ? "This connection cannot change source control."
@@ -1457,7 +1473,18 @@ export default function GitActionsControl({
       return;
     }
     if (item.dialogAction === "create_pr") {
+      setSkipPr(null);
       void runGitActionWithToast({ action: "create_pr" });
+      return;
+    }
+    if (item.dialogAction === "commit_push") {
+      setSkipPr(true);
+      void runGitActionWithToast({ action: "commit_push" });
+      return;
+    }
+    if (item.dialogAction === "commit_push_pr") {
+      setSkipPr(null);
+      void runGitActionWithToast({ action: "commit_push_pr" });
       return;
     }
     setExcludedFiles(new Set());

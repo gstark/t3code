@@ -217,3 +217,63 @@ describe("resolveAutoFeatureBranchName", () => {
     assert.equal(ref, "feature/ticket-1-2");
   });
 });
+
+describe("when: the branch prefers commit & push without a PR", () => {
+  it("resolveQuickAction commits and pushes local changes", () => {
+    const quick = resolveQuickAction(
+      status({ hasWorkingTreeChanges: true }),
+      false,
+      false,
+      true,
+      true,
+    );
+    assert.deepInclude(quick, {
+      kind: "run_action",
+      action: "commit_push",
+      label: "Commit & push",
+    });
+  });
+
+  it("resolveQuickAction pushes ahead commits without creating a PR", () => {
+    const quick = resolveQuickAction(status({ aheadCount: 2 }), false, false, true, true);
+    assert.deepInclude(quick, { kind: "run_action", action: "push", label: "Push" });
+  });
+
+  it("resolveQuickAction does not suggest a PR for a synced branch", () => {
+    const quick = resolveQuickAction(status({ aheadOfDefaultCount: 2 }), false, false, true, true);
+    assert.deepInclude(quick, { kind: "show_hint", disabled: true });
+  });
+
+  it("buildMenuItems offers commit, push & PR to switch back", () => {
+    const items = buildMenuItems(status({ hasWorkingTreeChanges: true }), false, true, false, true);
+    assert.deepInclude(items[1], {
+      id: "commit_push",
+      label: "Commit, push & PR",
+      dialogAction: "commit_push_pr",
+      disabled: false,
+    });
+  });
+
+  it("buildMenuItems offers commit & push when no preference is set", () => {
+    const items = buildMenuItems(status({ hasWorkingTreeChanges: true }), false);
+    assert.deepInclude(items[1], {
+      id: "commit_push",
+      label: "Commit & push",
+      dialogAction: "commit_push",
+      disabled: false,
+    });
+  });
+
+  it("buildMenuItems omits the commit & push item on the default ref", () => {
+    const items = buildMenuItems(
+      status({ hasWorkingTreeChanges: true, isDefaultRef: true }),
+      false,
+      true,
+      true,
+    );
+    assert.notInclude(
+      items.map((item) => item.id),
+      "commit_push",
+    );
+  });
+});
