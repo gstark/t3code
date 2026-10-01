@@ -115,6 +115,14 @@ describe("when: actions are busy", () => {
         dialogAction: "commit",
       },
       {
+        id: "commit_push",
+        label: "Commit & push",
+        disabled: true,
+        icon: "push",
+        kind: "open_dialog",
+        dialogAction: "commit_push",
+      },
+      {
         id: "push",
         label: "Push",
         disabled: true,
@@ -235,6 +243,14 @@ describe("when: ref is clean, ahead, and has no open PR", () => {
         dialogAction: "commit",
       },
       {
+        id: "commit_push",
+        label: "Commit & push",
+        disabled: true,
+        icon: "push",
+        kind: "open_dialog",
+        dialogAction: "commit_push",
+      },
+      {
         id: "push",
         label: "Push",
         disabled: false,
@@ -273,7 +289,7 @@ describe("when: source control provider uses merge requests", () => {
       action: "create_pr",
       label: "Push & create MR",
     });
-    assert.deepInclude(items[2], {
+    assert.deepInclude(items[3], {
       id: "pr",
       label: "Create MR",
     });
@@ -321,6 +337,14 @@ describe("when: ref is clean, up to date, and has no open PR", () => {
         dialogAction: "commit",
       },
       {
+        id: "commit_push",
+        label: "Commit & push",
+        disabled: true,
+        icon: "push",
+        kind: "open_dialog",
+        dialogAction: "commit_push",
+      },
+      {
         id: "push",
         label: "Push",
         disabled: true,
@@ -356,6 +380,14 @@ describe("when: ref is behind upstream", () => {
         icon: "commit",
         kind: "open_dialog",
         dialogAction: "commit",
+      },
+      {
+        id: "commit_push",
+        label: "Commit & push",
+        disabled: true,
+        icon: "push",
+        kind: "open_dialog",
+        dialogAction: "commit_push",
       },
       {
         id: "push",
@@ -448,6 +480,14 @@ describe("when: working tree has local changes", () => {
         dialogAction: "commit",
       },
       {
+        id: "commit_push",
+        label: "Commit & push",
+        disabled: false,
+        icon: "push",
+        kind: "open_dialog",
+        dialogAction: "commit_push",
+      },
+      {
         id: "push",
         label: "Push",
         disabled: true,
@@ -488,6 +528,14 @@ describe("when: working tree has local changes", () => {
         icon: "commit",
         kind: "open_dialog",
         dialogAction: "commit",
+      },
+      {
+        id: "commit_push",
+        label: "Commit & push",
+        disabled: false,
+        icon: "push",
+        kind: "open_dialog",
+        dialogAction: "commit_push",
       },
       {
         id: "push",
@@ -564,6 +612,14 @@ describe("when: working tree has local changes and ref is behind upstream", () =
         dialogAction: "commit",
       },
       {
+        id: "commit_push",
+        label: "Commit & push",
+        disabled: false,
+        icon: "push",
+        kind: "open_dialog",
+        dialogAction: "commit_push",
+      },
+      {
         id: "push",
         label: "Push",
         disabled: true,
@@ -602,6 +658,14 @@ describe("when: HEAD is detached and there are no local changes", () => {
         icon: "commit",
         kind: "open_dialog",
         dialogAction: "commit",
+      },
+      {
+        id: "commit_push",
+        label: "Commit & push",
+        disabled: true,
+        icon: "push",
+        kind: "open_dialog",
+        dialogAction: "commit_push",
       },
       {
         id: "push",
@@ -696,6 +760,14 @@ describe("when: ref has no upstream configured", () => {
         dialogAction: "commit",
       },
       {
+        id: "commit_push",
+        label: "Commit & push",
+        disabled: true,
+        icon: "push",
+        kind: "open_dialog",
+        dialogAction: "commit_push",
+      },
+      {
         id: "push",
         label: "Push",
         disabled: true,
@@ -759,6 +831,14 @@ describe("when: ref has no upstream configured", () => {
         icon: "commit",
         kind: "open_dialog",
         dialogAction: "commit",
+      },
+      {
+        id: "commit_push",
+        label: "Commit & push",
+        disabled: true,
+        icon: "push",
+        kind: "open_dialog",
+        dialogAction: "commit_push",
       },
       {
         id: "push",
@@ -853,6 +933,14 @@ describe("when: ref has no upstream configured", () => {
         icon: "commit",
         kind: "open_dialog",
         dialogAction: "commit",
+      },
+      {
+        id: "commit_push",
+        label: "Commit & push",
+        disabled: true,
+        icon: "push",
+        kind: "open_dialog",
+        dialogAction: "commit_push",
       },
       {
         id: "push",
@@ -1151,5 +1239,65 @@ describe("resolveAutoFeatureBranchName", () => {
   it("falls back to feature/update when no preferred name is provided", () => {
     const ref = resolveAutoFeatureBranchName(["main"]);
     assert.equal(ref, "feature/update");
+  });
+});
+
+describe("when: the branch prefers commit & push without a PR", () => {
+  it("resolveQuickAction commits and pushes local changes", () => {
+    const quick = resolveQuickAction(
+      status({ hasWorkingTreeChanges: true }),
+      false,
+      false,
+      true,
+      true,
+    );
+    assert.deepInclude(quick, {
+      kind: "run_action",
+      action: "commit_push",
+      label: "Commit & push",
+    });
+  });
+
+  it("resolveQuickAction pushes ahead commits without creating a PR", () => {
+    const quick = resolveQuickAction(status({ aheadCount: 2 }), false, false, true, true);
+    assert.deepInclude(quick, { kind: "run_action", action: "push", label: "Push" });
+  });
+
+  it("resolveQuickAction does not suggest a PR for a synced branch", () => {
+    const quick = resolveQuickAction(status({ aheadOfDefaultCount: 2 }), false, false, true, true);
+    assert.deepInclude(quick, { kind: "show_hint", disabled: true });
+  });
+
+  it("buildMenuItems offers commit, push & PR to switch back", () => {
+    const items = buildMenuItems(status({ hasWorkingTreeChanges: true }), false, true, false, true);
+    assert.deepInclude(items[1], {
+      id: "commit_push",
+      label: "Commit, push & PR",
+      dialogAction: "commit_push_pr",
+      disabled: false,
+    });
+  });
+
+  it("buildMenuItems offers commit & push when no preference is set", () => {
+    const items = buildMenuItems(status({ hasWorkingTreeChanges: true }), false);
+    assert.deepInclude(items[1], {
+      id: "commit_push",
+      label: "Commit & push",
+      dialogAction: "commit_push",
+      disabled: false,
+    });
+  });
+
+  it("buildMenuItems omits the commit & push item on the default ref", () => {
+    const items = buildMenuItems(
+      status({ hasWorkingTreeChanges: true, isDefaultRef: true }),
+      false,
+      true,
+      true,
+    );
+    assert.notInclude(
+      items.map((item) => item.id),
+      "commit_push",
+    );
   });
 });
