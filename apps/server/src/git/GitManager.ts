@@ -563,10 +563,15 @@ interface CommitAndBranchSuggestion {
   commitMessage: string;
 }
 
-function isCommitAction(
-  action: GitStackedAction,
-): action is "commit" | "commit_push" | "commit_push_pr" {
-  return action === "commit" || action === "commit_push" || action === "commit_push_pr";
+type GitCommitAction = "commit" | "commit_push" | "commit_push_pr" | "land";
+
+function isCommitAction(action: GitStackedAction): action is GitCommitAction {
+  return (
+    action === "commit" ||
+    action === "commit_push" ||
+    action === "commit_push_pr" ||
+    action === "land"
+  );
 }
 
 function formatCommitMessage(subject: string, body: string): string {
@@ -1891,7 +1896,7 @@ export const make = Effect.gen(function* () {
   const runCommitStep = Effect.fn("runCommitStep")(function* (
     settings: SourceControlTextGenerationSettings,
     cwd: string,
-    action: "commit" | "commit_push" | "commit_push_pr",
+    action: GitCommitAction,
     branch: string | null,
     commitMessage?: string,
     preResolvedSuggestion?: CommitAndBranchSuggestion,
@@ -2638,6 +2643,176 @@ export const make = Effect.gen(function* () {
     };
   });
 
+  /**
+   * Checks that the worktree at `cwd` can land before anything is committed:
+   * it is a linked worktree on a branch, and the main checkout is clean and on
+   * the base branch.
+   */
+  const prepareLand = Effect.fn("prepareLand")(function* (cwd: string) {
+    const fail = (detail: string) => new GitManagerError({ operation: "land", cwd, detail });
+    const read = (operation: string, gitCwd: string, args: readonly string[]) =>
+      gitCore
+        .execute({ operation: `GitManager.land.${operation}`, cwd: gitCwd, args })
+        .pipe(Effect.map((result) => result.stdout.trim()));
+
+    const branch = yield* read("branch", cwd, ["branch", "--show-current"]);
+    if (!branch) {
+      return yield* fail("Cannot land from detached HEAD.");
+    }
+    const [gitDir, commonDir] = (yield* read("gitDirs", cwd, [
+      "rev-parse",
+      "--path-format=absolute",
+      "--git-dir",
+      "--git-common-dir",
+    ])).split("\n");
+    if (gitDir === commonDir) {
+      return yield* fail("Only a linked worktree can land.");
+    }
+    const worktreePath = yield* read("worktreePath", cwd, ["rev-parse", "--show-toplevel"]);
+    // The first entry of `git worktree list` is always the main checkout.
+    const mainCheckoutPath = (yield* read("worktreeList", cwd, ["worktree", "list", "--porcelain"]))
+      .split("\n")[0]
+      ?.replace(/^worktree /, "");
+    if (!mainCheckoutPath) {
+      return yield* fail("Could not find the main checkout.");
+    }
+
+    const remoteName = yield* gitCore.resolvePrimaryRemoteName(mainCheckoutPath);
+    const baseBranch =
+      (yield* gitCore.resolveDefaultBranchName(mainCheckoutPath, remoteName)) ?? "main";
+    if (branch === baseBranch) {
+      return yield* fail(`This worktree is on ${baseBranch}. Land a feature branch instead.`);
+    }
+    if (yield* read("mainStatus", mainCheckoutPath, ["status", "--porcelain"])) {
+      return yield* fail(
+        `The main checkout at ${mainCheckoutPath} has uncommitted changes. Commit or discard them, then land again.`,
+      );
+    }
+    const mainBranch = yield* read("mainBranch", mainCheckoutPath, ["branch", "--show-current"]);
+    if (mainBranch !== baseBranch) {
+      return yield* fail(
+        `The main checkout at ${mainCheckoutPath} is on ${mainBranch || "a detached HEAD"}. Switch it to ${baseBranch}, then land again.`,
+      );
+    }
+
+    return { branch, worktreePath, mainCheckoutPath, remoteName, baseBranch };
+  });
+
+  /**
+   * Merges the worktree branch into the base branch in the main checkout,
+   * pushes the base branch, then removes the worktree and deletes the branch.
+   * Stops on conflicts or a diverged base without undoing anything, so the
+   * user can see and resolve the state in the main checkout.
+   */
+  const runLandStep = Effect.fn("runLandStep")(function* (
+    land: Effect.Success<ReturnType<typeof prepareLand>>,
+    emit: GitActionProgressEmitter,
+    setPhase: (phase: GitActionProgressPhase) => Effect.Effect<void>,
+  ) {
+    const { branch, worktreePath, mainCheckoutPath: main, remoteName, baseBranch } = land;
+    const remoteBase = `${remoteName}/${baseBranch}`;
+    const fail = (detail: string) =>
+      new GitManagerError({ operation: "land", cwd: worktreePath, detail });
+    const git = (operation: string, args: readonly string[]) =>
+      gitCore.execute({
+        operation: `GitManager.land.${operation}`,
+        cwd: main,
+        args,
+        allowNonZeroExit: true,
+      });
+    const read = (operation: string, args: readonly string[]) =>
+      gitCore
+        .execute({ operation: `GitManager.land.${operation}`, cwd: main, args })
+        .pipe(Effect.map((result) => result.stdout.trim()));
+    const startPhase = (phase: GitActionProgressPhase, label: string) =>
+      setPhase(phase).pipe(Effect.andThen(emit({ kind: "phase_started", phase, label })));
+    const mergeOrFail = Effect.fn("runLandStep.merge")(function* (ref: string) {
+      if ((yield* git("merge", ["merge", "--no-edit", ref])).exitCode === 0) return;
+      const conflicts = (yield* read("conflicts", ["diff", "--name-only", "--diff-filter=U"]))
+        .split("\n")
+        .filter(Boolean);
+      return yield* fail(
+        conflicts.length > 0
+          ? `Merging ${ref} into ${baseBranch} conflicts in ${conflicts.join(", ")}. Resolve the merge in ${main}, or run "git merge --abort" there.`
+          : `Merging ${ref} into ${baseBranch} failed in ${main}.`,
+      );
+    });
+
+    if (
+      Number(yield* read("aheadCount", ["rev-list", "--count", `${baseBranch}..${branch}`])) === 0
+    ) {
+      return yield* fail(`${branch} has no commits that are not on ${baseBranch}.`);
+    }
+
+    yield* startPhase("merge", `Merging into ${baseBranch}...`);
+    yield* read("fetch", ["fetch", remoteName]);
+    const hasRemoteBase =
+      (yield* git("remoteBase", ["rev-parse", "--verify", "--quiet", `refs/remotes/${remoteBase}`]))
+        .exitCode === 0;
+    if (hasRemoteBase) {
+      const [ahead = 0, behind = 0] = (yield* read("baseDivergence", [
+        "rev-list",
+        "--left-right",
+        "--count",
+        `${baseBranch}...${remoteBase}`,
+      ]))
+        .split(/\s+/)
+        .map(Number);
+      if (ahead > 0 && behind > 0) {
+        return yield* fail(
+          `${baseBranch} has diverged from ${remoteBase}. Reconcile them in ${main}, then land again.`,
+        );
+      }
+      if (behind > 0) {
+        yield* read("fastForward", ["merge", "--ff-only", remoteBase]);
+      }
+    }
+    const fromSha = yield* read("fromSha", ["rev-parse", hasRemoteBase ? remoteBase : "HEAD"]);
+    yield* mergeOrFail(branch);
+
+    yield* startPhase("push", `Pushing ${baseBranch}...`);
+    const push = () => git("push", ["push", remoteName, baseBranch]);
+    if ((yield* push()).exitCode !== 0) {
+      // The remote moved while we merged. Catch up once and retry.
+      yield* read("refetch", ["fetch", remoteName]);
+      yield* mergeOrFail(remoteBase);
+      if ((yield* push()).exitCode !== 0) {
+        return yield* fail(
+          `Pushing ${baseBranch} to ${remoteName} was rejected twice. The merge is in ${main} but not pushed.`,
+        );
+      }
+    }
+    const toSha = yield* read("toSha", ["rev-parse", "HEAD"]);
+
+    yield* startPhase("cleanup", "Removing worktree...");
+    yield* gitCore
+      .removeWorktree({ cwd: main, path: worktreePath })
+      .pipe(
+        Effect.mapError(() =>
+          fail(
+            `Landed and pushed ${baseBranch}, but git refused to remove ${worktreePath}. It has untracked or changed files.`,
+          ),
+        ),
+      );
+    if ((yield* git("deleteBranch", ["branch", "-d", branch])).exitCode !== 0) {
+      return yield* fail(
+        `Landed and pushed ${baseBranch}, but git refused to delete ${branch} because it is not merged.`,
+      );
+    }
+
+    return {
+      push: { status: "pushed" as const, branch: baseBranch, upstreamBranch: remoteBase },
+      land: {
+        branch,
+        baseBranch,
+        mainCheckoutPath: main,
+        removedWorktreePath: worktreePath,
+        fromSha,
+        toSha,
+      },
+    };
+  });
+
   const runStackedAction: GitManager["Service"]["runStackedAction"] = Effect.fn("runStackedAction")(
     function* (input, options) {
       const progress = yield* createProgressEmitter(input, options);
@@ -2656,8 +2831,9 @@ export const make = Effect.gen(function* () {
           (input.action === "create_pr" &&
             (!initialStatus.hasUpstream || initialStatus.aheadCount > 0));
         const wantsPr = input.action === "create_pr" || input.action === "commit_push_pr";
+        const wantsLand = input.action === "land";
 
-        if (input.featureBranch && !wantsCommit) {
+        if (input.featureBranch && (!wantsCommit || wantsLand)) {
           return yield* new GitManagerError({
             operation: "runStackedAction",
             cwd: input.cwd,
@@ -2675,8 +2851,10 @@ export const make = Effect.gen(function* () {
         const phases: GitActionProgressPhase[] = [
           ...(input.featureBranch ? (["branch"] as const) : []),
           ...(wantsCommit ? (["commit"] as const) : []),
-          ...(wantsPush ? (["push"] as const) : []),
+          ...(wantsLand ? (["merge"] as const) : []),
+          ...(wantsPush || wantsLand ? (["push"] as const) : []),
           ...(wantsPr ? (["pr"] as const) : []),
+          ...(wantsLand ? (["cleanup"] as const) : []),
         ];
 
         yield* progress.emit({
@@ -2698,6 +2876,8 @@ export const make = Effect.gen(function* () {
             detail: "Cannot create a pull request from detached HEAD.",
           });
         }
+
+        const landContext = wantsLand ? yield* prepareLand(input.cwd) : null;
 
         let branchStep: { status: "created" | "skipped_not_requested"; name?: string };
         let commitMessageForStep = input.commitMessage;
@@ -2792,6 +2972,12 @@ export const make = Effect.gen(function* () {
               )
           : { status: "skipped_not_requested" as const };
 
+        const landed = landContext
+          ? yield* runLandStep(landContext, progress.emit, (phase) =>
+              Ref.set(currentPhase, Option.some(phase)),
+            )
+          : null;
+
         const pr = wantsPr
           ? yield* progress
               .emit({
@@ -2807,20 +2993,28 @@ export const make = Effect.gen(function* () {
               )
           : { status: "skipped_not_requested" as const };
 
-        const toast = yield* buildCompletionToast(input.cwd, {
-          action: input.action,
-          branch: branchStep,
-          commit,
-          push,
-          pr,
-        });
+        // A landed worktree is gone, so its toast cannot read status from cwd.
+        const toast = landed
+          ? {
+              title: `Landed ${landed.land.branch} into ${landed.land.baseBranch}`,
+              description: `Pushed ${shortenSha(landed.land.fromSha)}..${shortenSha(landed.land.toSha)}`,
+              cta: { kind: "none" as const },
+            }
+          : yield* buildCompletionToast(input.cwd, {
+              action: input.action,
+              branch: branchStep,
+              commit,
+              push,
+              pr,
+            });
 
         const result = {
           action: input.action,
           branch: branchStep,
           commit,
-          push,
+          push: landed?.push ?? push,
           pr,
+          ...(landed ? { land: landed.land } : {}),
           toast,
         };
         yield* progress.emit({
