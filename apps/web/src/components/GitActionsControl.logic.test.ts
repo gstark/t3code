@@ -1373,3 +1373,64 @@ describe("when: the project prefers commit only", () => {
     );
   });
 });
+
+describe("when: the thread is in a worktree", () => {
+  it("resolveQuickAction lands local changes by default", () => {
+    const quick = resolveQuickAction(
+      status({ hasWorkingTreeChanges: true }),
+      false,
+      false,
+      true,
+      null,
+      true,
+    );
+    assert.deepInclude(quick, { kind: "run_action", action: "land", label: "Land worktree" });
+  });
+
+  it("resolveQuickAction lands already-committed work", () => {
+    const quick = resolveQuickAction(status({ aheadCount: 2 }), false, false, true, null, true);
+    assert.deepInclude(quick, { kind: "run_action", action: "land" });
+  });
+
+  it("resolveQuickAction follows a chosen PR path instead of landing", () => {
+    const quick = resolveQuickAction(
+      status({ hasWorkingTreeChanges: true }),
+      false,
+      false,
+      true,
+      "commit_push_pr",
+      true,
+    );
+    assert.deepInclude(quick, { kind: "run_action", action: "commit_push_pr" });
+  });
+
+  it("buildMenuItems offers landing when another path is preferred", () => {
+    const items = buildMenuItems(
+      status({ hasWorkingTreeChanges: true }),
+      false,
+      true,
+      false,
+      "commit_push",
+      true,
+    );
+    assert.deepEqual(
+      items.map((item) => item.id),
+      ["commit", "commit_push_pr", "land", "push", "pr"],
+    );
+  });
+
+  it("buildMenuItems offers both push paths while landing is the default", () => {
+    const items = buildMenuItems(
+      status({ hasWorkingTreeChanges: true }),
+      false,
+      true,
+      false,
+      null,
+      true,
+    );
+    assert.deepEqual(
+      items.map((item) => item.id),
+      ["commit", "commit_push", "commit_push_pr", "push", "pr"],
+    );
+  });
+});

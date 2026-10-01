@@ -790,6 +790,33 @@ const makeWsRpcLayer = (
         );
       };
 
+      // A landed worktree is gone, so its thread continues in the main checkout
+      // on the base branch. Never fails, for the same reason as above.
+      const moveLandedThreadToMainCheckout = (
+        threadId: ThreadId,
+        land: NonNullable<GitRunStackedActionResult["land"]>,
+      ) =>
+        serverCommandId("git-land-thread-meta-update").pipe(
+          Effect.flatMap((commandId) =>
+            dispatchFromClient({
+              type: "thread.meta.update",
+              commandId,
+              threadId,
+              branch: land.baseBranch,
+              worktreePath: null,
+            }),
+          ),
+          Effect.asVoid,
+          Effect.catchCause((cause) =>
+            Cause.hasInterruptsOnly(cause)
+              ? Effect.failCause(cause as Cause.Cause<never>)
+              : Effect.logWarning("failed to move landed thread to the main checkout", {
+                  threadId,
+                  cause,
+                }),
+          ),
+        );
+
       const appendSetupScriptActivity = (input: {
         readonly threadId: ThreadId;
         readonly kind: "setup-script.requested" | "setup-script.started" | "setup-script.failed";
@@ -3396,11 +3423,18 @@ const makeWsRpcLayer = (
                           )
                       ).pipe(
                         Effect.andThen(
+                          input.threadId === undefined || result.land === undefined
+                            ? Effect.void
+                            : moveLandedThreadToMainCheckout(input.threadId, result.land),
+                        ),
+                        Effect.andThen(
                           input.threadId === undefined
                             ? Effect.void
                             : appendGitActionActivity(input.threadId, result),
                         ),
-                        Effect.andThen(refreshGitStatus(input.cwd)),
+                        Effect.andThen(
+                          refreshGitStatus(result.land?.mainCheckoutPath ?? input.cwd),
+                        ),
                         Effect.andThen(Queue.end(queue).pipe(Effect.asVoid)),
                       ),
                   }),

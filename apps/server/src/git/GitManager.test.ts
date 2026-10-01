@@ -20,6 +20,7 @@ import { ChildProcessSpawner } from "effect/unstable/process";
 import { expect } from "vite-plus/test";
 import type {
   GitActionProgressEvent,
+  GitStackedAction,
   GitPreparePullRequestThreadInput,
   ThreadId,
 } from "@t3tools/contracts";
@@ -284,6 +285,20 @@ function configureVisibleRemoteUrlWithLocalRewrite(
   return Effect.gen(function* () {
     yield* runGit(cwd, ["config", `remote.${remoteName}.url`, visibleUrl]);
     yield* runGit(cwd, ["config", `url.${localRemotePath}.insteadOf`, visibleUrl]);
+  });
+}
+
+/** A main checkout pushed to a bare remote, plus a linked worktree on `feature/land`. */
+function makeLandableWorktree() {
+  return Effect.gen(function* () {
+    const repoDir = yield* makeTempDir("t3code-git-manager-");
+    yield* initRepo(repoDir);
+    const remoteDir = yield* createBareRemote();
+    yield* runGit(repoDir, ["remote", "add", "origin", remoteDir]);
+    yield* runGit(repoDir, ["push", "-u", "origin", "main"]);
+    const worktreeDir = NodePath.join(yield* makeTempDir("t3code-git-worktree-"), "land");
+    yield* runGit(repoDir, ["worktree", "add", "-b", "feature/land", worktreeDir]);
+    return { repoDir, remoteDir, worktreeDir };
   });
 }
 
@@ -599,7 +614,7 @@ function runStackedAction(
   manager: GitManager.GitManager["Service"],
   input: {
     cwd: string;
-    action: "commit" | "push" | "create_pr" | "commit_push" | "commit_push_pr";
+    action: GitStackedAction;
     actionId?: string;
     commitMessage?: string;
     featureBranch?: boolean;
@@ -3181,6 +3196,47 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
         cwd: repoDir,
       });
       expect(error.message).toContain("no changes to commit");
+    }),
+  );
+
+  it.effect("lands a worktree: commits, merges into main, pushes, and cleans up", () =>
+    Effect.gen(function* () {
+      const { repoDir, remoteDir, worktreeDir } = yield* makeLandableWorktree();
+      NodeFS.writeFileSync(NodePath.join(worktreeDir, "feature.txt"), "feature\n");
+
+      const { manager } = yield* makeManager();
+      const result = yield* runStackedAction(manager, { cwd: worktreeDir, action: "land" });
+
+      expect(result.commit.status).toBe("created");
+      expect(result.push).toMatchObject({ status: "pushed", branch: "main" });
+      const remoteMain = (yield* runGit(remoteDir, ["rev-parse", "main"])).stdout.trim();
+      expect(result.land).toMatchObject({
+        branch: "feature/land",
+        baseBranch: "main",
+        toSha: remoteMain,
+      });
+      expect(result.toast.title).toBe("Landed feature/land into main");
+      expect(NodeFS.existsSync(worktreeDir)).toBe(false);
+      expect((yield* runGit(repoDir, ["branch", "--list", "feature/land"])).stdout.trim()).toBe("");
+      expect(NodeFS.readFileSync(NodePath.join(repoDir, "feature.txt"), "utf8")).toBe("feature\n");
+    }),
+  );
+
+  it.effect("refuses to land into a dirty main checkout before committing", () =>
+    Effect.gen(function* () {
+      const { repoDir, worktreeDir } = yield* makeLandableWorktree();
+      NodeFS.writeFileSync(NodePath.join(worktreeDir, "feature.txt"), "feature\n");
+      NodeFS.writeFileSync(NodePath.join(repoDir, "README.md"), "edited\n");
+
+      const { manager } = yield* makeManager();
+      const error = yield* runStackedAction(manager, { cwd: worktreeDir, action: "land" }).pipe(
+        Effect.flip,
+      );
+
+      expect(error.message).toContain("has uncommitted changes");
+      expect((yield* runGit(worktreeDir, ["status", "--porcelain"])).stdout.trim()).toBe(
+        "?? feature.txt",
+      );
     }),
   );
 

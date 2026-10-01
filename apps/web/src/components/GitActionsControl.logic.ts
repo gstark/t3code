@@ -10,12 +10,18 @@ import {
   type ChangeRequestTerminology,
 } from "../sourceControlPresentation";
 
-export type GitActionIconName = "commit" | "push" | "pr";
+export type GitActionIconName = "commit" | "push" | "pr" | "land";
 
-export type GitDialogAction = "commit" | "push" | "create_pr" | "commit_push" | "commit_push_pr";
+export type GitDialogAction =
+  | "commit"
+  | "push"
+  | "create_pr"
+  | "commit_push"
+  | "commit_push_pr"
+  | "land";
 
 export interface GitActionMenuItem {
-  id: "commit" | "commit_push" | "commit_push_pr" | "push" | "pr";
+  id: "commit" | "commit_push" | "commit_push_pr" | "land" | "push" | "pr";
   label: string;
   disabled: boolean;
   icon: GitActionIconName;
@@ -85,22 +91,35 @@ export function buildGitActionProgressStages(input: {
   if (input.action === "commit") {
     return [...branchStages, ...commitStages];
   }
+  if (input.action === "land") {
+    return [...commitStages, "Landing worktree..."];
+  }
   if (input.action === "commit_push") {
     return [...branchStages, ...commitStages, pushStage];
   }
   return [...branchStages, ...commitStages, pushStage, ...prStages];
 }
 
-/** The commit path a project prefers over the default "commit, push & PR". */
-export type GitCommitPreference = "commit" | "commit_push";
+/**
+ * The commit path a project prefers. Without one, worktree threads land and
+ * other threads commit, push & PR.
+ */
+export type GitCommitPreference = "commit" | "commit_push" | "commit_push_pr";
 
 function resolveCommitAction(
   commitPreference: GitCommitPreference | null,
   skipsPr: boolean,
-): "commit" | "commit_push" | "commit_push_pr" {
+  canLand: boolean,
+): "commit" | "commit_push" | "commit_push_pr" | "land" {
   if (commitPreference === "commit") return "commit";
+  if (canLand && commitPreference === null) return "land";
   if (commitPreference === "commit_push" || skipsPr) return "commit_push";
   return "commit_push_pr";
+}
+
+/** Commit & push without a PR, either chosen directly or implied by "commit". */
+function prefersSkippingPr(commitPreference: GitCommitPreference | null): boolean {
+  return commitPreference === "commit" || commitPreference === "commit_push";
 }
 
 export function buildMenuItems(
@@ -109,6 +128,7 @@ export function buildMenuItems(
   hasPrimaryRemote = true,
   isDefaultRef = false,
   commitPreference: GitCommitPreference | null = null,
+  isWorktree = false,
 ): GitActionMenuItem[] {
   if (!gitStatus) return [];
   const terminology = resolveChangeRequestTerminology(gitStatus);
@@ -151,7 +171,12 @@ export function buildMenuItems(
 
   // Offers the commit paths the quick action does not take, so the sticky
   // per-project commit preference can be switched from the menu.
-  const quickCommitAction = resolveCommitAction(commitPreference, isDefaultRef || hasOpenPr);
+  const canLand = isWorktree && !isDefaultRef;
+  const quickCommitAction = resolveCommitAction(
+    commitPreference,
+    isDefaultRef || hasOpenPr,
+    canLand,
+  );
   const commitPushItems: GitActionMenuItem[] = [
     ...(quickCommitAction === "commit_push"
       ? []
@@ -175,6 +200,18 @@ export function buildMenuItems(
             icon: "pr",
             kind: "open_dialog",
             dialogAction: "commit_push_pr",
+          } satisfies GitActionMenuItem,
+        ]),
+    ...(!canLand || quickCommitAction === "land"
+      ? []
+      : [
+          {
+            id: "land",
+            label: "Land worktree",
+            disabled: isBusy || !(hasChanges || hasDefaultBranchDelta),
+            icon: "land",
+            kind: "open_dialog",
+            dialogAction: "land",
           } satisfies GitActionMenuItem,
         ]),
   ];
@@ -215,6 +252,7 @@ export function resolveQuickAction(
   isDefaultRef = false,
   hasPrimaryRemote = true,
   commitPreference: GitCommitPreference | null = null,
+  isWorktree = false,
 ): GitQuickAction {
   if (isBusy) {
     return { label: "Commit", disabled: true, kind: "show_hint", hint: "Git action in progress." };
@@ -237,7 +275,12 @@ export function resolveQuickAction(
   const isBehind = gitStatus.behindCount > 0;
   const isDiverged = isAhead && isBehind;
   const terminology = resolveChangeRequestTerminology(gitStatus);
-  const skipPr = commitPreference !== null;
+  const skipPr = prefersSkippingPr(commitPreference);
+  const commitAction = resolveCommitAction(
+    commitPreference,
+    hasOpenPr || isDefaultRef,
+    isWorktree && hasPrimaryRemote && !isDefaultRef,
+  );
 
   if (!hasBranch) {
     return {
@@ -248,11 +291,15 @@ export function resolveQuickAction(
     };
   }
 
+  // Landing commits first when needed, so it also covers already-committed work.
+  if (commitAction === "land" && (hasChanges || hasDefaultBranchDelta)) {
+    return { label: "Land worktree", disabled: false, kind: "run_action", action: "land" };
+  }
+
   if (hasChanges) {
     if (!gitStatus.hasUpstream && !hasPrimaryRemote) {
       return { label: "Commit", disabled: false, kind: "run_action", action: "commit" };
     }
-    const commitAction = resolveCommitAction(commitPreference, hasOpenPr || isDefaultRef);
     if (commitAction === "commit") {
       return { label: "Commit", disabled: false, kind: "run_action", action: "commit" };
     }
