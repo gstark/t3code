@@ -301,7 +301,14 @@ export const VcsSwitchRefResult = Schema.Struct({
 });
 export type VcsSwitchRefResult = typeof VcsSwitchRefResult.Type;
 
-export const GitRunStackedActionResult = Schema.Struct({
+/**
+ * Thread activity kind the server appends after a stacked git action commits,
+ * pushes, or opens a pull request beside a thread.
+ */
+export const GIT_ACTION_ACTIVITY_KIND = "git.action.completed";
+
+/** Payload of a `git.action.completed` activity: the action's result without its toast. */
+export const GitActionActivityPayload = Schema.Struct({
   action: GitStackedAction,
   branch: Schema.Struct({
     status: GitBranchStepStatus,
@@ -326,6 +333,11 @@ export const GitRunStackedActionResult = Schema.Struct({
     headBranch: Schema.optional(TrimmedNonEmptyStringSchema),
     title: Schema.optional(TrimmedNonEmptyStringSchema),
   }),
+});
+export type GitActionActivityPayload = typeof GitActionActivityPayload.Type;
+
+export const GitRunStackedActionResult = Schema.Struct({
+  ...GitActionActivityPayload.fields,
   toast: GitRunStackedActionToast,
 });
 export type GitRunStackedActionResult = typeof GitRunStackedActionResult.Type;

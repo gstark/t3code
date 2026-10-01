@@ -32,6 +32,7 @@ import {
 import { type ChatMessage, type ProposedPlan, type TurnDiffSummary } from "../../types";
 import type { QueuedComposerMessage } from "../../queuedMessageStore";
 import {
+  type GitActionActivityPayload,
   type MessageId,
   type OrchestrationLatestTurn,
   type TurnId,
@@ -404,6 +405,13 @@ export type MessagesTimelineRow =
       id: string;
       createdAt: string;
       label: string;
+    }
+  | {
+      kind: "git-action";
+      id: string;
+      createdAt: string;
+      label: string;
+      gitAction: GitActionActivityPayload;
     }
   | {
       kind: "message";
@@ -1217,6 +1225,17 @@ export function deriveMessagesTimelineRows(input: {
       continue;
     }
 
+    if (timelineEntry.kind === "work" && timelineEntry.entry.gitAction !== undefined) {
+      nextRows.push({
+        kind: "git-action",
+        id: timelineEntry.id,
+        createdAt: timelineEntry.createdAt,
+        label: timelineEntry.entry.label,
+        gitAction: timelineEntry.entry.gitAction,
+      });
+      continue;
+    }
+
     if (timelineEntry.kind === "work") {
       if (
         timelineEntry.entry.agentSpawn !== undefined ||
@@ -1248,6 +1267,7 @@ export function deriveMessagesTimelineRows(input: {
           nextEntry.entry.agentSpawn !== undefined ||
           nextEntry.entry.questionAnswer !== undefined ||
           nextEntry.entry.sourceActivityKind === "context-compaction" ||
+          nextEntry.entry.gitAction !== undefined ||
           nextEntry.entry.tone === "error" ||
           activeWorkEntryIds.has(nextEntry.id) ||
           collapsedEntryIds.has(nextEntry.id) ||
@@ -1634,6 +1654,9 @@ function isRowUnchanged(a: MessagesTimelineRow, b: MessagesTimelineRow): boolean
       const bc = b as typeof a;
       return a.createdAt === bc.createdAt && a.label === bc.label;
     }
+
+    case "git-action":
+      return a.gitAction === (b as typeof a).gitAction;
 
     case "proposed-plan":
       return a.proposedPlan === (b as typeof a).proposedPlan;
