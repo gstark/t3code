@@ -344,7 +344,10 @@ export const GitRunStackedActionResult = Schema.Struct({
     headBranch: Schema.optional(TrimmedNonEmptyStringSchema),
     title: Schema.optional(TrimmedNonEmptyStringSchema),
   }),
-  /** Present when a `land` action merged a worktree branch into the main checkout. */
+  /**
+   * Present when a `land` action removed a worktree. The SHAs are absent when
+   * the branch had no commits to merge and the action only cleaned up.
+   */
   land: Schema.optional(
     Schema.Struct({
       branch: TrimmedNonEmptyStringSchema,
@@ -352,9 +355,9 @@ export const GitRunStackedActionResult = Schema.Struct({
       mainCheckoutPath: TrimmedNonEmptyStringSchema,
       removedWorktreePath: TrimmedNonEmptyStringSchema,
       /** The remote base before the push; `fromSha..toSha` is the pushed range. */
-      fromSha: TrimmedNonEmptyStringSchema,
+      fromSha: Schema.optional(TrimmedNonEmptyStringSchema),
       /** The merge commit, or the branch head when the merge fast-forwarded. */
-      toSha: TrimmedNonEmptyStringSchema,
+      toSha: Schema.optional(TrimmedNonEmptyStringSchema),
     }),
   ),
   toast: GitRunStackedActionToast,
