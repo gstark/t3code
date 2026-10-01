@@ -12,10 +12,10 @@ import {
 
 export type GitActionIconName = "commit" | "push" | "pr";
 
-export type GitDialogAction = "commit" | "push" | "create_pr";
+export type GitDialogAction = "commit" | "push" | "create_pr" | "commit_push" | "commit_push_pr";
 
 export interface GitActionMenuItem {
-  id: "commit" | "push" | "pr";
+  id: "commit" | "commit_push" | "push" | "pr";
   label: string;
   disabled: boolean;
   icon: GitActionIconName;
@@ -95,6 +95,8 @@ export function buildMenuItems(
   gitStatus: VcsStatusResult | null,
   isBusy: boolean,
   hasPrimaryRemote = true,
+  isDefaultRef = false,
+  skipPr = false,
 ): GitActionMenuItem[] {
   if (!gitStatus) return [];
   const terminology = resolveChangeRequestTerminology(gitStatus);
@@ -135,8 +137,34 @@ export function buildMenuItems(
     return [commitItem];
   }
 
+  // Offers the commit path the quick action does not take, so the sticky
+  // "skip PR" choice can be switched on and off from the menu.
+  const commitPushItems: GitActionMenuItem[] =
+    isDefaultRef || hasOpenPr
+      ? []
+      : [
+          skipPr
+            ? {
+                id: "commit_push",
+                label: `Commit, push & ${terminology.shortLabel}`,
+                disabled: !canCommit,
+                icon: "pr",
+                kind: "open_dialog",
+                dialogAction: "commit_push_pr",
+              }
+            : {
+                id: "commit_push",
+                label: "Commit & push",
+                disabled: !canCommit,
+                icon: "push",
+                kind: "open_dialog",
+                dialogAction: "commit_push",
+              },
+        ];
+
   return [
     commitItem,
+    ...commitPushItems,
     {
       id: "push",
       label: "Push",
@@ -169,6 +197,7 @@ export function resolveQuickAction(
   isBusy: boolean,
   isDefaultRef = false,
   hasPrimaryRemote = true,
+  skipPr = false,
 ): GitQuickAction {
   if (isBusy) {
     return { label: "Commit", disabled: true, kind: "show_hint", hint: "Git action in progress." };
@@ -205,7 +234,7 @@ export function resolveQuickAction(
     if (!gitStatus.hasUpstream && !hasPrimaryRemote) {
       return { label: "Commit", disabled: false, kind: "run_action", action: "commit" };
     }
-    if (hasOpenPr || isDefaultRef) {
+    if (hasOpenPr || isDefaultRef || skipPr) {
       return { label: "Commit & push", disabled: false, kind: "run_action", action: "commit_push" };
     }
     return {
@@ -238,7 +267,7 @@ export function resolveQuickAction(
         hint: "No local commits to push.",
       };
     }
-    if (hasOpenPr || isDefaultRef) {
+    if (hasOpenPr || isDefaultRef || skipPr) {
       return {
         label: "Push",
         disabled: false,
@@ -272,7 +301,7 @@ export function resolveQuickAction(
   }
 
   if (isAhead) {
-    if (hasOpenPr || isDefaultRef) {
+    if (hasOpenPr || isDefaultRef || skipPr) {
       return {
         label: "Push",
         disabled: false,
@@ -292,7 +321,7 @@ export function resolveQuickAction(
     return { label: `View ${terminology.shortLabel}`, disabled: false, kind: "open_pr" };
   }
 
-  if (hasDefaultBranchDelta && !isDefaultRef) {
+  if (hasDefaultBranchDelta && !isDefaultRef && !skipPr) {
     return {
       label: `Create ${terminology.shortLabel}`,
       disabled: false,
