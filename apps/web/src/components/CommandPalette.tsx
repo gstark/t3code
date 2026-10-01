@@ -693,6 +693,25 @@ function CommandPaletteDialog(props: {
   );
 }
 
+// Whether Shift is down while the palette is open. Rows that can open in a
+// worktree preview that action while it is held.
+function useShiftHeld(): boolean {
+  const [shiftHeld, setShiftHeld] = useState(false);
+  useEffect(() => {
+    const sync = (event: globalThis.KeyboardEvent) => setShiftHeld(event.shiftKey);
+    const reset = () => setShiftHeld(false);
+    window.addEventListener("keydown", sync, true);
+    window.addEventListener("keyup", sync, true);
+    window.addEventListener("blur", reset);
+    return () => {
+      window.removeEventListener("keydown", sync, true);
+      window.removeEventListener("keyup", sync, true);
+      window.removeEventListener("blur", reset);
+    };
+  }, []);
+  return shiftHeld;
+}
+
 function OpenCommandPaletteDialog(props: {
   readonly openIntent: CommandPaletteOpenIntent | null;
   readonly setOpen: (open: boolean) => void;
@@ -709,6 +728,7 @@ function OpenCommandPaletteDialog(props: {
   const deferredQuery = useDeferredValue(query);
   const isActionsOnly = deferredQuery.startsWith(">");
   const [highlightedItemValue, setHighlightedItemValue] = useState<string | null>(null);
+  const shiftHeld = useShiftHeld();
   const clientSettings = useClientSettings();
   const createProject = useAtomCommand(projectEnvironment.create, {
     reportFailure: false,
@@ -2724,6 +2744,23 @@ function OpenCommandPaletteDialog(props: {
       return;
     }
 
+    if (
+      event.key === "Enter" &&
+      event.shiftKey &&
+      !event.altKey &&
+      !isPrimaryModifierPressed(event)
+    ) {
+      const highlightedItem = displayedGroups
+        .flatMap((group) => group.items)
+        .find((item) => item.value === highlightedItemValue);
+      if (highlightedItem?.kind === "action" && highlightedItem.runInWorktree) {
+        event.preventDefault();
+        event.stopPropagation();
+        executeItem(highlightedItem, { inWorktree: true });
+        return;
+      }
+    }
+
     if (addProjectCloneFlow?.step === "repository" && event.key === "Enter") {
       event.preventDefault();
       void submitAddProjectCloneFlow();
@@ -2977,16 +3014,31 @@ function OpenCommandPaletteDialog(props: {
         ? "Select"
         : undefined;
 
-  const footerTrailing = canOpenProjectFromFileManager ? (
-    <CommandFooterAction
-      disabled={isPickingProjectFolder}
-      onClick={() => {
-        void handleOpenProjectFromFileManager();
-      }}
-    >
-      {`Open in ${fileManagerName}`}
-    </CommandFooterAction>
-  ) : null;
+  const hasWorktreeItems = displayedGroups.some((group) =>
+    group.items.some((item) => item.kind === "action" && item.runInWorktree !== undefined),
+  );
+  const footerTrailing =
+    canOpenProjectFromFileManager || hasWorktreeItems ? (
+      <div className="flex items-center gap-3">
+        {hasWorktreeItems ? (
+          <KbdGroup>
+            <span>Hold</span>
+            <Kbd>Shift</Kbd>
+            <span>to open in worktree</span>
+          </KbdGroup>
+        ) : null}
+        {canOpenProjectFromFileManager ? (
+          <CommandFooterAction
+            disabled={isPickingProjectFolder}
+            onClick={() => {
+              void handleOpenProjectFromFileManager();
+            }}
+          >
+            {`Open in ${fileManagerName}`}
+          </CommandFooterAction>
+        ) : null}
+      </div>
+    ) : null;
 
   return (
     <CommandPaletteContent
@@ -3054,6 +3106,7 @@ function OpenCommandPaletteDialog(props: {
         highlightedItemValue={highlightedItemValue}
         isActionsOnly={isActionsOnly}
         keybindings={keybindings}
+        shiftHeld={shiftHeld}
         onExecuteItem={executeItem}
         {...(addProjectCloneFlow?.step === "repository"
           ? {
