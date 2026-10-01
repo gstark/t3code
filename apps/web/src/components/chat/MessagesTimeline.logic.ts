@@ -50,6 +50,7 @@ import {
   type TurnDiffSummary,
 } from "../../types";
 import {
+  type GitActionActivityPayload,
   idleCompactionOf,
   isCompactionCommandMessage,
   type MessageId,
@@ -593,6 +594,13 @@ type MessagesTimelineRowContent =
       failed?: true;
       /** The provider's reason, when a failed compaction gave one. */
       failure?: string;
+    }
+  | {
+      kind: "git-action";
+      id: string;
+      createdAt: string;
+      label: string;
+      gitAction: GitActionActivityPayload;
     }
   | {
       kind: "message";
@@ -1740,6 +1748,17 @@ export function deriveMessagesTimelineRows(input: {
       continue;
     }
 
+    if (timelineEntry.kind === "work" && timelineEntry.entry.gitAction !== undefined) {
+      nextRows.push({
+        kind: "git-action",
+        id: timelineEntry.id,
+        createdAt: timelineEntry.createdAt,
+        label: timelineEntry.entry.label,
+        gitAction: timelineEntry.entry.gitAction,
+      });
+      continue;
+    }
+
     if (
       timelineEntry.kind === "work" &&
       timelineEntry.entry.runId != null &&
@@ -1778,6 +1797,7 @@ export function deriveMessagesTimelineRows(input: {
           !nextEntry ||
           nextEntry.kind !== "work" ||
           nextEntry.entry.sourceActivityKind === "context-compaction" ||
+          nextEntry.entry.gitAction !== undefined ||
           nextEntry.entry.tone === "error" ||
           nextEntry.entry.sourceActivityKind === "runtime.error" ||
           nextEntry.entry.itemType === "system_notice" ||
@@ -2380,6 +2400,9 @@ function isRowUnchanged(a: MessagesTimelineRow, b: MessagesTimelineRow): boolean
         a.failure === bc.failure
       );
     }
+
+    case "git-action":
+      return a.gitAction === (b as typeof a).gitAction;
 
     case "proposed-plan":
       return a.proposedPlan === (b as typeof a).proposedPlan;

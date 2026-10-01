@@ -2,6 +2,7 @@ import type { ThreadStructure, ThreadStructureRuntime } from "@t3tools/client-ru
 import { resolveThreadWorkingStartedAt } from "@t3tools/client-runtime/state/models";
 import {
   type AssetResource,
+  type GitActionActivityPayload,
   type OrchestrationV2Checkpoint,
   type OrchestrationV2ExecutionNode,
   type OrchestrationV2PlanArtifact,
@@ -68,6 +69,8 @@ export type WorkLogToolLifecycleStatus =
 
 export interface WorkLogEntry {
   readonly questionAnswer?: import("@t3tools/contracts").UserInputAttachmentAnswerPayload;
+  /** Present on rows for a commit, push, or pull request made from the git controls. */
+  readonly gitAction?: GitActionActivityPayload;
   readonly id: string;
   readonly createdAt: string;
   readonly runId?: RunId | null;
