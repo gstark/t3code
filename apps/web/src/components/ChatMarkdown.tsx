@@ -175,7 +175,12 @@ import { resolvePullRequestPreviewTarget } from "@t3tools/client-runtime/change-
 import { sourceControlClients } from "@t3tools/client-runtime/source-control-clients";
 import { useOpenChangeRequestLink } from "~/lib/openPullRequestLink";
 import { useOpenLink } from "../browser/useOpenLink";
-import { writeTextToClipboard } from "../hooks/useCopyToClipboard";
+import { useCopyToClipboard, writeTextToClipboard } from "../hooks/useCopyToClipboard";
+import {
+  ANCHORED_COPY_TOAST_TIMEOUT_MS,
+  showAnchoredCopyErrorToast,
+  showAnchoredCopySuccessToast,
+} from "./ui/anchoredCopyToast";
 import { isPreviewAvailableFor } from "../browser/previewRuntime";
 import {
   isBrowserPreviewFile,
@@ -380,6 +385,41 @@ function normalizeMarkdownLinkHrefKey(href: string): string {
   return WINDOWS_DRIVE_PATH_REGEX.test(rewrittenHref)
     ? rewrittenHref.replaceAll("\\", "/")
     : rewrittenHref;
+}
+
+/** Inline code that copies its text on click. A drag that selects text does not copy. */
+function CopyableInlineCode({
+  text,
+  className,
+  children,
+  ...props
+}: ComponentProps<"code"> & { text: string }) {
+  const ref = useRef<HTMLElement>(null);
+  const { copyToClipboard } = useCopyToClipboard<void>({
+    onCopy: () => showAnchoredCopySuccessToast(ref),
+    onError: (error: Error) => showAnchoredCopyErrorToast(ref, error),
+    timeout: ANCHORED_COPY_TOAST_TIMEOUT_MS,
+  });
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <code
+            {...props}
+            ref={ref}
+            className={cn("cursor-copy", className)}
+            onClick={() => {
+              if (window.getSelection()?.isCollapsed === false) return;
+              copyToClipboard(text);
+            }}
+          />
+        }
+      >
+        {children}
+      </TooltipTrigger>
+      <TooltipPopup side="top">Click to copy</TooltipPopup>
+    </Tooltip>
+  );
 }
 
 // Heading ids are added after sanitizing, which would prefix them a second time.
@@ -1308,6 +1348,7 @@ const CHAT_MARKDOWN_COMPONENTS = {
   code: function MarkdownCode({ node, children, className, ...props }) {
     const { cwd, imageBaseDir, inlineCodeFileLinkMetaByText, fileLinkChip, mathEnabled, inline } =
       use(ChatMarkdownRendererContext);
+    const insideLink = use(MarkdownLinkContext);
     const math = mathEnabled ? mathKind(className) : null;
     if (math) {
       return (
@@ -1328,6 +1369,13 @@ const CHAT_MARKDOWN_COMPONENTS = {
           fileLinkMeta,
           `\`${codeText}\``,
           inlineCodeFilePathCandidate(codeText) ?? codeText.trim(),
+        );
+      }
+      if (!insideLink) {
+        return (
+          <CopyableInlineCode {...props} className={className} text={codeText}>
+            {children}
+          </CopyableInlineCode>
         );
       }
     }
