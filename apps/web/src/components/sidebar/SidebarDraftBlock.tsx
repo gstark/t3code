@@ -3,7 +3,6 @@ import { replaceComposerContextReferences } from "@t3tools/shared/composerContex
 import { SquarePenIcon, XIcon } from "lucide-react";
 import {
   memo,
-  useState,
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
 } from "react";
@@ -21,21 +20,16 @@ import {
 } from "../../composerDraftStore";
 import { draftPenClassName, draftSurfaceClassName } from "./SidebarThreadRow";
 
-const SidebarDraftRow = memo(function SidebarDraftRow(props: {
-  draftId: DraftId;
-  composer: ComposerThreadDraftState;
-  project: ProjectFaviconProject | null;
-  projectDisplayName: string | null;
-  isActive: boolean;
-  onNavigate: (draftId: DraftId) => void;
-  onDiscard: (draftId: DraftId) => void;
-  onContextMenu: (draftId: DraftId, position: { x: number; y: number }) => void;
-}) {
-  const { composer, draftId, onContextMenu, onDiscard, onNavigate } = props;
+// First prompt line of a draft, or its attachment count when the prompt is
+// empty.
+function draftRowPreview(composer: ComposerThreadDraftState): string {
   const promptPreview =
     replaceComposerContextReferences(composer.prompt, (occurrence) => occurrence.label)
       .trim()
       .split("\n", 1)[0] ?? "";
+  if (promptPreview.length > 0) {
+    return promptPreview;
+  }
   // images mirrors persistedAttachments once rehydration finishes; before
   // that only the persisted list is populated, hence max not sum.
   const attachmentCount =
@@ -44,10 +38,20 @@ const SidebarDraftRow = memo(function SidebarDraftRow(props: {
     composer.terminalContexts.length +
     composer.previewAnnotations.length +
     composer.reviewComments.length;
-  const preview =
-    promptPreview.length > 0
-      ? promptPreview
-      : `${attachmentCount} attachment${attachmentCount === 1 ? "" : "s"}`;
+  return `${attachmentCount} attachment${attachmentCount === 1 ? "" : "s"}`;
+}
+
+// One unsent draft session. Callers own the surrounding list item.
+const SidebarDraftRow = memo(function SidebarDraftRow(props: {
+  draftId: DraftId;
+  preview: string;
+  project: ProjectFaviconProject | null;
+  projectDisplayName: string | null;
+  isActive: boolean;
+  onNavigate: (draftId: DraftId) => void;
+  onContextMenu: (draftId: DraftId, position: { x: number; y: number }) => void;
+}) {
+  const { draftId, onContextMenu, onNavigate, preview } = props;
   const accessibility = resolveSidebarRowAccessibility({
     title: preview,
     statusLabel: "Unsent draft",
@@ -76,58 +80,56 @@ const SidebarDraftRow = memo(function SidebarDraftRow(props: {
   const handleDiscard = (event: ReactMouseEvent) => {
     event.preventDefault();
     event.stopPropagation();
-    onDiscard(draftId);
+    discardComposerDraft(draftId);
   };
   return (
-    <li className="list-none py-0.5">
-      <div
-        role="button"
-        tabIndex={0}
-        aria-label={accessibility.label}
-        aria-current={accessibility.current}
-        data-testid="sidebar-draft-row"
-        className={cn(
-          "group/sidebar-row relative w-full cursor-pointer overflow-hidden rounded-md text-left text-sidebar-foreground outline-none select-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
-          props.isActive ? "bg-sidebar-row-active" : draftSurfaceClassName,
-        )}
-        onClick={handleActivate}
-        onContextMenu={handleContextMenu}
-        onKeyDown={handleKeyDown}
-      >
-        <span className="sr-only">{preview}</span>
-        <div className="relative z-10 h-[4.875rem] px-(--sidebar-row-content-inset) py-(--sidebar-content-inset)">
-          <div className="flex h-5 min-w-0 items-center gap-1.5">
-            <SquarePenIcon aria-hidden className={draftPenClassName} />
-            {props.project ? (
-              <ProjectFavicon project={props.project} className="size-4 shrink-0" />
-            ) : null}
-            <span className="min-w-0 flex-1 truncate text-xs font-medium text-secondary-label">
-              {props.projectDisplayName}
-            </span>
-            <span className="ml-auto flex h-5 min-w-5 shrink-0 items-center justify-end">
-              <Tooltip>
-                <TooltipTrigger
-                  render={
-                    <button
-                      type="button"
-                      aria-label="Discard draft"
-                      onClick={handleDiscard}
-                      className="pointer-events-none inline-flex cursor-pointer items-center rounded-md bg-transparent px-1 text-muted-foreground opacity-0 transition-opacity hover:text-foreground focus-visible:pointer-events-auto focus-visible:opacity-100 group-hover/sidebar-row:pointer-events-auto group-hover/sidebar-row:opacity-100"
-                    >
-                      <XIcon className="size-3" />
-                    </button>
-                  }
-                />
-                <TooltipPopup side="top">Discard draft</TooltipPopup>
-              </Tooltip>
-            </span>
-          </div>
-          <div aria-hidden className="mt-0.5 truncate text-sm font-medium text-foreground/90">
-            {preview}
-          </div>
+    <div
+      role="button"
+      tabIndex={0}
+      aria-label={accessibility.label}
+      aria-current={accessibility.current}
+      data-testid="sidebar-draft-row"
+      className={cn(
+        "group/sidebar-row relative w-full cursor-pointer overflow-hidden rounded-md text-left text-sidebar-foreground outline-none select-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+        props.isActive ? "bg-sidebar-row-active" : draftSurfaceClassName,
+      )}
+      onClick={handleActivate}
+      onContextMenu={handleContextMenu}
+      onKeyDown={handleKeyDown}
+    >
+      <span className="sr-only">{preview}</span>
+      <div className="relative z-10 h-[4.875rem] px-(--sidebar-row-content-inset) py-(--sidebar-content-inset)">
+        <div className="flex h-5 min-w-0 items-center gap-1.5">
+          <SquarePenIcon aria-hidden className={draftPenClassName} />
+          {props.project ? (
+            <ProjectFavicon project={props.project} className="size-4 shrink-0" />
+          ) : null}
+          <span className="min-w-0 flex-1 truncate text-xs font-medium text-secondary-label">
+            {props.projectDisplayName}
+          </span>
+          <span className="ml-auto flex h-5 min-w-5 shrink-0 items-center justify-end">
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <button
+                    type="button"
+                    aria-label="Discard draft"
+                    onClick={handleDiscard}
+                    className="pointer-events-none inline-flex cursor-pointer items-center rounded-md bg-transparent px-1 text-muted-foreground opacity-0 transition-opacity hover:text-foreground focus-visible:pointer-events-auto focus-visible:opacity-100 group-hover/sidebar-row:pointer-events-auto group-hover/sidebar-row:opacity-100"
+                  >
+                    <XIcon className="size-3" />
+                  </button>
+                }
+              />
+              <TooltipPopup side="top">Discard draft</TooltipPopup>
+            </Tooltip>
+          </span>
+        </div>
+        <div aria-hidden className="mt-0.5 truncate text-sm font-medium text-foreground/90">
+          {preview}
         </div>
       </div>
-    </li>
+    </div>
   );
 });
 
@@ -137,6 +139,8 @@ interface SidebarDraftRowData {
   composer: ComposerThreadDraftState;
 }
 
+// Draft sessions with user content, surfaced above the pinned block. The open
+// draft is not here: it renders as SidebarNewThreadRow.
 export const SidebarDraftBlock = memo(function SidebarDraftBlock(props: {
   projectByKey: ReadonlyMap<string, EnvironmentProject>;
   projectDisplayNameByKey: ReadonlyMap<string, string>;
@@ -147,39 +151,16 @@ export const SidebarDraftBlock = memo(function SidebarDraftBlock(props: {
 }) {
   const draftThreadsByThreadKey = useComposerDraftStore((store) => store.draftThreadsByThreadKey);
   const draftsByThreadKey = useComposerDraftStore((store) => store.draftsByThreadKey);
-  const [frozenActive, setFrozenActive] = useState<{
-    routeDraftId: string | null;
-    row: SidebarDraftRowData | null;
-  }>({ routeDraftId: null, row: null });
-  if (frozenActive.routeDraftId !== props.routeDraftId) {
-    let row: SidebarDraftRowData | null = null;
-    if (props.routeDraftId !== null) {
-      const draftId = DraftId.make(props.routeDraftId);
-      const session = draftThreadsByThreadKey[draftId];
-      const composer = draftsByThreadKey[draftId];
-      row =
-        session && session.promotedTo == null && composer && composerDraftHasUserContent(composer)
-          ? { draftId, session, composer }
-          : null;
-    }
-    setFrozenActive({ routeDraftId: props.routeDraftId, row });
-  }
   const drafts = (() => {
     const rows: SidebarDraftRowData[] = [];
     for (const [draftKey, session] of Object.entries(draftThreadsByThreadKey)) {
-      if (session.promotedTo != null) {
+      if (session.promotedTo != null || draftKey === props.routeDraftId) {
         continue;
       }
       if (
         props.scopedProjectKeys !== null &&
         !props.scopedProjectKeys.has(`${session.environmentId}:${session.projectId}`)
       ) {
-        continue;
-      }
-      if (draftKey === props.routeDraftId) {
-        if (frozenActive.routeDraftId === draftKey && frozenActive.row !== null) {
-          rows.push(frozenActive.row);
-        }
         continue;
       }
       const composer = draftsByThreadKey[draftKey];
@@ -199,17 +180,17 @@ export const SidebarDraftBlock = memo(function SidebarDraftBlock(props: {
       {drafts.map(({ composer, draftId, session }) => {
         const projectKey = `${session.environmentId}:${session.projectId}`;
         return (
-          <SidebarDraftRow
-            key={draftId}
-            draftId={draftId}
-            composer={composer}
-            project={props.projectByKey.get(projectKey) ?? null}
-            projectDisplayName={props.projectDisplayNameByKey.get(projectKey) ?? null}
-            isActive={draftId === props.routeDraftId}
-            onNavigate={props.onNavigateToDraft}
-            onDiscard={discardComposerDraft}
-            onContextMenu={props.onDraftContextMenu}
-          />
+          <li key={draftId} className="list-none py-0.5">
+            <SidebarDraftRow
+              draftId={draftId}
+              preview={draftRowPreview(composer)}
+              project={props.projectByKey.get(projectKey) ?? null}
+              projectDisplayName={props.projectDisplayNameByKey.get(projectKey) ?? null}
+              isActive={false}
+              onNavigate={props.onNavigateToDraft}
+              onContextMenu={props.onDraftContextMenu}
+            />
+          </li>
         );
       })}
       <li
@@ -218,5 +199,41 @@ export const SidebarDraftBlock = memo(function SidebarDraftBlock(props: {
         className="mx-2.5 my-1.5 h-px list-none bg-sidebar-border/60"
       />
     </>
+  );
+});
+
+// The draft open in the composer, shown in the slot its thread takes once
+// sent, so sending swaps this row for the thread row in place. Reads the
+// store itself so typing re-renders only this row.
+export const SidebarNewThreadRow = memo(function SidebarNewThreadRow(props: {
+  draftId: DraftId;
+  projectByKey: ReadonlyMap<string, EnvironmentProject>;
+  projectDisplayNameByKey: ReadonlyMap<string, string>;
+  onNavigate: (draftId: DraftId) => void;
+  onContextMenu: (draftId: DraftId, position: { x: number; y: number }) => void;
+}) {
+  const session = useComposerDraftStore(
+    (store) => store.draftThreadsByThreadKey[props.draftId] ?? null,
+  );
+  const preview = useComposerDraftStore((store) => {
+    const composer = store.draftsByThreadKey[props.draftId];
+    return composer && composerDraftHasUserContent(composer)
+      ? draftRowPreview(composer)
+      : "New thread";
+  });
+  if (session === null) {
+    return null;
+  }
+  const projectKey = `${session.environmentId}:${session.projectId}`;
+  return (
+    <SidebarDraftRow
+      draftId={props.draftId}
+      preview={preview}
+      project={props.projectByKey.get(projectKey) ?? null}
+      projectDisplayName={props.projectDisplayNameByKey.get(projectKey) ?? null}
+      isActive
+      onNavigate={props.onNavigate}
+      onContextMenu={props.onContextMenu}
+    />
   );
 });

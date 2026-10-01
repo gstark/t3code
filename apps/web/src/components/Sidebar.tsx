@@ -229,11 +229,12 @@ import {
   type SidebarProviderEntry,
   type SidebarSweepAction,
 } from "./sidebar/SidebarThreadRow";
-import { SidebarDraftBlock } from "./sidebar/SidebarDraftBlock";
+import { SidebarDraftBlock, SidebarNewThreadRow } from "./sidebar/SidebarDraftBlock";
 import {
   SidebarDragBoundary,
   SidebarSectionHeader,
   SidebarSectionPlaceholder,
+  SortableSidebarMarker,
 } from "./sidebar/SidebarListMarkers";
 
 function sameSidebarProviderEntries(
@@ -1049,7 +1050,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
   const visibleDraftSessionCount = useComposerDraftStore((store) => {
     let count = 0;
     for (const [draftKey, session] of Object.entries(store.draftThreadsByThreadKey)) {
-      if (session.promotedTo != null) {
+      if (session.promotedTo != null || draftKey === routeDraftIdForRows) {
         continue;
       }
       if (!composerDraftHasUserContent(store.draftsByThreadKey[draftKey])) {
@@ -1691,6 +1692,34 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
         event.activatorEvent instanceof PointerEvent ? event.activatorEvent.clientY : null,
     });
   };
+  // The open draft's session record changes only when its settings do; the
+  // prompt lives elsewhere, so typing does not re-render the sidebar.
+  const routeDraftSession = useComposerDraftStore((store) =>
+    routeDraftIdForRows === null
+      ? null
+      : (store.draftThreadsByThreadKey[routeDraftIdForRows] ?? null),
+  );
+  // The open draft gets a "New thread" row until its thread shell arrives,
+  // which then takes the same slot at the top of Active.
+  const newThreadDraftId = ((): DraftId | null => {
+    if (
+      routeDraftIdForRows === null ||
+      !routeDraftSession ||
+      routeDraftSession.promotedTo != null
+    ) {
+      return null;
+    }
+    const { environmentId, projectId, threadId } = routeDraftSession;
+    if (scopedProjectKeys !== null && !scopedProjectKeys.has(`${environmentId}:${projectId}`)) {
+      return null;
+    }
+    if (
+      threads.some((thread) => thread.environmentId === environmentId && thread.id === threadId)
+    ) {
+      return null;
+    }
+    return DraftId.make(routeDraftIdForRows);
+  })();
   const sidebarListItemsFresh = ((): readonly SidebarListItem[] => {
     const rowsOf = (
       list: readonly EnvironmentThreadShell[],
@@ -1708,12 +1737,15 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
         settledCount ===
       0
     ) {
-      return [];
+      return newThreadDraftId === null ? [] : [{ kind: "marker", marker: "new-thread" }];
     }
     const items: SidebarListItem[] = [{ kind: "marker", marker: "pinned-header" }];
     const pinnedRows = rowsOf(pinnedThreads, "pinned");
     items.push(...pinnedRows);
     items.push({ kind: "marker", marker: "pinned-divider" });
+    if (newThreadDraftId !== null) {
+      items.push({ kind: "marker", marker: "new-thread" });
+    }
     const activeRows = rowsOf(activeThreads, "active");
     items.push({ kind: "marker", marker: "active-placeholder" });
     items.push(...activeRows);
@@ -3087,6 +3119,26 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                               />,
                             );
                             break;
+                          case "new-thread":
+                            if (newThreadDraftId !== null) {
+                              items.push(
+                                <SortableSidebarMarker
+                                  key={`new-thread:${newThreadDraftId}`}
+                                  marker="new-thread"
+                                  data-testid="sidebar-new-thread-row"
+                                  className="py-0.5"
+                                >
+                                  <SidebarNewThreadRow
+                                    draftId={newThreadDraftId}
+                                    projectByKey={projectByKey}
+                                    projectDisplayNameByKey={projectDisplayNameByKey}
+                                    onNavigate={navigateToDraft}
+                                    onContextMenu={handleDraftContextMenu}
+                                  />
+                                </SortableSidebarMarker>,
+                              );
+                            }
+                            break;
                           case "pinned-divider":
                             items.push(
                               <SidebarDragBoundary
@@ -3224,6 +3276,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
           ) : null}
           {!isSearchingThreads &&
           visibleDraftSessionCount === 0 &&
+          newThreadDraftId === null &&
           pinnedThreads.length +
             activeThreads.length +
             workingThreads.length +
