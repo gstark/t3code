@@ -160,6 +160,7 @@ import {
   enumerateCommandPaletteItems,
   type CommandPaletteActionItem,
   type CommandPaletteOpenIntent,
+  type CommandPaletteProject,
   type CommandPaletteSubmenuItem,
   type CommandPaletteView,
   filterCommandPaletteGroups,
@@ -192,7 +193,11 @@ import {
 import { ThreadRowLeadingStatus, ThreadRowTrailingStatus } from "./ThreadStatusIndicators";
 import { primaryServerKeybindingsAtom, primaryServerProvidersAtom } from "../state/server";
 import { deriveProviderInstanceEntries, type ProviderInstanceEntry } from "../providerInstances";
-import { resolveShortcutCommand, threadJumpIndexFromCommand } from "../keybindings";
+import {
+  resolveShortcutCommand,
+  threadJumpCommandForIndex,
+  threadJumpIndexFromCommand,
+} from "../keybindings";
 import { CommandDialog, CommandDialogPopup, CommandFooterAction } from "./ui/command";
 import { Button } from "./ui/button";
 import { Kbd, KbdGroup } from "./ui/kbd";
@@ -1311,6 +1316,23 @@ function OpenCommandPaletteDialog(props: {
     ],
   );
 
+  const newThreadProjectRef = useCallback(
+    (project: CommandPaletteProject) => {
+      const group = projectGroupByTargetKey.get(`${project.environmentId}:${project.id}`);
+      const contextualRefBelongsToGroup =
+        contextualProjectRef !== null &&
+        group?.memberProjectRefs.some(
+          (projectRef) =>
+            projectRef.environmentId === contextualProjectRef.environmentId &&
+            projectRef.projectId === contextualProjectRef.projectId,
+        );
+      return contextualRefBelongsToGroup
+        ? contextualProjectRef
+        : scopeProjectRef(project.environmentId, project.id);
+    },
+    [contextualProjectRef, projectGroupByTargetKey],
+  );
+
   const projectThreadItems = useMemo(
     () =>
       enumerateCommandPaletteItems([
@@ -1354,19 +1376,10 @@ function OpenCommandPaletteDialog(props: {
           },
           icon: projectFavicon,
           runProject: async (project) => {
-            const group = projectGroupByTargetKey.get(`${project.environmentId}:${project.id}`);
-            const contextualRefBelongsToGroup =
-              contextualProjectRef !== null &&
-              group?.memberProjectRefs.some(
-                (projectRef) =>
-                  projectRef.environmentId === contextualProjectRef.environmentId &&
-                  projectRef.projectId === contextualProjectRef.projectId,
-              );
-            await handleNewThread(
-              contextualRefBelongsToGroup
-                ? contextualProjectRef
-                : scopeProjectRef(project.environmentId, project.id),
-            );
+            await handleNewThread(newThreadProjectRef(project));
+          },
+          runProjectInWorktree: async (project) => {
+            await handleNewThread(newThreadProjectRef(project), { envMode: "worktree" });
           },
         }),
         ...(scratchTargetEnvironmentId === null
@@ -1384,8 +1397,8 @@ function OpenCommandPaletteDialog(props: {
             ]),
       ]),
     [
-      contextualProjectRef,
       handleNewThread,
+      newThreadProjectRef,
       pickerProjects,
       projectEnvironmentLocationById,
       projectGroupByTargetKey,
@@ -3038,6 +3051,18 @@ function OpenCommandPaletteDialog(props: {
       platform: navigator.platform,
       context: { modelPickerOpen: false },
     });
+    const worktreeJumpIndex = worktreeJumpIndexFromEvent(event);
+    if (worktreeJumpIndex !== null) {
+      const matchingItem = displayedGroups
+        .flatMap((group) => group.items)
+        .find((item) => item.shortcutCommand === threadJumpCommandForIndex(worktreeJumpIndex));
+      if (matchingItem?.kind === "action" && matchingItem.runInWorktree) {
+        event.preventDefault();
+        event.stopPropagation();
+        executeItem(matchingItem, { inWorktree: true });
+        return;
+      }
+    }
     if (threadJumpIndexFromCommand(command ?? "") !== null) {
       event.preventDefault();
       event.stopPropagation();
@@ -3100,7 +3125,17 @@ function OpenCommandPaletteDialog(props: {
     }
   }
 
-  function executeItem(item: CommandPaletteActionItem | CommandPaletteSubmenuItem): void {
+  // Shift plus the jump shortcut (⇧⌘1 to ⇧⌘9) runs a row in a new worktree.
+  function worktreeJumpIndexFromEvent(event: KeyboardEvent<HTMLInputElement>): number | null {
+    if (!event.shiftKey || event.altKey || !isPrimaryModifierPressed(event)) return null;
+    const digit = /^Digit([1-9])$/.exec(event.code)?.[1];
+    return digit ? Number(digit) - 1 : null;
+  }
+
+  function executeItem(
+    item: CommandPaletteActionItem | CommandPaletteSubmenuItem,
+    options?: { readonly inWorktree?: boolean },
+  ): void {
     if (item.disabled) {
       return;
     }
@@ -3114,7 +3149,8 @@ function OpenCommandPaletteDialog(props: {
       setOpen(false);
     }
 
-    void item.run().catch((error: unknown) => {
+    const run = options?.inWorktree && item.runInWorktree ? item.runInWorktree : item.run;
+    void run().catch((error: unknown) => {
       toastManager.add(
         stackedThreadToast({
           type: "error",

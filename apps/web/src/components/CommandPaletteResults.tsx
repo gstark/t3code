@@ -1,6 +1,11 @@
 import { type ResolvedKeybindingsConfig } from "@t3tools/contracts";
-import { ChevronRightIcon } from "lucide-react";
-import { shortcutLabelForCommand } from "../keybindings";
+import { ChevronRightIcon, FolderGit2Icon } from "lucide-react";
+import {
+  formatShortcutLabel,
+  shortcutLabelForCommand,
+  threadJumpIndexFromCommand,
+} from "../keybindings";
+import { Button } from "./ui/button";
 import {
   type CommandPaletteActionItem,
   type CommandPaletteGroup,
@@ -22,7 +27,10 @@ interface CommandPaletteResultsProps {
   highlightedItemValue?: string | null;
   isActionsOnly: boolean;
   keybindings: ResolvedKeybindingsConfig;
-  onExecuteItem: (item: CommandPaletteActionItem | CommandPaletteSubmenuItem) => void;
+  onExecuteItem: (
+    item: CommandPaletteActionItem | CommandPaletteSubmenuItem,
+    options?: { readonly inWorktree?: boolean },
+  ) => void;
 }
 
 export function CommandPaletteResults(props: CommandPaletteResultsProps) {
@@ -99,11 +107,29 @@ function CommandPaletteResultRow(props: {
   item: CommandPaletteActionItem | CommandPaletteSubmenuItem;
   isActive: boolean;
   keybindings: ResolvedKeybindingsConfig;
-  onExecuteItem: (item: CommandPaletteActionItem | CommandPaletteSubmenuItem) => void;
+  onExecuteItem: (
+    item: CommandPaletteActionItem | CommandPaletteSubmenuItem,
+    options?: { readonly inWorktree?: boolean },
+  ) => void;
 }) {
   const shortcutLabel = props.item.shortcutCommand
     ? shortcutLabelForCommand(props.keybindings, props.item.shortcutCommand)
     : null;
+  const runInWorktree = props.item.kind === "action" ? props.item.runInWorktree : undefined;
+  const jumpIndex = props.item.shortcutCommand
+    ? threadJumpIndexFromCommand(props.item.shortcutCommand)
+    : null;
+  const worktreeShortcutLabel =
+    runInWorktree && jumpIndex !== null
+      ? formatShortcutLabel({
+          key: String(jumpIndex + 1),
+          modKey: true,
+          shiftKey: true,
+          metaKey: false,
+          ctrlKey: false,
+          altKey: false,
+        })
+      : null;
 
   return (
     <CommandItem
@@ -143,6 +169,27 @@ function CommandPaletteResultRow(props: {
         <span className="min-w-12 shrink-0 text-right text-xs tabular-nums text-muted-foreground/70">
           {props.item.timestamp}
         </span>
+      ) : null}
+      {runInWorktree ? (
+        <Button
+          size="xs"
+          variant="ghost-muted"
+          className="shrink-0"
+          aria-label={`New worktree thread${worktreeShortcutLabel ? ` (${worktreeShortcutLabel})` : ""}`}
+          onMouseDown={(event) => {
+            event.preventDefault();
+          }}
+          onClick={(event) => {
+            event.stopPropagation();
+            props.onExecuteItem(props.item, { inWorktree: true });
+          }}
+        >
+          <FolderGit2Icon aria-hidden />
+          New worktree
+          {worktreeShortcutLabel ? (
+            <CommandShortcut className="ms-1">{worktreeShortcutLabel}</CommandShortcut>
+          ) : null}
+        </Button>
       ) : null}
       {shortcutLabel ? <CommandShortcut>{shortcutLabel}</CommandShortcut> : null}
       {props.item.kind === "submenu" ? (
