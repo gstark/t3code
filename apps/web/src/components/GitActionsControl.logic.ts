@@ -21,7 +21,7 @@ export {
 } from "@t3tools/client-runtime/state/vcs";
 
 export interface GitActionMenuItem {
-  id: "commit" | "commit_push" | "push" | "pr";
+  id: "commit" | "commit_push" | "commit_push_pr" | "push" | "pr";
   label: string;
   disabled: boolean;
   icon: GitActionIconName;
@@ -106,12 +106,24 @@ export function formatGitActionElapsed(startedAtMs: number | null, nowMs: number
   return `${minutes}m ${seconds}s`;
 }
 
+/** The commit path a project prefers over the default "commit, push & PR". */
+export type GitCommitPreference = "commit" | "commit_push";
+
+function resolveCommitAction(
+  commitPreference: GitCommitPreference | null,
+  skipsPr: boolean,
+): "commit" | "commit_push" | "commit_push_pr" {
+  if (commitPreference === "commit") return "commit";
+  if (commitPreference === "commit_push" || skipsPr) return "commit_push";
+  return "commit_push_pr";
+}
+
 export function buildMenuItems(
   gitStatus: VcsStatusResult | null,
   isBusy: boolean,
   hasPrimaryRemote = true,
   isDefaultRef = false,
-  skipPr = false,
+  commitPreference: GitCommitPreference | null = null,
 ): GitActionMenuItem[] {
   if (!gitStatus) return [];
   const terminology = changeRequestTerminologyFor(gitStatus);
@@ -150,30 +162,35 @@ export function buildMenuItems(
     return [commitItem];
   }
 
-  // Offers the commit path the quick action does not take, so the sticky
-  // "skip PR" choice can be switched on and off from the menu.
-  const commitPushItems: GitActionMenuItem[] =
-    isDefaultRef || hasOpenPr
+  // Offers the commit paths the quick action does not take, so the sticky
+  // per-project commit preference can be switched from the menu.
+  const quickCommitAction = resolveCommitAction(commitPreference, isDefaultRef || hasOpenPr);
+  const commitPushItems: GitActionMenuItem[] = [
+    ...(quickCommitAction === "commit_push"
       ? []
       : [
-          skipPr
-            ? {
-                id: "commit_push",
-                label: `Commit, push & ${terminology.shortLabel}`,
-                disabled: !canCommit,
-                icon: "pr",
-                kind: "open_dialog",
-                dialogAction: "commit_push_pr",
-              }
-            : {
-                id: "commit_push",
-                label: "Commit & push",
-                disabled: !canCommit,
-                icon: "push",
-                kind: "open_dialog",
-                dialogAction: "commit_push",
-              },
-        ];
+          {
+            id: "commit_push",
+            label: "Commit & push",
+            disabled: !canCommit,
+            icon: "push",
+            kind: "open_dialog",
+            dialogAction: "commit_push",
+          } satisfies GitActionMenuItem,
+        ]),
+    ...(quickCommitAction === "commit_push_pr" || isDefaultRef || hasOpenPr
+      ? []
+      : [
+          {
+            id: "commit_push_pr",
+            label: `Commit, push & ${terminology.shortLabel}`,
+            disabled: !canCommit,
+            icon: "pr",
+            kind: "open_dialog",
+            dialogAction: "commit_push_pr",
+          } satisfies GitActionMenuItem,
+        ]),
+  ];
 
   const pushItem: GitActionMenuItem = {
     id: "push",
@@ -208,7 +225,7 @@ export function resolveQuickAction(
   isBusy: boolean,
   isDefaultRef = false,
   hasPrimaryRemote = true,
-  skipPr = false,
+  commitPreference: GitCommitPreference | null = null,
 ): GitQuickAction {
   if (isBusy) {
     return { label: "Commit", disabled: true, kind: "show_hint", hint: "Git action in progress." };
@@ -231,6 +248,7 @@ export function resolveQuickAction(
   const isBehind = gitStatus.behindCount > 0;
   const isDiverged = isAhead && isBehind;
   const terminology = changeRequestTerminologyFor(gitStatus);
+  const skipPr = commitPreference !== null;
 
   if (!hasBranch) {
     return {
@@ -245,7 +263,11 @@ export function resolveQuickAction(
     if (!gitStatus.hasUpstream && !hasPrimaryRemote) {
       return { label: "Commit", disabled: false, kind: "run_action", action: "commit" };
     }
-    if (hasOpenPr || isDefaultRef || skipPr) {
+    const commitAction = resolveCommitAction(commitPreference, hasOpenPr || isDefaultRef);
+    if (commitAction === "commit") {
+      return { label: "Commit", disabled: false, kind: "run_action", action: "commit" };
+    }
+    if (commitAction === "commit_push") {
       return { label: "Commit & push", disabled: false, kind: "run_action", action: "commit_push" };
     }
     return {
