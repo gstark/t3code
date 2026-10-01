@@ -24,13 +24,16 @@ export function GitActionCard(props: {
   const { label, gitAction, onOpenPr } = props;
   const [expanded, setExpanded] = useState(false);
   const { branch, commit, push, pr, land } = gitAction;
-  const Icon = land
+  const merged = land?.fromSha && land.toSha ? { fromSha: land.fromSha, toSha: land.toSha } : null;
+  const Icon = merged
     ? PullRequestGlyph.merged
-    : pr.status !== "skipped_not_requested"
-      ? PullRequestGlyph.pullRequest
-      : push.status === "pushed"
-        ? CloudUploadIcon
-        : GitCommitIcon;
+    : land
+      ? Trash2Icon
+      : pr.status !== "skipped_not_requested"
+        ? PullRequestGlyph.pullRequest
+        : push.status === "pushed"
+          ? CloudUploadIcon
+          : GitCommitIcon;
 
   return (
     <div className="mt-2 rounded-lg bg-secondary dark:bg-input/20">
@@ -61,7 +64,7 @@ export function GitActionCard(props: {
               {commit.subject}
             </GitActionStep>
           ) : null}
-          {land ? (
+          {land && merged ? (
             <GitActionStep icon={<PullRequestGlyph.merged />} term="Merge">
               <Code>{land.branch}</Code> into <Code>{land.baseBranch}</Code>
             </GitActionStep>
@@ -76,11 +79,11 @@ export function GitActionCard(props: {
                 </>
               ) : null}
               {push.setUpstream ? " (set upstream)" : null}
-              {land ? (
+              {merged ? (
                 <>
                   {" "}
                   <Code>
-                    {land.fromSha.slice(0, 7)}..{land.toSha.slice(0, 7)}
+                    {merged.fromSha.slice(0, 7)}..{merged.toSha.slice(0, 7)}
                   </Code>
                 </>
               ) : null}

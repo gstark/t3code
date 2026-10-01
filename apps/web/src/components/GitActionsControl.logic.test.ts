@@ -1392,6 +1392,33 @@ describe("when: the thread is in a worktree", () => {
     assert.deepInclude(quick, { kind: "run_action", action: "land" });
   });
 
+  it("resolveQuickAction offers cleanup when there is nothing to land", () => {
+    const quick = resolveQuickAction(
+      status({ aheadCount: 0, aheadOfDefaultCount: 0 }),
+      false,
+      false,
+      true,
+      null,
+      true,
+    );
+    assert.deepInclude(quick, { kind: "run_action", action: "land", label: "Cleanup worktree" });
+  });
+
+  it("buildMenuItems offers an enabled cleanup when there is nothing to land", () => {
+    const items = buildMenuItems(
+      status({ aheadCount: 0, aheadOfDefaultCount: 0 }),
+      false,
+      true,
+      false,
+      "commit_push",
+      true,
+    );
+    assert.deepInclude(
+      items.find((item) => item.id === "land"),
+      { label: "Cleanup worktree", disabled: false },
+    );
+  });
+
   it("resolveQuickAction follows a chosen PR path instead of landing", () => {
     const quick = resolveQuickAction(
       status({ hasWorkingTreeChanges: true }),

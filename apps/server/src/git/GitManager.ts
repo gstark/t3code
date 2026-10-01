@@ -2645,10 +2645,15 @@ export const make = Effect.gen(function* () {
 
   /**
    * Checks that the worktree at `cwd` can land before anything is committed:
-   * it is a linked worktree on a branch, and the main checkout is clean and on
-   * the base branch.
+   * it is a linked worktree on a branch, and the main checkout is on the base
+   * branch. `merges` is false when there is nothing to commit and the branch
+   * has no commits beyond the base, so landing only cleans up the worktree.
+   * Only a merge needs a clean main checkout.
    */
-  const prepareLand = Effect.fn("prepareLand")(function* (cwd: string) {
+  const prepareLand = Effect.fn("prepareLand")(function* (
+    cwd: string,
+    hasWorkingTreeChanges: boolean,
+  ) {
     const fail = (detail: string) => new GitManagerError({ operation: "land", cwd, detail });
     const read = (operation: string, gitCwd: string, args: readonly string[]) =>
       gitCore
@@ -2683,7 +2688,11 @@ export const make = Effect.gen(function* () {
     if (branch === baseBranch) {
       return yield* fail(`This worktree is on ${baseBranch}. Land a feature branch instead.`);
     }
-    if (yield* read("mainStatus", mainCheckoutPath, ["status", "--porcelain"])) {
+    const merges =
+      hasWorkingTreeChanges ||
+      Number(yield* read("aheadCount", cwd, ["rev-list", "--count", `${baseBranch}..${branch}`])) >
+        0;
+    if (merges && (yield* read("mainStatus", mainCheckoutPath, ["status", "--porcelain"]))) {
       return yield* fail(
         `The main checkout at ${mainCheckoutPath} has uncommitted changes. Commit or discard them, then land again.`,
       );
@@ -2695,12 +2704,13 @@ export const make = Effect.gen(function* () {
       );
     }
 
-    return { branch, worktreePath, mainCheckoutPath, remoteName, baseBranch };
+    return { branch, worktreePath, mainCheckoutPath, remoteName, baseBranch, merges };
   });
 
   /**
    * Merges the worktree branch into the base branch in the main checkout,
    * pushes the base branch, then removes the worktree and deletes the branch.
+   * A branch with no commits beyond the base skips the merge and push.
    * Stops on conflicts or a diverged base without undoing anything, so the
    * user can see and resolve the state in the main checkout.
    */
@@ -2738,10 +2748,33 @@ export const make = Effect.gen(function* () {
       );
     });
 
+    const removeWorktree = Effect.fn("runLandStep.removeWorktree")(function* (done: string) {
+      yield* startPhase("cleanup", "Removing worktree...");
+      yield* gitCore
+        .removeWorktree({ cwd: main, path: worktreePath })
+        .pipe(
+          Effect.mapError(() =>
+            fail(
+              `${done}, but git refused to remove ${worktreePath}. It has untracked or changed files.`,
+            ),
+          ),
+        );
+    });
+    const landResult = {
+      branch,
+      baseBranch,
+      mainCheckoutPath: main,
+      removedWorktreePath: worktreePath,
+    };
+
     if (
       Number(yield* read("aheadCount", ["rev-list", "--count", `${baseBranch}..${branch}`])) === 0
     ) {
-      return yield* fail(`${branch} has no commits that are not on ${baseBranch}.`);
+      yield* removeWorktree("Nothing needed to land");
+      // Every commit on the branch is already on the base branch, so a forced
+      // delete loses nothing. `-d` would also check the main checkout's HEAD.
+      yield* read("deleteBranch", ["branch", "-D", branch]);
+      return { push: null, land: landResult };
     }
 
     yield* startPhase("merge", `Merging into ${baseBranch}...`);
@@ -2784,16 +2817,7 @@ export const make = Effect.gen(function* () {
     }
     const toSha = yield* read("toSha", ["rev-parse", "HEAD"]);
 
-    yield* startPhase("cleanup", "Removing worktree...");
-    yield* gitCore
-      .removeWorktree({ cwd: main, path: worktreePath })
-      .pipe(
-        Effect.mapError(() =>
-          fail(
-            `Landed and pushed ${baseBranch}, but git refused to remove ${worktreePath}. It has untracked or changed files.`,
-          ),
-        ),
-      );
+    yield* removeWorktree(`Landed and pushed ${baseBranch}`);
     if ((yield* git("deleteBranch", ["branch", "-d", branch])).exitCode !== 0) {
       return yield* fail(
         `Landed and pushed ${baseBranch}, but git refused to delete ${branch} because it is not merged.`,
@@ -2802,14 +2826,7 @@ export const make = Effect.gen(function* () {
 
     return {
       push: { status: "pushed" as const, branch: baseBranch, upstreamBranch: remoteBase },
-      land: {
-        branch,
-        baseBranch,
-        mainCheckoutPath: main,
-        removedWorktreePath: worktreePath,
-        fromSha,
-        toSha,
-      },
+      land: { ...landResult, fromSha, toSha },
     };
   });
 
@@ -2848,11 +2865,16 @@ export const make = Effect.gen(function* () {
           });
         }
 
+        const landContext = wantsLand
+          ? yield* prepareLand(input.cwd, initialStatus.hasWorkingTreeChanges)
+          : null;
+        const landMerges = landContext?.merges ?? false;
+
         const phases: GitActionProgressPhase[] = [
           ...(input.featureBranch ? (["branch"] as const) : []),
-          ...(wantsCommit ? (["commit"] as const) : []),
-          ...(wantsLand ? (["merge"] as const) : []),
-          ...(wantsPush || wantsLand ? (["push"] as const) : []),
+          ...(wantsCommit && (!wantsLand || landMerges) ? (["commit"] as const) : []),
+          ...(landMerges ? (["merge"] as const) : []),
+          ...(wantsPush || landMerges ? (["push"] as const) : []),
           ...(wantsPr ? (["pr"] as const) : []),
           ...(wantsLand ? (["cleanup"] as const) : []),
         ];
@@ -2876,8 +2898,6 @@ export const make = Effect.gen(function* () {
             detail: "Cannot create a pull request from detached HEAD.",
           });
         }
-
-        const landContext = wantsLand ? yield* prepareLand(input.cwd) : null;
 
         let branchStep: { status: "created" | "skipped_not_requested"; name?: string };
         let commitMessageForStep = input.commitMessage;
@@ -2933,7 +2953,8 @@ export const make = Effect.gen(function* () {
         }
 
         const currentBranch = branchStep.name ?? initialStatus.branch;
-        const commitAction = isCommitAction(input.action) ? input.action : null;
+        const commitAction =
+          isCommitAction(input.action) && (!wantsLand || landMerges) ? input.action : null;
         const changeRequestTerms = wantsPr
           ? yield* sourceControlProvider(input.cwd).pipe(
               Effect.map((provider) => getChangeRequestTerminologyForKind(provider.kind)),
@@ -2996,8 +3017,15 @@ export const make = Effect.gen(function* () {
         // A landed worktree is gone, so its toast cannot read status from cwd.
         const toast = landed
           ? {
-              title: `Landed ${landed.land.branch} into ${landed.land.baseBranch}`,
-              description: `Pushed ${shortenSha(landed.land.fromSha)}..${shortenSha(landed.land.toSha)}`,
+              ...("fromSha" in landed.land
+                ? {
+                    title: `Landed ${landed.land.branch} into ${landed.land.baseBranch}`,
+                    description: `Pushed ${shortenSha(landed.land.fromSha)}..${shortenSha(landed.land.toSha)}`,
+                  }
+                : {
+                    title: "Cleaned up worktree",
+                    description: `${landed.land.branch} had no commits beyond ${landed.land.baseBranch}.`,
+                  }),
               cta: { kind: "none" as const },
             }
           : yield* buildCompletionToast(input.cwd, {
