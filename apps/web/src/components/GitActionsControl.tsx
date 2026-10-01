@@ -113,6 +113,7 @@ import { vcsActionManager, vcsEnvironment, vcsStatusRevalidation } from "~/state
 import { randomUUID } from "~/lib/utils";
 import { resolvePathLinkTarget } from "@t3tools/shared/fileLinks";
 import { type DraftId, useComposerDraftStore } from "~/composerDraftStore";
+import { PullRequestGlyph } from "./pullRequest/pullRequestIcons";
 import {
   THREAD_DETAILS_PANEL_CHEVRON_CLASS,
   THREAD_DETAILS_PANEL_ICON_CLASS,
@@ -255,6 +256,10 @@ function getMenuActionDisabledReason({
     return "Commit is currently unavailable.";
   }
 
+  if (item.id === "land") {
+    return "Nothing to land. Make changes or commits first.";
+  }
+
   if (item.id === "push") {
     if (!hasBranch) {
       return "Detached HEAD: check out a branch before pushing.";
@@ -289,7 +294,9 @@ function getMenuActionDisabledReason({
   return `Create ${terminology.singular} is currently unavailable.`;
 }
 
-const CommitPreferenceSchema = Schema.NullOr(Schema.Literals(["commit", "commit_push"]));
+const CommitPreferenceSchema = Schema.NullOr(
+  Schema.Literals(["commit", "commit_push", "commit_push_pr"]),
+);
 
 const COMMIT_DIALOG_TITLE = "Commit changes";
 const COMMIT_DIALOG_DESCRIPTION =
@@ -304,6 +311,7 @@ function GitActionItemIcon({
 }) {
   if (icon === "commit") return <GitCommitIcon />;
   if (icon === "push") return <CloudUploadIcon />;
+  if (icon === "land") return <PullRequestGlyph.merged />;
   return <SourceControlIcon />;
 }
 
@@ -320,6 +328,7 @@ function GitQuickActionIcon({
   if (quickAction.kind === "run_pull") return <CloudDownloadIcon className={className} />;
   if (quickAction.kind === "run_action") {
     if (quickAction.action === "commit") return <GitCommitIcon className={className} />;
+    if (quickAction.action === "land") return <PullRequestGlyph.merged className={className} />;
     if (quickAction.action === "push" || quickAction.action === "commit_push") {
       return <CloudUploadIcon className={className} />;
     }
@@ -1136,8 +1145,9 @@ export default function GitActionsControl({
 
   const isDefaultRef = gitStatusForActions?.isDefaultRef ?? false;
 
-  // Remembers, per project, whether the user wants "Commit" or "Commit & push"
-  // instead of the default "Commit, push & PR". Worktree threads share it.
+  // Remembers, per project, the commit path the user last chose from the menu.
+  // Without one, worktree threads land and other threads commit, push & PR.
+  const isWorktree = (activeServerThread?.worktreePath ?? null) !== null;
   const projectId = activeServerThread?.projectId ?? activeDraftThread?.projectId ?? null;
   const [commitPreference, setCommitPreference] = useLocalStorage(
     `t3code:git-commit-preference:${activeEnvironmentId ?? ""}:${projectId ?? gitCwd}`,
@@ -1151,6 +1161,7 @@ export default function GitActionsControl({
     hasPrimaryRemote,
     isDefaultRef,
     commitPreference,
+    isWorktree,
   );
   const quickAction = resolveQuickAction(
     gitStatusForActions,
@@ -1158,6 +1169,7 @@ export default function GitActionsControl({
     isDefaultRef,
     hasPrimaryRemote,
     commitPreference,
+    isWorktree,
   );
   const quickActionDisabledReason = !canWriteSourceControl
     ? "This connection cannot change source control."
@@ -1483,8 +1495,15 @@ export default function GitActionsControl({
       return;
     }
     if (item.dialogAction === "commit_push_pr") {
-      setCommitPreference(null);
+      // Outside a worktree this is the default, so clearing it keeps landing
+      // as the default for this project's worktree threads.
+      setCommitPreference(isWorktree ? "commit_push_pr" : null);
       void runGitActionWithToast({ action: "commit_push_pr" });
+      return;
+    }
+    if (item.dialogAction === "land") {
+      setCommitPreference(null);
+      void runGitActionWithToast({ action: "land" });
       return;
     }
     setExcludedFiles(new Set());

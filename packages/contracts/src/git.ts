@@ -21,9 +21,17 @@ export const GitStackedAction = Schema.Literals([
   "create_pr",
   "commit_push",
   "commit_push_pr",
+  "land",
 ]);
 export type GitStackedAction = typeof GitStackedAction.Type;
-export const GitActionProgressPhase = Schema.Literals(["branch", "commit", "push", "pr"]);
+export const GitActionProgressPhase = Schema.Literals([
+  "branch",
+  "commit",
+  "merge",
+  "push",
+  "pr",
+  "cleanup",
+]);
 export type GitActionProgressPhase = typeof GitActionProgressPhase.Type;
 export const GitActionProgressKind = Schema.Literals([
   "action_started",
@@ -336,6 +344,19 @@ export const GitRunStackedActionResult = Schema.Struct({
     headBranch: Schema.optional(TrimmedNonEmptyStringSchema),
     title: Schema.optional(TrimmedNonEmptyStringSchema),
   }),
+  /** Present when a `land` action merged a worktree branch into the main checkout. */
+  land: Schema.optional(
+    Schema.Struct({
+      branch: TrimmedNonEmptyStringSchema,
+      baseBranch: TrimmedNonEmptyStringSchema,
+      mainCheckoutPath: TrimmedNonEmptyStringSchema,
+      removedWorktreePath: TrimmedNonEmptyStringSchema,
+      /** The remote base before the push; `fromSha..toSha` is the pushed range. */
+      fromSha: TrimmedNonEmptyStringSchema,
+      /** The merge commit, or the branch head when the merge fast-forwarded. */
+      toSha: TrimmedNonEmptyStringSchema,
+    }),
+  ),
   toast: GitRunStackedActionToast,
 });
 export type GitRunStackedActionResult = typeof GitRunStackedActionResult.Type;

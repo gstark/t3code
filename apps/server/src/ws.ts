@@ -41,6 +41,7 @@ import {
   type OrchestrationV2Command,
   type GitActionProgressEvent,
   type GitManagerServiceError,
+  type GitRunStackedActionResult,
   type MessageId,
   type AcpRegistryImportSessionInput,
   type AcpRegistryDeleteSessionInput,
@@ -1723,6 +1724,23 @@ export const layerWsRpc = (
           ),
         );
 
+      const moveLandedThreadToMainCheckout = (
+        threadId: ThreadId,
+        land: NonNullable<GitRunStackedActionResult["land"]>,
+      ) =>
+        serverCommandId("git-land-thread-metadata-update").pipe(
+          Effect.flatMap((commandId) =>
+            orchestrationEngine.dispatch({
+              type: "thread.metadata.update",
+              commandId,
+              threadId,
+              branch: land.baseBranch,
+              worktreePath: null,
+            }),
+          ),
+          Effect.ignoreCause({ log: true }),
+        );
+
       const loadServerConfig = Effect.fn("ws.loadServerConfig")(function* (options: {
         readonly usageLimitsCommand: boolean;
         readonly workspaceSnapshotsOnDemand: boolean;
@@ -3001,7 +3019,12 @@ export const layerWsRpc = (
                           ),
                         ),
                       ),
-                      Effect.andThen(refreshGitStatus(input.cwd)),
+                      Effect.andThen(
+                        input.threadId === undefined || result.land === undefined
+                          ? Effect.void
+                          : moveLandedThreadToMainCheckout(input.threadId, result.land),
+                      ),
+                      Effect.andThen(refreshGitStatus(result.land?.mainCheckoutPath ?? input.cwd)),
                       Effect.andThen(Queue.end(queue).pipe(Effect.asVoid)),
                     ),
                 }),
