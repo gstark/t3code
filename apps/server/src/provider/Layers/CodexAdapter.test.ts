@@ -3090,35 +3090,33 @@ it.effect("managed runtime rotation restarts app-server and resumes the same nat
   let revision = "first";
   const layer = Layer.effect(
     CodexAdapter,
-    Effect.gen(function* () {
-      return yield* makeCodexAdapter(decodeCodexSettings({}), {
-        resolveRuntime: Effect.sync(() => ({
-          config: decodeCodexSettings({
-            binaryPath: "/t3/tools/codex/0.155.1/bin/codex",
-            homePath: "/t3/caches/codex/home",
-            launchArgs: "-c 'model_provider=managed'",
+    makeCodexAdapter(decodeCodexSettings({}), {
+      resolveRuntime: Effect.sync(() => ({
+        config: decodeCodexSettings({
+          binaryPath: "/t3/tools/codex/0.155.1/bin/codex",
+          homePath: "/t3/caches/codex/home",
+          launchArgs: "-c 'model_provider=managed'",
+        }),
+        environment: { ACCESS_TOKEN: `dummy-${revision}` },
+        revision,
+      })),
+      makeRuntime: (options) => {
+        const runtime = new FakeCodexRuntime(options);
+        runtime.startImpl.mockImplementation(() =>
+          Promise.resolve({
+            provider: ProviderDriverKind.make("codex"),
+            threadId: options.threadId,
+            runtimeMode: options.runtimeMode,
+            cwd: options.cwd,
+            status: "ready",
+            createdAt: "2026-01-01T00:00:00Z",
+            updatedAt: "2026-01-01T00:00:00Z",
+            resumeCursor: { threadId: "native-managed-thread" },
           }),
-          environment: { ACCESS_TOKEN: `dummy-${revision}` },
-          revision,
-        })),
-        makeRuntime: (options) => {
-          const runtime = new FakeCodexRuntime(options);
-          runtime.startImpl.mockImplementation(() =>
-            Promise.resolve({
-              provider: ProviderDriverKind.make("codex"),
-              threadId: options.threadId,
-              runtimeMode: options.runtimeMode,
-              cwd: options.cwd,
-              status: "ready",
-              createdAt: "2026-01-01T00:00:00Z",
-              updatedAt: "2026-01-01T00:00:00Z",
-              resumeCursor: { threadId: "native-managed-thread" },
-            }),
-          );
-          runtimes.push(runtime);
-          return Effect.succeed(runtime);
-        },
-      });
+        );
+        runtimes.push(runtime);
+        return Effect.succeed(runtime);
+      },
     }),
   ).pipe(
     Layer.provideMerge(ServerConfig.layerTest(process.cwd(), process.cwd())),
@@ -3146,15 +3144,13 @@ it.effect("managed turn failures preserve the sharing-limit code for client noti
   const factory = makeRuntimeFactory();
   const layer = Layer.effect(
     CodexAdapter,
-    Effect.gen(function* () {
-      return yield* makeCodexAdapter(decodeCodexSettings({}), {
-        makeRuntime: factory.factory,
-        resolveRuntime: Effect.succeed({
-          config: decodeCodexSettings({}),
-          environment: {},
-          revision: "managed",
-        }),
-      });
+    makeCodexAdapter(decodeCodexSettings({}), {
+      makeRuntime: factory.factory,
+      resolveRuntime: Effect.succeed({
+        config: decodeCodexSettings({}),
+        environment: {},
+        revision: "managed",
+      }),
     }),
   ).pipe(
     Layer.provideMerge(ServerConfig.layerTest(process.cwd(), process.cwd())),

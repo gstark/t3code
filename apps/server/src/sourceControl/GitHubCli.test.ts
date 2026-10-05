@@ -268,8 +268,9 @@ describe("GitHubCli.listPullRequestsByHead", () => {
         }),
       );
       const gh = yield* GitHubCli.GitHubCli;
-      const lookups = yield* Effect.all(
-        ["feature/a", "feature/b"].map((headSelector) =>
+      const lookups = yield* Effect.forEach(
+        ["feature/a", "feature/b"],
+        (headSelector) =>
           gh.listPullRequestsByHead({
             cwd: "/repo",
             headSelector,
@@ -277,7 +278,6 @@ describe("GitHubCli.listPullRequestsByHead", () => {
             limit: 100,
             rateLimitHost: "github.com",
           }),
-        ),
         { concurrency: "unbounded" },
       ).pipe(Effect.forkChild);
       yield* TestClock.adjust("50 millis");
@@ -374,8 +374,9 @@ describe("GitHubCli.listPullRequestsByHead", () => {
         );
       });
       const gh = yield* GitHubCli.GitHubCli;
-      const lookups = yield* Effect.all(
-        ["feature/a", "feature/b"].map((headSelector) =>
+      const lookups = yield* Effect.forEach(
+        ["feature/a", "feature/b"],
+        (headSelector) =>
           gh
             .listPullRequestsByHead({
               cwd: "/repo",
@@ -385,7 +386,6 @@ describe("GitHubCli.listPullRequestsByHead", () => {
               rateLimitHost: "github.com",
             })
             .pipe(Effect.flip),
-        ),
         { concurrency: "unbounded" },
       ).pipe(Effect.forkChild);
       yield* TestClock.adjust("50 millis");
