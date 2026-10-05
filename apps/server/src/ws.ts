@@ -1794,7 +1794,7 @@ const makeWsRpcLayer = (
               isRepository ? undefined : path.resolve(config.baseDir, "scratch"),
             ),
             Effect.catchCause((cause) =>
-              Cause.hasInterrupts(cause) ? Effect.interrupt : Effect.succeed(undefined),
+              Cause.hasInterrupts(cause) ? Effect.interrupt : Effect.void,
             ),
           ),
           Duration.infinity,
