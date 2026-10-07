@@ -1476,6 +1476,9 @@ export default function GitActionsControl({
             closeResultToast();
             void runGitActionWithToast({
               action: toastCta.action.kind,
+              // Pushing after a land is the choice the user just made, so the
+              // default-branch prompt would only ask again.
+              skipDefaultBranchPrompt: actionResult.land !== undefined,
             });
           },
         };

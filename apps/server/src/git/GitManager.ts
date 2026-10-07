@@ -70,7 +70,7 @@ import type { GitManagerServiceError } from "@t3tools/contracts";
 import * as GitVcsDriver from "../vcs/GitVcsDriver.ts";
 import * as SourceControlProviderRegistry from "../sourceControl/SourceControlProviderRegistry.ts";
 import { detectPrTemplate } from "../sourceControl/PrTemplateDetection.ts";
-import type { ChangeRequest } from "@t3tools/contracts";
+import type { ChangeRequest, GitActionActivityPayload } from "@t3tools/contracts";
 
 export interface GitActionProgressReporter {
   readonly publish: (event: GitActionProgressEvent) => Effect.Effect<void, never>;
@@ -2709,8 +2709,9 @@ export const make = Effect.gen(function* () {
 
   /**
    * Merges the worktree branch into the base branch in the main checkout,
-   * pushes the base branch, then removes the worktree and deletes the branch.
-   * A branch with no commits beyond the base skips the merge and push.
+   * then removes the worktree and deletes the branch. The base branch is not
+   * pushed; the completion toast offers that as a separate action.
+   * A branch with no commits beyond the base skips the merge.
    * Stops on conflicts or a diverged base without undoing anything, so the
    * user can see and resolve the state in the main checkout.
    */
@@ -2760,7 +2761,7 @@ export const make = Effect.gen(function* () {
           ),
         );
     });
-    const landResult = {
+    const landResult: NonNullable<GitActionActivityPayload["land"]> = {
       branch,
       baseBranch,
       mainCheckoutPath: main,
@@ -2774,7 +2775,7 @@ export const make = Effect.gen(function* () {
       // Every commit on the branch is already on the base branch, so a forced
       // delete loses nothing. `-d` would also check the main checkout's HEAD.
       yield* read("deleteBranch", ["branch", "-D", branch]);
-      return { push: null, land: landResult };
+      return landResult;
     }
 
     yield* startPhase("merge", `Merging into ${baseBranch}...`);
@@ -2800,34 +2801,18 @@ export const make = Effect.gen(function* () {
         yield* read("fastForward", ["merge", "--ff-only", remoteBase]);
       }
     }
-    const fromSha = yield* read("fromSha", ["rev-parse", hasRemoteBase ? remoteBase : "HEAD"]);
+    const fromSha = yield* read("fromSha", ["rev-parse", "HEAD"]);
     yield* mergeOrFail(branch);
-
-    yield* startPhase("push", `Pushing ${baseBranch}...`);
-    const push = () => git("push", ["push", remoteName, baseBranch]);
-    if ((yield* push()).exitCode !== 0) {
-      // The remote moved while we merged. Catch up once and retry.
-      yield* read("refetch", ["fetch", remoteName]);
-      yield* mergeOrFail(remoteBase);
-      if ((yield* push()).exitCode !== 0) {
-        return yield* fail(
-          `Pushing ${baseBranch} to ${remoteName} was rejected twice. The merge is in ${main} but not pushed.`,
-        );
-      }
-    }
     const toSha = yield* read("toSha", ["rev-parse", "HEAD"]);
 
-    yield* removeWorktree(`Landed and pushed ${baseBranch}`);
+    yield* removeWorktree(`Merged into ${baseBranch}`);
     if ((yield* git("deleteBranch", ["branch", "-d", branch])).exitCode !== 0) {
       return yield* fail(
-        `Landed and pushed ${baseBranch}, but git refused to delete ${branch} because it is not merged.`,
+        `Merged into ${baseBranch}, but git refused to delete ${branch} because it is not merged.`,
       );
     }
 
-    return {
-      push: { status: "pushed" as const, branch: baseBranch, upstreamBranch: remoteBase },
-      land: { ...landResult, fromSha, toSha },
-    };
+    return { ...landResult, fromSha, toSha };
   });
 
   const runStackedAction: GitManager["Service"]["runStackedAction"] = Effect.fn("runStackedAction")(
@@ -2874,7 +2859,7 @@ export const make = Effect.gen(function* () {
           ...(input.featureBranch ? (["branch"] as const) : []),
           ...(wantsCommit && (!wantsLand || landMerges) ? (["commit"] as const) : []),
           ...(landMerges ? (["merge"] as const) : []),
-          ...(wantsPush || landMerges ? (["push"] as const) : []),
+          ...(wantsPush ? (["push"] as const) : []),
           ...(wantsPr ? (["pr"] as const) : []),
           ...(wantsLand ? (["cleanup"] as const) : []),
         ];
@@ -3015,19 +3000,23 @@ export const make = Effect.gen(function* () {
           : { status: "skipped_not_requested" as const };
 
         // A landed worktree is gone, so its toast cannot read status from cwd.
+        // Pushing the merged base branch is the user's choice, from the toast.
         const toast = landed
-          ? {
-              ...("fromSha" in landed.land
-                ? {
-                    title: `Landed ${landed.land.branch} into ${landed.land.baseBranch}`,
-                    description: `Pushed ${shortenSha(landed.land.fromSha)}..${shortenSha(landed.land.toSha)}`,
-                  }
-                : {
-                    title: "Cleaned up worktree",
-                    description: `${landed.land.branch} had no commits beyond ${landed.land.baseBranch}.`,
-                  }),
-              cta: { kind: "none" as const },
-            }
+          ? landed.fromSha && landed.toSha
+            ? {
+                title: `Landed ${landed.branch} into ${landed.baseBranch}`,
+                description: `Merged ${shortenSha(landed.fromSha)}..${shortenSha(landed.toSha)}`,
+                cta: {
+                  kind: "run_action" as const,
+                  label: `Push ${landed.baseBranch}`,
+                  action: { kind: "push" as const },
+                },
+              }
+            : {
+                title: "Cleaned up worktree",
+                description: `${landed.branch} had no commits beyond ${landed.baseBranch}.`,
+                cta: { kind: "none" as const },
+              }
           : yield* buildCompletionToast(input.cwd, {
               action: input.action,
               branch: branchStep,
@@ -3040,9 +3029,9 @@ export const make = Effect.gen(function* () {
           action: input.action,
           branch: branchStep,
           commit,
-          push: landed?.push ?? push,
+          push,
           pr,
-          ...(landed ? { land: landed.land } : {}),
+          ...(landed ? { land: landed } : {}),
           toast,
         };
         yield* progress.emit({
