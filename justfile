@@ -34,27 +34,27 @@ merge-release: sync _require-mine
     fi
 
     echo "Merging $latest into mine."
-    if git merge --no-edit -m "Merge upstream $latest into mine" "$latest"; then
+    if git merge --no-commit --no-ff -m "Merge upstream $latest into mine" "$latest"; then
       echo "Merged $latest without conflicts."
-      exit 0
+    else
+      echo "Conflicts found. Asking Claude to resolve them."
+      UNSLOP_OFF=1 claude -p "You are in the gstark/t3code repository on the 'mine' branch. It is a personal fork of pingdotgg/t3code with custom features. A 'git merge $latest' (the newest official upstream release) stopped with conflicts.
+
+      Resolve every conflicted file:
+      - Keep the fork's custom features and take the upstream changes. Combine both sides when they touch the same code.
+      - If upstream rewrote code that a fork feature depends on, adapt the fork feature to the new upstream code.
+      - For pnpm-lock.yaml, take the upstream version with 'git checkout --theirs pnpm-lock.yaml', then run 'vp i --lockfile-only'.
+      - Remove all conflict markers, then run 'git add' on each resolved file.
+      - Run 'vp test run <files>' for the tests that cover the code you changed. Run 'vp run <package>#typecheck' for each package you changed. Fix any failures.
+      - Do not commit, push, or abort the merge.
+
+      Finish with a short summary of each conflict and how you resolved it." \
+        --permission-mode acceptEdits \
+        --allowedTools Read Edit Write Grep Glob \
+          "Bash(git status:*)" "Bash(git diff:*)" "Bash(git log:*)" "Bash(git show:*)" \
+          "Bash(git add:*)" "Bash(git checkout --theirs:*)" "Bash(git checkout --ours:*)" \
+          "Bash(vp i --lockfile-only:*)" "Bash(vp test run:*)" "Bash(vp run *#typecheck)"
     fi
-
-    echo "Conflicts found. Asking Claude to resolve them."
-    claude -p "You are in the gstark/t3code repository on the 'mine' branch. It is a personal fork of pingdotgg/t3code with custom features. A 'git merge $latest' (the newest official upstream release) stopped with conflicts.
-
-    Resolve every conflicted file:
-    - Keep the fork's custom features and take the upstream changes. Combine both sides when they touch the same code.
-    - If upstream rewrote code that a fork feature depends on, adapt the fork feature to the new upstream code.
-    - For pnpm-lock.yaml, take the upstream version with 'git checkout --theirs pnpm-lock.yaml', then run 'pnpm install --lockfile-only'.
-    - Remove all conflict markers, then run 'git add' on each resolved file.
-    - Do not commit, push, or abort the merge.
-
-    Finish with a short summary of each conflict and how you resolved it." \
-      --permission-mode acceptEdits \
-      --allowedTools Read Edit Write Grep Glob \
-        "Bash(git status:*)" "Bash(git diff:*)" "Bash(git log:*)" "Bash(git show:*)" \
-        "Bash(git add:*)" "Bash(git checkout --theirs:*)" "Bash(git checkout --ours:*)" \
-        "Bash(pnpm install --lockfile-only:*)"
 
     if [[ -n "$(git diff --name-only --diff-filter=U)" ]]; then
       echo "Unresolved files remain. Fix them, then run 'git commit --no-edit'." >&2
@@ -65,8 +65,13 @@ merge-release: sync _require-mine
       echo "Conflict markers remain in staged changes. Fix them, then run 'git commit --no-edit'." >&2
       exit 1
     fi
+    vp i --frozen-lockfile
+    if ! vp run typecheck; then
+      echo "Typecheck failed. The merge is not committed. Fix the errors, then run 'git commit --no-edit'." >&2
+      exit 1
+    fi
     git commit --no-edit
-    echo "Merged $latest into mine. Run 'pnpm typecheck' before 'just release'."
+    echo "Merged $latest into mine. Typecheck passed."
 
 # Build the macOS app from mine, publish a GitHub release, and update the Homebrew cask
 release: _require-mine
