@@ -207,6 +207,8 @@ export function useChatTerminalActions(input: ChatTerminalActionsInput) {
       preferNewTerminal?: boolean;
       rememberAsLastInvoked?: boolean;
       shellHistory?: "preserve" | "suppress";
+      /** False types the command without Enter so the user can finish it. */
+      submit?: boolean;
     },
   ) => {
     if (!hasTerminalWriteAccess() || !activeThreadId || !activeProject || !activeThread) return;
@@ -273,9 +275,11 @@ export function useChatTerminalActions(input: ChatTerminalActionsInput) {
 
     const writeResult = await terminalActions.writeToTerminal(
       targetTerminalId,
-      options?.shellHistory === "preserve"
-        ? `${script.command}\r`
-        : projectScriptTerminalInput(script.command),
+      options?.submit === false
+        ? `${script.command} `
+        : options?.shellHistory === "preserve"
+          ? `${script.command}\r`
+          : projectScriptTerminalInput(script.command),
     );
     if (!writeResult) return;
     if (writeResult._tag === "Failure") {

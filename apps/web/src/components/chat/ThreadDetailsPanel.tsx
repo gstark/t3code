@@ -7,7 +7,10 @@ import type {
   ThreadId,
 } from "@t3tools/contracts";
 
+import type { JustRecipe } from "@t3tools/shared/justfile";
+
 import type { DraftId } from "../../composerDraftStore";
+import { useJustfileRecipes } from "../../hooks/useJustfileRecipes";
 import { useT3ProjectFileScripts } from "../../hooks/useT3ProjectFileScripts";
 import { type EnvMode, type EnvironmentOption } from "../BranchToolbar.logic";
 import { BranchToolbar } from "../BranchToolbar";
@@ -77,6 +80,7 @@ interface ThreadDetailsPanelProps extends Pick<
   onComposerFocusRequest: () => void;
   onOpenChanges?: () => void;
   onRunProjectScript: (script: ProjectScript) => void;
+  onRunJustRecipe: (recipe: JustRecipe) => void;
   onAddProjectScript: (input: NewProjectScriptInput) => Promise<ProjectScriptActionResult>;
   onUpdateProjectScript: (
     scriptId: string,
@@ -90,6 +94,10 @@ export function ThreadDetailsPanel(props: ThreadDetailsPanelProps) {
   const visible = useClientSettings(resolveThreadDetailsVisibility);
   const [menuPosition, setMenuPosition] = useState<{ x: number; y: number } | null>(null);
   const fileScripts = useT3ProjectFileScripts(
+    props.environmentId,
+    props.activeProjectScripts && visible.scripts ? props.gitCwd : null,
+  );
+  const justRecipes = useJustfileRecipes(
     props.environmentId,
     props.activeProjectScripts && visible.scripts ? props.gitCwd : null,
   );
@@ -201,8 +209,10 @@ export function ThreadDetailsPanel(props: ThreadDetailsPanelProps) {
                         displayMode="panel"
                         scripts={props.activeProjectScripts}
                         fileScripts={fileScripts}
+                        justRecipes={justRecipes}
                         preferredScriptId={props.preferredScriptId}
                         onRunScript={props.onRunProjectScript}
+                        onRunJustRecipe={props.onRunJustRecipe}
                         onAddScript={props.onAddProjectScript}
                         onUpdateScript={props.onUpdateProjectScript}
                         onDeleteScript={props.onDeleteProjectScript}
