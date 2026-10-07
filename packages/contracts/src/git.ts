@@ -354,7 +354,7 @@ export const GitRunStackedActionResult = Schema.Struct({
       baseBranch: TrimmedNonEmptyStringSchema,
       mainCheckoutPath: TrimmedNonEmptyStringSchema,
       removedWorktreePath: TrimmedNonEmptyStringSchema,
-      /** The remote base before the push; `fromSha..toSha` is the pushed range. */
+      /** The base branch before the merge; `fromSha..toSha` is the merged range. */
       fromSha: Schema.optional(TrimmedNonEmptyStringSchema),
       /** The merge commit, or the branch head when the merge fast-forwarded. */
       toSha: Schema.optional(TrimmedNonEmptyStringSchema),
