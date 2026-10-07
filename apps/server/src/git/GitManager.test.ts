@@ -3225,23 +3225,33 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
     }),
   );
 
-  it.effect("lands a worktree: commits, merges into main, pushes, and cleans up", () =>
+  it.effect("lands a worktree: commits, merges into main, cleans up, and offers the push", () =>
     Effect.gen(function* () {
       const { repoDir, remoteDir, worktreeDir } = yield* makeLandableWorktree();
       NodeFS.writeFileSync(NodePath.join(worktreeDir, "feature.txt"), "feature\n");
+      const remoteMainBefore = (yield* runGit(remoteDir, ["rev-parse", "main"])).stdout.trim();
 
       const { manager } = yield* makeManager();
       const result = yield* runStackedAction(manager, { cwd: worktreeDir, action: "land" });
 
       expect(result.commit.status).toBe("created");
-      expect(result.push).toMatchObject({ status: "pushed", branch: "main" });
-      const remoteMain = (yield* runGit(remoteDir, ["rev-parse", "main"])).stdout.trim();
+      expect(result.push.status).toBe("skipped_not_requested");
+      const localMain = (yield* runGit(repoDir, ["rev-parse", "main"])).stdout.trim();
       expect(result.land).toMatchObject({
         branch: "feature/land",
         baseBranch: "main",
-        toSha: remoteMain,
+        fromSha: remoteMainBefore,
+        toSha: localMain,
       });
+      expect((yield* runGit(remoteDir, ["rev-parse", "main"])).stdout.trim()).toBe(
+        remoteMainBefore,
+      );
       expect(result.toast.title).toBe("Landed feature/land into main");
+      expect(result.toast.cta).toEqual({
+        kind: "run_action",
+        label: "Push main",
+        action: { kind: "push" },
+      });
       expect(NodeFS.existsSync(worktreeDir)).toBe(false);
       expect((yield* runGit(repoDir, ["branch", "--list", "feature/land"])).stdout.trim()).toBe("");
       expect(NodeFS.readFileSync(NodePath.join(repoDir, "feature.txt"), "utf8")).toBe("feature\n");

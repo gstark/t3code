@@ -66,7 +66,10 @@ export function GitActionCard(props: {
           ) : null}
           {land && merged ? (
             <GitActionStep icon={<PullRequestGlyph.merged />} term="Merge">
-              <Code>{land.branch}</Code> into <Code>{land.baseBranch}</Code>
+              <Code>{land.branch}</Code> into <Code>{land.baseBranch}</Code>{" "}
+              <Code>
+                {merged.fromSha.slice(0, 7)}..{merged.toSha.slice(0, 7)}
+              </Code>
             </GitActionStep>
           ) : null}
           {push.status === "pushed" ? (
@@ -79,14 +82,6 @@ export function GitActionCard(props: {
                 </>
               ) : null}
               {push.setUpstream ? " (set upstream)" : null}
-              {merged ? (
-                <>
-                  {" "}
-                  <Code>
-                    {merged.fromSha.slice(0, 7)}..{merged.toSha.slice(0, 7)}
-                  </Code>
-                </>
-              ) : null}
             </GitActionStep>
           ) : null}
           {land ? (
