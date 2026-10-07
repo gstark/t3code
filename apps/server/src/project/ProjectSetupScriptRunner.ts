@@ -1,5 +1,6 @@
 import { ProjectId } from "@t3tools/contracts";
 import { HostProcessEnvironment, HostProcessPlatform } from "@t3tools/shared/hostProcess";
+import { parseJustfileRecipes } from "@t3tools/shared/justfile";
 import {
   projectScriptRuntimeEnv,
   resolveProjectScripts,
@@ -11,8 +12,10 @@ import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 
 import * as ProjectionSnapshotQuery from "../orchestration/Services/ProjectionSnapshotQuery.ts";
@@ -191,9 +194,14 @@ function wrapCommandForCompletion(
   }
 }
 
+/** The justfile recipe that runs after the setup script in every new worktree. */
+const WORKTREE_RECIPE = "worktree";
+
 /** @public Service construction is part of the canonical Effect module API. */
 export const make = Effect.gen(function* () {
   const projectionSnapshotQuery = yield* ProjectionSnapshotQuery.ProjectionSnapshotQuery;
+  const fileSystem = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
   const terminalManager = yield* TerminalManager.TerminalManager;
   const serverSettings = yield* ServerSettings.ServerSettingsService;
   const completionShell = resolveCompletionShell(
@@ -286,6 +294,26 @@ export const make = Effect.gen(function* () {
       return { completion, unsubscribe };
     });
 
+  /**
+   * True when the worktree's justfile has a public `worktree` recipe that
+   * runs without arguments. `Justfile` is read only when `justfile` is missing.
+   */
+  const hasWorktreeRecipe = Effect.fn("ProjectSetupScriptRunner.hasWorktreeRecipe")(function* (
+    worktreePath: string,
+  ) {
+    const readJustfile = (name: string) =>
+      fileSystem.readFileString(path.join(worktreePath, name)).pipe(Effect.option);
+    const lower = yield* readJustfile("justfile");
+    const contents = Option.isSome(lower) ? lower : yield* readJustfile("Justfile");
+    return Option.match(contents, {
+      onNone: () => false,
+      onSome: (text) =>
+        parseJustfileRecipes(text).some(
+          (recipe) => recipe.name === WORKTREE_RECIPE && !recipe.hasRequiredParams,
+        ),
+    });
+  });
+
   const runForThread: ProjectSetupScriptRunner["Service"]["runForThread"] = Effect.fn(
     "ProjectSetupScriptRunner.runForThread",
   )(function* (input) {
@@ -338,7 +366,25 @@ export const make = Effect.gen(function* () {
           }),
       ),
     );
-    const script = setupProjectScript(resolveProjectScripts(settings, project));
+    const projectScript = setupProjectScript(resolveProjectScripts(settings, project));
+    const justCommand = (yield* hasWorktreeRecipe(input.worktreePath))
+      ? `just ${WORKTREE_RECIPE}`
+      : null;
+    // The justfile's `worktree` recipe runs after the project's setup script,
+    // or on its own when the project has none.
+    const script =
+      projectScript && justCommand
+        ? { ...projectScript, command: `${projectScript.command}\n${justCommand}` }
+        : (projectScript ??
+          (justCommand
+            ? {
+                id: "just-worktree",
+                name: justCommand,
+                command: justCommand,
+                icon: "configure" as const,
+                runOnWorktreeCreate: true,
+              }
+            : null));
     if (!script) {
       return {
         status: "no-script",

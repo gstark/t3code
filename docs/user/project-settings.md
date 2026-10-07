@@ -50,7 +50,8 @@ checkouts and removal. Actions belong to a project: editing them creates the pro
 on each selected environment, and reset returns to the environment's shared list. A project's
 `t3.json` actions can be imported there. Public recipes from the project's `justfile` appear in
 the thread header's actions menu without setup and run in the terminal drawer. A recipe that
-needs arguments is typed into the terminal without being run, so you can add them.
+needs arguments is typed into the terminal without being run, so you can add them. A new
+worktree runs `just worktree` after its setup action when the justfile has a `worktree` recipe.
 
 Settings a repository can also declare in `t3.json`, such as the workspace for new threads,
 resolve in one order: a project override, then the environment setting, then `t3.json`, then the

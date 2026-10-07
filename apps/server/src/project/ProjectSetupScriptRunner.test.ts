@@ -1,7 +1,9 @@
+import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, expect, it, vi } from "@effect/vitest";
 import { type OrchestrationProject, ProjectId, type TerminalEvent } from "@t3tools/contracts";
 import { HostProcessEnvironment, HostProcessPlatform } from "@t3tools/shared/hostProcess";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
@@ -83,7 +85,34 @@ const testLayer = (
     Layer.provideMerge(makeProjectionSnapshotQueryLayer(project)),
     Layer.provideMerge(makeTerminalManagerLayer(terminal)),
     Layer.provide(settings),
+    Layer.provideMerge(NodeServices.layer),
   );
+
+const openSetupTerminal = (terminalId: string, worktreePath: string) =>
+  Effect.succeed({
+    threadId: "thread-1",
+    terminalId,
+    cwd: worktreePath,
+    worktreePath,
+    status: "running" as const,
+    pid: 123,
+    history: "",
+    exitCode: null,
+    exitSignal: null,
+    label: terminalId,
+    updatedAt: "2026-01-01T00:00:00.000Z",
+  });
+
+/** A temp worktree whose justfile has a `worktree` recipe. */
+const makeWorktreeWithJustfile = Effect.gen(function* () {
+  const fileSystem = yield* FileSystem.FileSystem;
+  const worktreePath = yield* fileSystem.makeTempDirectoryScoped({ prefix: "t3-setup-just-" });
+  yield* fileSystem.writeFileString(
+    `${worktreePath}/justfile`,
+    "# Prepare a new worktree\nworktree:\n    echo ready\n",
+  );
+  return worktreePath;
+});
 
 describe("ProjectSetupScriptRunner", () => {
   it.effect("runs the inherited machine setup action in the checkout's worktree", () => {
@@ -145,6 +174,80 @@ describe("ProjectSetupScriptRunner", () => {
             ],
           }),
         ),
+      ),
+    );
+  });
+
+  it.effect("runs the justfile's worktree recipe after the setup script", () => {
+    const writes: string[] = [];
+    const write = vi.fn((input: { data: string }) =>
+      Effect.sync(() => void writes.push(input.data)),
+    );
+    const project = makeProject([
+      {
+        id: "setup",
+        name: "Setup",
+        command: "bun install",
+        icon: "configure",
+        runOnWorktreeCreate: true,
+      },
+    ]);
+
+    return Effect.gen(function* () {
+      const worktreePath = yield* makeWorktreeWithJustfile;
+      const runner = yield* ProjectSetupScriptRunner.ProjectSetupScriptRunner;
+      const result = yield* runner.runForThread({
+        threadId: "thread-1",
+        projectId: "project-1",
+        worktreePath,
+      });
+
+      expect(result).toMatchObject({
+        status: "started",
+        scriptId: "setup",
+        scriptCommand: "bun install\njust worktree",
+      });
+      expect(writes).toEqual(["bun install\njust worktree\r"]);
+    }).pipe(
+      Effect.scoped,
+      Effect.provide(
+        testLayer(project, {
+          open: (input) => openSetupTerminal(input.terminalId, input.cwd),
+          write,
+        }),
+      ),
+    );
+  });
+
+  it.effect("runs the justfile's worktree recipe alone when there is no setup script", () => {
+    const writes: string[] = [];
+    const write = vi.fn((input: { data: string }) =>
+      Effect.sync(() => void writes.push(input.data)),
+    );
+
+    return Effect.gen(function* () {
+      const worktreePath = yield* makeWorktreeWithJustfile;
+      const runner = yield* ProjectSetupScriptRunner.ProjectSetupScriptRunner;
+      const result = yield* runner.runForThread({
+        threadId: "thread-1",
+        projectId: "project-1",
+        worktreePath,
+      });
+
+      expect(result).toMatchObject({
+        status: "started",
+        scriptName: "just worktree",
+        scriptCommand: "just worktree",
+        terminalId: "setup-just-worktree",
+      });
+      expect(writes).toEqual(["just worktree\r"]);
+    }).pipe(
+      Effect.scoped,
+      Effect.provide(
+        testLayer(makeProject([]), {
+          open: (input) => openSetupTerminal(input.terminalId, input.cwd),
+          write,
+        }),
       ),
     );
   });
