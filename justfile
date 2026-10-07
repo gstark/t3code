@@ -84,7 +84,7 @@ release: _require-mine
 
     base="$(node -p "require('./apps/desktop/package.json').version")"
     version="${base}-mine.$(date +%Y%m%d%H%M)"
-    tag="mine-v${version}"
+    tag="v${version}"
     out="release/mine"
 
     rm -rf "$out"
@@ -111,7 +111,7 @@ release: _require-mine
       version "$version"
       sha256 "$sha"
 
-      url "https://github.com/{{ fork_repo }}/releases/download/mine-v#{version}/T3-Code-#{version}-arm64.dmg"
+      url "https://github.com/{{ fork_repo }}/releases/download/v#{version}/T3-Code-#{version}-arm64.dmg"
       name "T3 Code (mine)"
       desc "Personal fork build of T3 Code"
       homepage "https://github.com/{{ fork_repo }}/tree/mine"

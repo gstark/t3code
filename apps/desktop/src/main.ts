@@ -98,7 +98,12 @@ const resolveDesktopSshCliRunner = (
       nodeEngineRange: serverPackageJson.engines.node,
     };
   }
-  return { archiveVersion: environment.appVersion };
+  // Fork: `-mine` versions are released on the fork, where the
+  // mine-cli-archives workflow attaches the Linux archives.
+  return {
+    archiveVersion: environment.appVersion,
+    releaseBaseUrl: "https://github.com/gstark/t3code/releases/download",
+  };
 };
 
 const desktopSshEnvironmentLayer = Layer.unwrap(
