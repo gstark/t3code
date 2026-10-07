@@ -5,6 +5,7 @@ import {
   type ResolvedKeybindingsConfig,
   type ThreadId,
 } from "@t3tools/contracts";
+import type { JustRecipe } from "@t3tools/shared/justfile";
 import { scopeThreadRef } from "@t3tools/client-runtime/environment";
 import type { EnvironmentProject } from "@t3tools/client-runtime/state/shell";
 import {
@@ -35,6 +36,7 @@ import ProjectScriptsControl, {
 import { OpenInPicker } from "./OpenInPicker";
 import { useRemoteOpenState, type RemoteOpenMode } from "../../remoteOpen";
 import { usePrimaryEnvironmentId } from "../../state/environments";
+import { useJustfileRecipes } from "~/hooks/useJustfileRecipes";
 import { useT3ProjectFileScripts } from "~/hooks/useT3ProjectFileScripts";
 import { useThreadActionMenu } from "~/hooks/useThreadActionMenu";
 import { readLocalApi } from "~/localApi";
@@ -72,6 +74,7 @@ interface ChatHeaderProps {
   onNewThreadInProject: () => void;
   onOpenProjectSettings?: (() => void) | undefined;
   onRunProjectScript: (script: ProjectScript) => void;
+  onRunJustRecipe: (recipe: JustRecipe) => void;
   onAddProjectScript: (input: NewProjectScriptInput) => Promise<ProjectScriptActionResult>;
   onUpdateProjectScript: (
     scriptId: string,
@@ -141,6 +144,7 @@ export const ChatHeader = memo(function ChatHeader({
   onNewThreadInProject,
   onOpenProjectSettings,
   onRunProjectScript,
+  onRunJustRecipe,
   onAddProjectScript,
   onUpdateProjectScript,
   onDeleteProjectScript,
@@ -200,6 +204,11 @@ export const ChatHeader = memo(function ChatHeader({
   const fileScripts = useT3ProjectFileScripts(
     activeThreadEnvironmentId,
     activeProjectScripts ? activeProjectCwd : null,
+  );
+  // Read the justfile where its recipes run: the thread's worktree when it has one.
+  const justRecipes = useJustfileRecipes(
+    activeThreadEnvironmentId,
+    activeProjectScripts ? (gitCwd ?? activeProjectCwd) : null,
   );
   const remoteOpenState = useRemoteOpenState(activeThreadEnvironmentId);
   const showOpenInPicker = shouldShowOpenInPicker({
@@ -360,9 +369,11 @@ export const ChatHeader = memo(function ChatHeader({
             presentation={actionsCollapsed ? "menu" : "toolbar"}
             scripts={activeProjectScripts}
             fileScripts={fileScripts}
+            justRecipes={justRecipes}
             keybindings={keybindings}
             preferredScriptId={preferredScriptId}
             onRunScript={onRunProjectScript}
+            onRunJustRecipe={onRunJustRecipe}
             onAddScript={onAddProjectScript}
             onUpdateScript={onUpdateProjectScript}
             onDeleteScript={onDeleteProjectScript}

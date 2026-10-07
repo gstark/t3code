@@ -3,6 +3,7 @@ import type {
   ResolvedKeybindingsConfig,
   T3ProjectFileScript,
 } from "@t3tools/contracts";
+import type { JustRecipe } from "@t3tools/shared/justfile";
 import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,
@@ -42,6 +43,7 @@ import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
 export type { NewProjectScriptInput, ProjectScriptActionResult };
 
 const NO_FILE_SCRIPTS: ReadonlyArray<T3ProjectFileScript> = [];
+const NO_JUST_RECIPES: ReadonlyArray<JustRecipe> = [];
 
 interface ProjectScriptsControlProps {
   presentation?: "toolbar" | "menu";
@@ -49,9 +51,12 @@ interface ProjectScriptsControlProps {
   scripts: ReadonlyArray<ProjectScript>;
   /** Scripts declared in the project's checked-in t3.json, offered for import. */
   fileScripts?: ReadonlyArray<T3ProjectFileScript>;
+  /** Recipes from the project's justfile, run directly without saving. */
+  justRecipes?: ReadonlyArray<JustRecipe>;
   keybindings: ResolvedKeybindingsConfig;
   preferredScriptId?: string | null;
   onRunScript: (script: ProjectScript) => void;
+  onRunJustRecipe: (recipe: JustRecipe) => void;
   onAddScript: (input: NewProjectScriptInput) => Promise<ProjectScriptActionResult>;
   onUpdateScript: (
     scriptId: string,
@@ -65,9 +70,11 @@ export default function ProjectScriptsControl({
   onRequestMenuClose,
   scripts,
   fileScripts = NO_FILE_SCRIPTS,
+  justRecipes = NO_JUST_RECIPES,
   keybindings,
   preferredScriptId = null,
   onRunScript,
+  onRunJustRecipe,
   onAddScript,
   onUpdateScript,
   onDeleteScript,
@@ -101,6 +108,15 @@ export default function ProjectScriptsControl({
       ),
     [fileScripts, scripts],
   );
+  // A recipe already saved as an action shows once, as that action.
+  const runnableRecipes = useMemo(
+    () =>
+      justRecipes.filter(
+        (recipe) => !scripts.some((script) => script.command === `just ${recipe.name}`),
+      ),
+    [justRecipes, scripts],
+  );
+  const hasMenuExtras = importableScripts.length > 0 || runnableRecipes.length > 0;
 
   const openAddDialog = () => {
     setEditorRequest({ scriptId: null, initial: EMPTY_PROJECT_SCRIPT_INPUT });
@@ -164,6 +180,26 @@ export default function ProjectScriptsControl({
     </>
   );
 
+  const justMenuItems = runnableRecipes.length > 0 && (
+    <>
+      {(primaryScript || importableScripts.length > 0) && <MenuSeparator />}
+      <MenuGroup>
+        <MenuGroupLabel>From justfile</MenuGroupLabel>
+        {runnableRecipes.map((recipe) => (
+          <MenuItem
+            density={presentation === "menu" ? "touch" : "default"}
+            key={recipe.name}
+            {...(recipe.doc ? { title: recipe.doc } : {})}
+            onClick={() => onRunJustRecipe(recipe)}
+          >
+            <ScriptIcon icon="play" className="size-4" />
+            <MenuItemLabel>{recipe.name}</MenuItemLabel>
+          </MenuItem>
+        ))}
+      </MenuGroup>
+    </>
+  );
+
   const scriptItems = (
     <>
       {scripts.map((script) => {
@@ -219,6 +255,7 @@ export default function ProjectScriptsControl({
         );
       })}
       {importMenuItems}
+      {justMenuItems}
       <MenuItem density={presentation === "menu" ? "touch" : "default"} onClick={openAddDialog}>
         <PlusIcon className="size-4" />
         <MenuItemLabel>Add action</MenuItemLabel>
@@ -242,7 +279,7 @@ export default function ProjectScriptsControl({
               </MenuShortcut>
             </MenuItem>
           )}
-          {primaryScript || importableScripts.length > 0 ? (
+          {primaryScript || hasMenuExtras ? (
             <MenuSub
               open={actionsMenuOpen.scripts}
               onOpenChange={(open) =>
@@ -304,7 +341,7 @@ export default function ProjectScriptsControl({
             <MenuPopup align="end">{scriptItems}</MenuPopup>
           </Menu>
         </Group>
-      ) : importableScripts.length > 0 ? (
+      ) : hasMenuExtras ? (
         <Menu
           open={actionsMenuOpen.imports}
           onOpenChange={(open) =>
@@ -312,14 +349,19 @@ export default function ProjectScriptsControl({
           }
         >
           <MenuTrigger render={<Button size="xs" variant="outline" aria-label="Project actions" />}>
-            <PlusIcon className="size-3.5" />
+            {runnableRecipes.length > 0 ? (
+              <ScriptIcon icon="play" className="size-3.5" />
+            ) : (
+              <PlusIcon className="size-3.5" />
+            )}
             <span className="sr-only @3xl/header-actions:not-sr-only @3xl/header-actions:ml-0.5">
-              Add action
+              {runnableRecipes.length > 0 ? "Actions" : "Add action"}
             </span>
             <ChevronDownIcon className="size-3.5" />
           </MenuTrigger>
           <MenuPopup align="end">
             {importMenuItems}
+            {justMenuItems}
             <MenuItem onClick={openAddDialog}>
               <PlusIcon className="size-4" />
               Add action

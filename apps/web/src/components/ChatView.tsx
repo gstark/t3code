@@ -77,6 +77,7 @@ import {
   resolveProjectScripts,
 } from "@t3tools/shared/projectScripts";
 import { resolveProjectSettings } from "@t3tools/shared/projectSettings";
+import type { JustRecipe } from "@t3tools/shared/justfile";
 import { sourceControlRepositorySelector } from "@t3tools/shared/sourceControl";
 import { truncate } from "@t3tools/shared/String";
 import { resolveThreadReferenceCopyTarget } from "@t3tools/shared/threadReference";
@@ -4185,6 +4186,8 @@ export default function ChatView(props: ChatViewProps) {
         worktreePath?: string | null;
         preferNewTerminal?: boolean;
         rememberAsLastInvoked?: boolean;
+        /** False types the command without Enter so the user can finish it. */
+        submit?: boolean;
       },
     ) => {
       if (!activeThreadId || !activeProject || !activeThread) return;
@@ -4264,7 +4267,7 @@ export default function ChatView(props: ChatViewProps) {
         input: {
           threadId: activeThreadId,
           terminalId: targetTerminalId,
-          data: `${script.command}\r`,
+          data: options?.submit === false ? `${script.command} ` : `${script.command}\r`,
         },
       });
       if (writeResult._tag === "Failure" && !isAtomCommandInterrupted(writeResult)) {
@@ -4294,6 +4297,21 @@ export default function ChatView(props: ChatViewProps) {
       terminalUiState.activeTerminalId,
       writeTerminal,
     ],
+  );
+
+  const runJustRecipe = useCallback(
+    (recipe: JustRecipe) =>
+      void runProjectScript(
+        {
+          id: `just-${recipe.name}`,
+          name: recipe.name,
+          command: `just ${recipe.name}`,
+          icon: "play",
+          runOnWorktreeCreate: false,
+        },
+        { rememberAsLastInvoked: false, submit: !recipe.hasRequiredParams },
+      ),
+    [runProjectScript],
   );
 
   const runProjectScriptRef = useRef(runProjectScript);
@@ -9775,6 +9793,7 @@ export default function ChatView(props: ChatViewProps) {
               ? { onOpenProjectSettings: handleOpenDraftProjectSettings }
               : {})}
             onRunProjectScript={runProjectScript}
+            onRunJustRecipe={runJustRecipe}
             onAddProjectScript={saveProjectScript}
             onUpdateProjectScript={updateProjectScript}
             onDeleteProjectScript={deleteProjectScript}
