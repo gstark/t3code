@@ -1,6 +1,5 @@
 import { ProjectId, type ProjectScript } from "@t3tools/contracts";
 import * as HostProcess from "@t3tools/shared/HostProcess";
-import { parseJustfileRecipes } from "@t3tools/shared/justfile";
 import {
   projectScriptRuntimeEnv,
   projectScriptTerminalInput,
@@ -21,6 +20,7 @@ import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 
 import * as ServerSettings from "../serverSettings.ts";
+import { hasRunnableJustRecipe } from "./justfileRecipe.ts";
 import * as TerminalManager from "../terminal/Manager.ts";
 import * as ProjectService from "./ProjectService.ts";
 
@@ -344,26 +344,6 @@ export const make = Effect.gen(function* () {
     },
   );
 
-  /**
-   * True when the worktree's justfile has a public `worktree` recipe that
-   * runs without arguments. `Justfile` is read only when `justfile` is missing.
-   */
-  const hasWorktreeRecipe = Effect.fn("ProjectSetupScriptRunner.hasWorktreeRecipe")(function* (
-    worktreePath: string,
-  ) {
-    const readJustfile = (name: string) =>
-      fileSystem.readFileString(path.join(worktreePath, name)).pipe(Effect.option);
-    const lower = yield* readJustfile("justfile");
-    const contents = Option.isSome(lower) ? lower : yield* readJustfile("Justfile");
-    return Option.match(contents, {
-      onNone: () => false,
-      onSome: (text) =>
-        parseJustfileRecipes(text).some(
-          (recipe) => recipe.name === WORKTREE_RECIPE && !recipe.hasRequiredParams,
-        ),
-    });
-  });
-
   const runForThread: ProjectSetupScriptRunner["Service"]["runForThread"] = Effect.fn(
     "ProjectSetupScriptRunner.runForThread",
   )(function* (input) {
@@ -423,7 +403,8 @@ export const make = Effect.gen(function* () {
     const trigger = input.trigger ?? "setup";
     const scripts = resolveProjectScripts(settings, project);
     const justCommand =
-      trigger === "setup" && (yield* hasWorktreeRecipe(input.worktreePath))
+      trigger === "setup" &&
+      (yield* hasRunnableJustRecipe({ fileSystem, path }, input.worktreePath, WORKTREE_RECIPE))
         ? `just ${WORKTREE_RECIPE}`
         : null;
     const projectScript =
