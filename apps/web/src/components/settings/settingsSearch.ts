@@ -23,6 +23,7 @@ export type SettingsPath =
   | "/settings/source-control"
   | "/settings/storage"
   | "/settings/connections"
+  | "/settings/proxmox"
   | "/settings/archived";
 
 /**
@@ -95,6 +96,7 @@ export const SETTINGS_SECTION_LABELS: Readonly<Record<SettingsPath, string>> = {
   "/settings/source-control": "Source Control",
   "/settings/storage": "Storage",
   "/settings/connections": "Connections",
+  "/settings/proxmox": "Proxmox",
   "/settings/archived": "Archive",
 };
 
@@ -530,6 +532,13 @@ export const SETTINGS_SEARCH_ITEMS = [
   },
   ...KEYBINDING_SEARCH_ITEMS,
   {
+    id: "proxmox-connection",
+    title: "Proxmox",
+    searchTerms: ["proxmox spikes containers lxc template api token"],
+    to: "/settings/proxmox",
+    desktopOnly: true,
+  },
+  {
     id: "snap-shot-enabled",
     title: "SnapShots",
     searchTerms: ["window capture screenshot"],
@@ -891,6 +900,7 @@ const SETTINGS_CATEGORY_SCOPES: Readonly<Record<SettingsPath, SettingsSearchScop
   "/settings/source-control": "environment-defaults",
   "/settings/storage": "project-defaults",
   "/settings/connections": "connections",
+  "/settings/proxmox": null,
   "/settings/scheduled-tasks": null,
   "/settings/archived": "project-defaults",
 };

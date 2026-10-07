@@ -75,6 +75,7 @@ import {
   takeLegacyLocalStorage,
 } from "./methods/legacyLocalStorage.ts";
 import { getWslState, setWslBackendEnabled, setWslDistro, setWslOnly } from "./methods/wsl.ts";
+import * as ProxmoxIpc from "./methods/proxmox.ts";
 
 export const installDesktopIpcHandlers = Effect.fn("desktop.ipc.installHandlers")(function* () {
   const ipc = yield* DesktopIpc.DesktopIpc;
@@ -131,6 +132,12 @@ export const installDesktopIpcHandlers = Effect.fn("desktop.ipc.installHandlers"
   yield* ipc.handle(setWslBackendEnabled);
   yield* ipc.handle(setWslDistro);
   yield* ipc.handle(setWslOnly);
+
+  yield* ipc.handle(ProxmoxIpc.getProxmoxSettings);
+  yield* ipc.handle(ProxmoxIpc.setProxmoxSettings);
+  yield* ipc.handle(ProxmoxIpc.clearProxmoxSettings);
+  yield* ipc.handle(ProxmoxIpc.fetchProxmoxCertificate);
+  yield* ipc.handle(ProxmoxIpc.testProxmoxConnection);
 
   yield* ipc.handle(pickFolder);
   yield* ipc.handle(pickProjectFavicon);

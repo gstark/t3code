@@ -23,6 +23,12 @@ import { AdvertisedEndpoint } from "./remoteAccess.ts";
 import { ExecutionEnvironmentDescriptor } from "./environment.ts";
 import { type ClientSettings, type QuitConfirmationMode, SnapShotShortcut } from "./settings.ts";
 import type { EditorId } from "./editor.ts";
+import type {
+  DesktopProxmoxCertificate,
+  DesktopProxmoxConnectionTest,
+  DesktopProxmoxSettings,
+  DesktopProxmoxSettingsInput,
+} from "./proxmox.ts";
 
 import type {
   DesktopAppActivationRequest,
@@ -1198,6 +1204,14 @@ export interface DesktopBridge {
   setWslBackendEnabled: (enabled: boolean) => Promise<DesktopWslState>;
   setWslDistro: (distro: string | null) => Promise<DesktopWslState>;
   setWslOnly: (enabled: boolean) => Promise<DesktopWslState>;
+  /** Fork-only Proxmox spikes. Optional so other desktop shells still satisfy the bridge. */
+  getProxmoxSettings?: () => Promise<DesktopProxmoxSettings | null>;
+  setProxmoxSettings?: (input: DesktopProxmoxSettingsInput) => Promise<DesktopProxmoxSettings>;
+  clearProxmoxSettings?: () => Promise<void>;
+  fetchProxmoxCertificate?: (apiUrl: string) => Promise<DesktopProxmoxCertificate>;
+  testProxmoxConnection?: (
+    input: DesktopProxmoxSettingsInput,
+  ) => Promise<DesktopProxmoxConnectionTest>;
   pickFolder: (options?: PickFolderOptions) => Promise<string | null>;
   /** Optional while older desktop shells can host a newer web client. */
   pickProjectFavicon?: (initialPath?: string) => Promise<string | null>;

@@ -185,6 +185,14 @@ contextBridge.exposeInMainWorld("desktopBridge", {
     ipcRenderer.invoke(IpcChannels.SET_WSL_BACKEND_ENABLED_CHANNEL, enabled),
   setWslDistro: (distro) => ipcRenderer.invoke(IpcChannels.SET_WSL_DISTRO_CHANNEL, distro),
   setWslOnly: (enabled) => ipcRenderer.invoke(IpcChannels.SET_WSL_ONLY_CHANNEL, enabled),
+  getProxmoxSettings: () => ipcRenderer.invoke(IpcChannels.GET_PROXMOX_SETTINGS_CHANNEL),
+  setProxmoxSettings: (input) =>
+    ipcRenderer.invoke(IpcChannels.SET_PROXMOX_SETTINGS_CHANNEL, input),
+  clearProxmoxSettings: () => ipcRenderer.invoke(IpcChannels.CLEAR_PROXMOX_SETTINGS_CHANNEL),
+  fetchProxmoxCertificate: (apiUrl) =>
+    ipcRenderer.invoke(IpcChannels.FETCH_PROXMOX_CERTIFICATE_CHANNEL, apiUrl),
+  testProxmoxConnection: (input) =>
+    ipcRenderer.invoke(IpcChannels.TEST_PROXMOX_CONNECTION_CHANNEL, input),
   pickFolder: (options) => ipcRenderer.invoke(IpcChannels.PICK_FOLDER_CHANNEL, options),
   pickProjectFavicon: (initialPath) =>
     ipcRenderer.invoke(IpcChannels.PICK_PROJECT_FAVICON_CHANNEL, initialPath),
