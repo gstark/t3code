@@ -141,9 +141,9 @@ install:
     set -euo pipefail
     brew update
     if brew list --cask {{ cask }} >/dev/null 2>&1; then
-      brew upgrade --cask {{ cask }}
+      brew upgrade --no-ask --cask {{ cask }}
     else
-      brew install --cask {{ tap }}/{{ cask }}
+      brew install --no-ask --cask {{ tap }}/{{ cask }}
     fi
     echo "Quit and reopen T3 Code to use the new build."
 
