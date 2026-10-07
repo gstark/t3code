@@ -1,6 +1,5 @@
 import { ProjectId } from "@t3tools/contracts";
 import { HostProcessEnvironment, HostProcessPlatform } from "@t3tools/shared/hostProcess";
-import { parseJustfileRecipes } from "@t3tools/shared/justfile";
 import {
   projectScriptRuntimeEnv,
   resolveProjectScripts,
@@ -20,6 +19,7 @@ import * as Schema from "effect/Schema";
 
 import * as ProjectionSnapshotQuery from "../orchestration/Services/ProjectionSnapshotQuery.ts";
 import * as ServerSettings from "../serverSettings.ts";
+import { hasRunnableJustRecipe } from "./justfileRecipe.ts";
 import * as TerminalManager from "../terminal/Manager.ts";
 
 export interface ProjectSetupScriptRunnerResultNoScript {
@@ -294,26 +294,6 @@ export const make = Effect.gen(function* () {
       return { completion, unsubscribe };
     });
 
-  /**
-   * True when the worktree's justfile has a public `worktree` recipe that
-   * runs without arguments. `Justfile` is read only when `justfile` is missing.
-   */
-  const hasWorktreeRecipe = Effect.fn("ProjectSetupScriptRunner.hasWorktreeRecipe")(function* (
-    worktreePath: string,
-  ) {
-    const readJustfile = (name: string) =>
-      fileSystem.readFileString(path.join(worktreePath, name)).pipe(Effect.option);
-    const lower = yield* readJustfile("justfile");
-    const contents = Option.isSome(lower) ? lower : yield* readJustfile("Justfile");
-    return Option.match(contents, {
-      onNone: () => false,
-      onSome: (text) =>
-        parseJustfileRecipes(text).some(
-          (recipe) => recipe.name === WORKTREE_RECIPE && !recipe.hasRequiredParams,
-        ),
-    });
-  });
-
   const runForThread: ProjectSetupScriptRunner["Service"]["runForThread"] = Effect.fn(
     "ProjectSetupScriptRunner.runForThread",
   )(function* (input) {
@@ -367,7 +347,11 @@ export const make = Effect.gen(function* () {
       ),
     );
     const projectScript = setupProjectScript(resolveProjectScripts(settings, project));
-    const justCommand = (yield* hasWorktreeRecipe(input.worktreePath))
+    const justCommand = (yield* hasRunnableJustRecipe(
+      { fileSystem, path },
+      input.worktreePath,
+      WORKTREE_RECIPE,
+    ))
       ? `just ${WORKTREE_RECIPE}`
       : null;
     // The justfile's `worktree` recipe runs after the project's setup script,

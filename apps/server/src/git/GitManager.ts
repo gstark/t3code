@@ -63,6 +63,8 @@ import {
   repositoryConventionsTextGenerationPolicy,
 } from "../textGeneration/TextGenerationPresets.ts";
 import * as ProjectSetupScriptRunner from "../project/ProjectSetupScriptRunner.ts";
+import { hasRunnableJustRecipe } from "../project/justfileRecipe.ts";
+import * as ProcessRunner from "../processRunner.ts";
 import * as ProviderRegistry from "../provider/Services/ProviderRegistry.ts";
 import { extractBranchNameFromRemoteRef } from "./remoteRefs.ts";
 import * as ServerSettings from "../serverSettings.ts";
@@ -133,6 +135,8 @@ export class GitManager extends Context.Service<
 >()("t3/git/GitManager") {}
 
 const COMMIT_TIMEOUT_MS = 10 * 60_000;
+/** The justfile recipe that runs in a worktree before landing removes it. */
+const WORKTREE_COMPLETE_RECIPE = "worktree-complete";
 const MAX_PROGRESS_TEXT_LENGTH = 500;
 const SHORT_SHA_LENGTH = 7;
 const TOAST_DESCRIPTION_MAX = 72;
@@ -707,6 +711,7 @@ export const make = Effect.gen(function* () {
   const crypto = yield* Crypto.Crypto;
   const fileSystem = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
+  const processRunner = yield* ProcessRunner.ProcessRunner;
 
   const sourceControlProvider = (cwd: string) => sourceControlProviders.resolve({ cwd });
   const serverSettingsService = yield* ServerSettings.ServerSettingsService;
@@ -2709,7 +2714,8 @@ export const make = Effect.gen(function* () {
 
   /**
    * Merges the worktree branch into the base branch in the main checkout,
-   * then removes the worktree and deletes the branch. The base branch is not
+   * runs the worktree's `just worktree-complete` recipe when it has one, then
+   * removes the worktree and deletes the branch. The base branch is not
    * pushed; the completion toast offers that as a separate action.
    * A branch with no commits beyond the base skips the merge.
    * Stops on conflicts or a diverged base without undoing anything, so the
@@ -2749,8 +2755,60 @@ export const make = Effect.gen(function* () {
       );
     });
 
+    // Runs the justfile's `worktree-complete` recipe in the worktree, if it has
+    // one. A failure keeps the worktree so the user can fix it and land again.
+    const runWorktreeCompleteRecipe = Effect.fn("runLandStep.worktreeComplete")(function* (
+      done: string,
+    ) {
+      if (
+        !(yield* hasRunnableJustRecipe(
+          { fileSystem, path },
+          worktreePath,
+          WORKTREE_COMPLETE_RECIPE,
+        ))
+      ) {
+        return;
+      }
+      const hookName = `just ${WORKTREE_COMPLETE_RECIPE}`;
+      yield* emit({ kind: "hook_started", hookName });
+      const result = yield* processRunner
+        .run({
+          command: "just",
+          args: [WORKTREE_COMPLETE_RECIPE],
+          cwd: worktreePath,
+          timeout: COMMIT_TIMEOUT_MS,
+          outputMode: "truncate",
+        })
+        .pipe(
+          Effect.mapError((error) =>
+            fail(`${done}, but ${hookName} failed: ${error.message}. The worktree is kept.`),
+          ),
+        );
+      for (const [stream, output] of [
+        ["stdout", result.stdout],
+        ["stderr", result.stderr],
+      ] as const) {
+        for (const line of output.split("\n")) {
+          const text = sanitizeProgressText(line);
+          if (text) yield* emit({ kind: "hook_output", hookName, stream, text });
+        }
+      }
+      yield* emit({
+        kind: "hook_finished",
+        hookName,
+        exitCode: result.code,
+        durationMs: null,
+      });
+      if (result.code !== 0) {
+        return yield* fail(
+          `${done}, but ${hookName} exited with code ${result.code}. The worktree is kept.`,
+        );
+      }
+    });
+
     const removeWorktree = Effect.fn("runLandStep.removeWorktree")(function* (done: string) {
       yield* startPhase("cleanup", "Removing worktree...");
+      yield* runWorktreeCompleteRecipe(done);
       yield* gitCore
         .removeWorktree({ cwd: main, path: worktreePath })
         .pipe(

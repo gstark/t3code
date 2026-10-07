@@ -52,6 +52,8 @@ on each selected environment, and reset returns to the environment's shared list
 the thread header's actions menu without setup and run in the terminal drawer. A recipe that
 needs arguments is typed into the terminal without being run, so you can add them. A new
 worktree runs `just worktree` after its setup action when the justfile has a `worktree` recipe.
+Landing a worktree runs `just worktree-complete` in it after the merge and before the worktree is
+removed. If that recipe fails, the worktree stays, and you can land again after you fix it.
 
 Settings a repository can also declare in `t3.json`, such as the workspace for new threads,
 resolve in one order: a project override, then the environment setting, then `t3.json`, then the

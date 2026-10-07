@@ -50,6 +50,7 @@ import * as SourceControlProviderRegistry from "../sourceControl/SourceControlPr
 import * as ServerConfig from "../config.ts";
 import * as ProjectSetupScriptRunner from "../project/ProjectSetupScriptRunner.ts";
 import * as ProviderRegistry from "../provider/Services/ProviderRegistry.ts";
+import * as ProcessRunner from "../processRunner.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import * as GitManager from "./GitManager.ts";
 
@@ -288,6 +289,20 @@ function configureVisibleRemoteUrlWithLocalRewrite(
     yield* runGit(cwd, ["config", `remote.${remoteName}.url`, visibleUrl]);
     yield* runGit(cwd, ["config", `url.${localRemotePath}.insteadOf`, visibleUrl]);
   });
+}
+
+/** A finished `just` run with no output. */
+function justResult(code: number): ProcessRunner.ProcessRunOutput {
+  return {
+    stdout: "",
+    stderr: "",
+    code: ChildProcessSpawner.ExitCode(code),
+    timedOut: false,
+    stdoutTruncated: false,
+    stderrTruncated: false,
+    stdoutInvalidUtf8: false,
+    stderrInvalidUtf8: false,
+  };
 }
 
 /** A main checkout pushed to a bare remote, plus a linked worktree on `feature/land`. */
@@ -677,6 +692,7 @@ function makeManager(input?: {
   textGeneration?: Partial<FakeGitTextGeneration>;
   serverSettings?: Parameters<typeof ServerSettings.layerTest>[0];
   setupScriptRunner?: ProjectSetupScriptRunner.ProjectSetupScriptRunner["Service"];
+  processRunner?: ProcessRunner.ProcessRunner["Service"];
   gitConfigReads?: string[];
 }) {
   const { service: gitHubCli, ghCalls } = createGitHubCliWithFakeGh(input?.ghScenario);
@@ -743,6 +759,9 @@ function makeManager(input?: {
     ),
     vcsDriverLayer,
     serverSettingsLayer,
+    input?.processRunner
+      ? Layer.succeed(ProcessRunner.ProcessRunner, input.processRunner)
+      : ProcessRunner.layer.pipe(Layer.provide(NodeServices.layer)),
   ).pipe(Layer.provideMerge(sourceControlRegistryLayer), Layer.provideMerge(NodeServices.layer));
 
   return GitManager.make.pipe(
@@ -3277,6 +3296,60 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
       expect((yield* runGit(remoteDir, ["rev-parse", "main"])).stdout.trim()).toBe(
         remoteMainBefore,
       );
+    }),
+  );
+
+  it.effect("runs the justfile's worktree-complete recipe before removing the worktree", () =>
+    Effect.gen(function* () {
+      const { repoDir, worktreeDir } = yield* makeLandableWorktree();
+      NodeFS.writeFileSync(
+        NodePath.join(worktreeDir, "justfile"),
+        "worktree-complete:\n    true\n",
+      );
+      const runs: Array<{ command: string; args: ReadonlyArray<string>; cwdHasJustfile: boolean }> =
+        [];
+      const { manager } = yield* makeManager({
+        processRunner: {
+          run: (input) =>
+            Effect.sync(() => {
+              runs.push({
+                command: input.command,
+                args: input.args,
+                cwdHasJustfile: NodeFS.existsSync(NodePath.join(input.cwd ?? "", "justfile")),
+              });
+              return justResult(0);
+            }),
+        },
+      });
+
+      yield* runStackedAction(manager, { cwd: worktreeDir, action: "land" });
+
+      expect(runs).toEqual([
+        { command: "just", args: ["worktree-complete"], cwdHasJustfile: true },
+      ]);
+      expect(NodeFS.existsSync(worktreeDir)).toBe(false);
+      expect(NodeFS.existsSync(NodePath.join(repoDir, "justfile"))).toBe(true);
+    }),
+  );
+
+  it.effect("keeps the worktree when the worktree-complete recipe fails", () =>
+    Effect.gen(function* () {
+      const { repoDir, worktreeDir } = yield* makeLandableWorktree();
+      NodeFS.writeFileSync(
+        NodePath.join(worktreeDir, "justfile"),
+        "worktree-complete:\n    false\n",
+      );
+      const { manager } = yield* makeManager({
+        processRunner: { run: () => Effect.succeed(justResult(1)) },
+      });
+
+      const error = yield* runStackedAction(manager, { cwd: worktreeDir, action: "land" }).pipe(
+        Effect.flip,
+      );
+
+      expect(error.message).toContain("just worktree-complete exited with code 1");
+      expect(NodeFS.existsSync(worktreeDir)).toBe(true);
+      expect(NodeFS.existsSync(NodePath.join(repoDir, "justfile"))).toBe(true);
     }),
   );
 
