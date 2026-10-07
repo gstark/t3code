@@ -113,6 +113,7 @@ import {
 import { formatModelSlugName, resolveSelectableModel } from "@t3tools/shared/model";
 import { projectScriptCwd, resolveProjectScripts } from "@t3tools/shared/projectScripts";
 import { resolveProjectSettings } from "@t3tools/shared/projectSettings";
+import type { JustRecipe } from "@t3tools/shared/justfile";
 import { resolveThreadReferenceCopyTarget } from "@t3tools/client-runtime/thread-reference";
 import { resolveTerminalSessionLabel } from "@t3tools/shared/terminalLabels";
 import { useAtomValue } from "@effect/atom-react";
@@ -1836,6 +1837,18 @@ export default function ChatView(props: ChatViewProps) {
     setTerminalUiLaunchContext,
     setThreadError,
   });
+  const runJustRecipe = (recipe: JustRecipe) =>
+    void runProjectScriptStable(
+      {
+        id: `just-${recipe.name}`,
+        name: recipe.name,
+        command: `just ${recipe.name}`,
+        icon: "play",
+        runOnWorktreeCreate: false,
+      },
+      { rememberAsLastInvoked: false, submit: !recipe.hasRequiredParams },
+    );
+  const runJustRecipeStable = useStableCallback(runJustRecipe);
   const {
     saveProjectScript: saveProjectScriptStable,
     updateProjectScript: updateProjectScriptStable,
@@ -3792,6 +3805,7 @@ export default function ChatView(props: ChatViewProps) {
                 ? { onOpenChanges: openChangesFromThreadPanelStable }
                 : {})}
               onRunProjectScript={runProjectScriptStable}
+              onRunJustRecipe={runJustRecipeStable}
               onAddProjectScript={saveProjectScriptStable}
               onUpdateProjectScript={updateProjectScriptStable}
               onDeleteProjectScript={deleteProjectScriptStable}
