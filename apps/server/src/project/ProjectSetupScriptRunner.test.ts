@@ -1,10 +1,12 @@
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
+import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, expect, it } from "@effect/vitest";
 import { ProjectId, type TerminalEvent, type TerminalSessionSnapshot } from "@t3tools/contracts";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
+import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Queue from "effect/Queue";
 import { TestClock } from "effect/testing";
@@ -60,6 +62,7 @@ const makeHarness = Effect.fn(function* (options: {
         Layer.mock(ProjectService.ProjectService)({}),
         ServerSettings.layerTest(),
         NodeCrypto.layer,
+        NodeServices.layer,
       ),
     ),
     Effect.provideService(HostProcess.Platform, "darwin"),
@@ -163,6 +166,143 @@ describe("ProjectSetupScriptRunner", () => {
       expect(yield* completion).toMatchObject({ exitCode: null });
       yield* TestClock.adjust("1 minute");
       expect(yield* Queue.size(writes)).toBe(0);
+    }),
+  );
+});
+
+const setupScript = {
+  id: "setup",
+  name: "Setup",
+  command: "bun install",
+  icon: "configure" as const,
+  runOnWorktreeCreate: true,
+};
+
+const cleanScript = {
+  id: "clean",
+  name: "Clean",
+  command: "cargo clean",
+  icon: "build" as const,
+  runOnWorktreeCreate: false,
+  runOnSettle: true,
+};
+
+/** A runner whose project has `scripts`, recording every terminal write. */
+const makeJustfileHarness = Effect.fn(function* (
+  scripts: ReadonlyArray<typeof setupScript | typeof cleanScript>,
+) {
+  const writes = yield* Queue.unbounded<string>();
+  const projectId = ProjectId.make("project:setup-runner-just");
+  const project = {
+    id: projectId,
+    title: "Project",
+    workspaceRoot: "/repo",
+    repositoryIdentity: null,
+    faviconPath: null,
+    defaultModelSelection: null,
+    scripts: [...scripts],
+    createdAt: "2026-06-20T00:00:00.000Z",
+    updatedAt: "2026-06-20T00:00:00.000Z",
+    deletedAt: null,
+  };
+  const layer = ProjectSetupScriptRunner.layer.pipe(
+    Layer.provide(
+      Layer.mergeAll(
+        Layer.mock(ProjectService.ProjectService)({
+          getById: () => Effect.succeedSome(project),
+        }),
+        Layer.mock(TerminalManager.TerminalManager)({
+          open: (input) =>
+            Effect.succeed({
+              threadId: input.threadId,
+              terminalId: input.terminalId,
+              cwd: input.cwd,
+              worktreePath: input.worktreePath ?? null,
+              status: "running" as const,
+              pid: 123,
+              history: "",
+              exitCode: null,
+              exitSignal: null,
+              label: "Shell",
+              updatedAt: "2026-06-20T00:00:00.000Z",
+            }),
+          write: (input) => Queue.offer(writes, input.data).pipe(Effect.asVoid),
+          subscribe: () => Effect.succeed(() => undefined),
+          closeIdle: () => Effect.void,
+        }),
+        ServerSettings.layerTest(),
+        NodeCrypto.layer,
+      ),
+    ),
+    // The tests write the worktree's justfile with the same file system.
+    Layer.provideMerge(NodeServices.layer),
+  );
+  return { writes, projectId, layer };
+});
+
+/** A temp worktree whose justfile has a `worktree` recipe. */
+const makeWorktreeWithJustfile = Effect.gen(function* () {
+  const fileSystem = yield* FileSystem.FileSystem;
+  const worktreePath = yield* fileSystem.makeTempDirectoryScoped({ prefix: "t3-setup-just-" });
+  yield* fileSystem.writeFileString(
+    `${worktreePath}/justfile`,
+    "# Prepare a new worktree\nworktree:\n    echo ready\n",
+  );
+  return worktreePath;
+});
+
+/** Runs the setup runner in a worktree with a justfile and returns its result and first write. */
+const runInJustfileWorktree = Effect.fn(function* (
+  scripts: ReadonlyArray<typeof setupScript | typeof cleanScript>,
+  trigger: "setup" | "settle" = "setup",
+) {
+  const { writes, projectId, layer } = yield* makeJustfileHarness(scripts);
+  return yield* Effect.gen(function* () {
+    const worktreePath = yield* makeWorktreeWithJustfile;
+    const runner = yield* ProjectSetupScriptRunner.ProjectSetupScriptRunner;
+    const result = yield* runner.runForThread({
+      threadId: "thread-1",
+      projectId,
+      worktreePath,
+      trigger,
+    });
+    // The shell has no line editor here, so the runner types once it stays quiet.
+    yield* TestClock.adjust("3 seconds");
+    return { result, write: yield* Queue.take(writes) };
+  }).pipe(Effect.provide(layer));
+});
+
+describe("ProjectSetupScriptRunner justfile worktree recipe", () => {
+  it.effect("runs after the setup script", () =>
+    Effect.gen(function* () {
+      const { result, write } = yield* runInJustfileWorktree([setupScript]);
+      expect(result).toMatchObject({
+        status: "started",
+        scriptId: "setup",
+        scriptCommand: "bun install\njust worktree",
+      });
+      expect(write).toBe(" bun install\njust worktree\r");
+    }),
+  );
+
+  it.effect("runs alone when there is no setup script", () =>
+    Effect.gen(function* () {
+      const { result, write } = yield* runInJustfileWorktree([]);
+      expect(result).toMatchObject({
+        status: "started",
+        scriptName: "just worktree",
+        scriptCommand: "just worktree",
+        terminalId: "setup-just-worktree",
+      });
+      expect(write).toBe(" just worktree\r");
+    }),
+  );
+
+  it.effect("does not run when a thread settles", () =>
+    Effect.gen(function* () {
+      const { result, write } = yield* runInJustfileWorktree([cleanScript], "settle");
+      expect(result).toMatchObject({ status: "started", scriptCommand: "cargo clean" });
+      expect(write).toBe(" cargo clean\r");
     }),
   );
 });
