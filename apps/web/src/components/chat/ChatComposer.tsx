@@ -941,6 +941,7 @@ import {
   FileIcon,
   BotIcon,
   CircleAlertIcon,
+  MicIcon,
   PaperclipIcon,
   PencilRulerIcon,
   PlayIcon,
@@ -5257,6 +5258,44 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     terminalOpen,
   ]);
 
+  // Present only in the macOS desktop app; other clients have no way to start
+  // system dictation, so the button and shortcut stay inert there.
+  const startDictation = window.desktopBridge?.startDictation;
+  const dictationShortcutLabel = shortcutLabelForCommand(keybindings, "composer.dictate", {
+    context: { terminalFocus: false, terminalOpen, modelPickerOpen: false },
+  });
+  const startComposerDictation = useCallback(() => {
+    if (!startDictation) return;
+    focusComposer();
+    void startDictation();
+  }, [focusComposer, startDictation]);
+
+  useEffect(() => {
+    if (!startDictation) return;
+    const handler = (event: globalThis.KeyboardEvent) => {
+      const command = resolveShortcutCommand(event, keybindings, {
+        context: {
+          terminalFocus: getTerminalFocusOwner() !== null,
+          terminalOpen,
+          modelPickerOpen: isComposerModelPickerOpen,
+        },
+      });
+      if (command !== "composer.dictate") return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (isCommandPaletteOpen()) return;
+      startComposerDictation();
+    };
+    window.addEventListener("keydown", handler, true);
+    return () => window.removeEventListener("keydown", handler, true);
+  }, [
+    isComposerModelPickerOpen,
+    keybindings,
+    startComposerDictation,
+    startDictation,
+    terminalOpen,
+  ]);
+
   // ------------------------------------------------------------------
   // Callbacks: attachments
   // ------------------------------------------------------------------
@@ -7005,6 +7044,29 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                   }
                   className="flex shrink-0 flex-nowrap items-center justify-end gap-2"
                 >
+                  {startDictation && !isComposerResting ? (
+                    <Tooltip>
+                      <TooltipTrigger
+                        render={
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon-sm"
+                            onPointerDown={(event) => event.preventDefault()}
+                            onClick={startComposerDictation}
+                            aria-label="Start dictation"
+                          />
+                        }
+                      >
+                        <MicIcon />
+                      </TooltipTrigger>
+                      <TooltipPopup>
+                        {dictationShortcutLabel
+                          ? `Start dictation (${dictationShortcutLabel})`
+                          : "Start dictation"}
+                      </TooltipPopup>
+                    </Tooltip>
+                  ) : null}
                   {showComposerAttachAction ? (
                     <>
                       <input
