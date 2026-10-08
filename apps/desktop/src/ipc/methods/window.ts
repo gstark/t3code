@@ -357,6 +357,29 @@ export const pasteAsText = DesktopIpc.makeIpcMethod({
   }),
 });
 
+// Sends the same action as the system "Start Dictation…" Edit menu item, so
+// macOS dictates into whichever field has focus in the main window.
+export const startDictation = DesktopIpc.makeIpcMethod({
+  channel: IpcChannels.START_DICTATION_CHANNEL,
+  payload: Schema.Undefined,
+  result: Schema.Void,
+  handler: Effect.fn("desktop.ipc.window.startDictation")(function* (_input, event) {
+    const environment = yield* DesktopEnvironment.DesktopEnvironment;
+    const electronWindow = yield* ElectronWindow.ElectronWindow;
+    const window = yield* electronWindow.main;
+    if (
+      environment.platform !== "darwin" ||
+      event === undefined ||
+      Option.isNone(window) ||
+      window.value.isDestroyed() ||
+      window.value.webContents.id !== event.sender.id
+    ) {
+      return;
+    }
+    Electron.Menu.sendActionToFirstResponder("startDictation:");
+  }),
+});
+
 export const revealWindow = DesktopIpc.makeIpcMethod({
   channel: IpcChannels.REVEAL_WINDOW_CHANNEL,
   payload: Schema.Undefined,
