@@ -143,6 +143,13 @@ awake; it can sleep normally once recording stops.
 Transcription runs on your device. T3 Code deletes the temporary audio after
 transcription or cancellation; only the message text is sent when you submit.
 
+## Voice input on Mac
+
+In the macOS desktop app, select the composer's microphone to start macOS
+Dictation in the composer. To start it from the keyboard, bind
+**Composer: Dictate** in **Settings > Keybindings**. It has no default shortcut.
+Dictation must be turned on in **System Settings > Keyboard**.
+
 ## Commands and skills
 
 Type `/` for commands or `$` to add a skill from the selected environment and
