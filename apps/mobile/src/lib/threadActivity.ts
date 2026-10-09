@@ -656,6 +656,8 @@ function itemSummary(
   if (item.type === "notification") return item.summary;
   if (item.type === "system_notice") return item.message;
   if (item.type === "compaction") return contextCompactionLabel(item);
+  // The agent's stated reason for a command reads better than the command itself.
+  if (item.type === "command_execution" && item.intent) return item.intent;
   const title =
     (item.type === "dynamic_tool"
       ? dynamicToolTitle(item.toolName, item.input, item.title)

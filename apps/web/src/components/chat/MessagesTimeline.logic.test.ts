@@ -33,7 +33,28 @@ import {
   resolveAssistantMessageCopyState,
   type MessagesTimelineRow,
   workEntryDisplayLabel,
+  liveWorkEntryLabel,
 } from "./MessagesTimeline.logic";
+
+describe("work entry labels", () => {
+  const entry = {
+    id: "tool-1",
+    createdAt: "2026-09-01T12:00:00Z",
+    label: "Tool call",
+    tone: "tool" as const,
+  };
+
+  it("labels a command with the agent's stated intent when the provider sends one", () => {
+    const commandEntry = {
+      ...entry,
+      command: "cat failed.txt | tr '\\n' ' '; bash control.sh",
+      intent: "Rerun the failed specs",
+    };
+    expect(liveWorkEntryLabel(commandEntry, undefined, true)).toBe("Rerun the failed specs");
+    expect(liveWorkEntryLabel(commandEntry, undefined, false)).toBe("Rerun the failed specs");
+    expect(workEntryDisplayLabel(commandEntry, undefined)).toBe("Rerun the failed specs");
+  });
+});
 
 describe("computeMessageDurationStart", () => {
   it("uses the previous completed assistant updatedAt for subsequent assistant responses", () => {

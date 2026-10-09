@@ -282,6 +282,15 @@ function assistantMessage(updatedAt = "2026-06-20T00:00:03.000Z") {
   };
 }
 
+it("labels a command with the agent's stated intent", () => {
+  const item: OrchestrationV2TurnItem = { ...command(), intent: "Rerun the failed specs" };
+  const activity = buildThreadFeed([projected(item, 0)]).flatMap((entry) =>
+    entry.type === "activity-group" ? entry.activities : [],
+  )[0];
+
+  expect(activity?.summary).toBe("Rerun the failed specs");
+});
+
 describe("buildThreadFeed", () => {
   it("keeps async answers in question history instead of user bubbles", () => {
     const requestId = RuntimeRequestId.make("question");
