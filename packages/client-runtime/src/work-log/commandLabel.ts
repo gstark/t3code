@@ -1367,3 +1367,18 @@ function commandProgramNameInternal(
 export function commandProgramName(command: string, depth = 0): string | null {
   return commandProgramNameInternal(command, depth, "shell", MAX_COMMAND_SEGMENTS);
 }
+
+/** Every program in a top-level command chain, in order: `cat a | tr x y; grep z f` is `cat, tr, grep`. */
+export function commandChainLabel(command: string): string {
+  const programs: string[] = [];
+  let remaining: string | null = command;
+  for (let segment = 0; remaining && segment < MAX_COMMAND_SEGMENTS; segment += 1) {
+    const split = splitFirstShellCommand(remaining);
+    // The splitter breaks on `&&` inside `[[ ... ]]`; later segments would be test operands.
+    if (split.firstCommand.startsWith("[[") && !split.firstCommand.includes("]]")) break;
+    const program = commandProgramName(split.firstCommand);
+    if (program && !program.startsWith("-")) programs.push(program);
+    remaining = split.remainingCommand;
+  }
+  return programs.length > 0 ? programs.join(", ") : (commandProgramName(command) ?? "command");
+}
