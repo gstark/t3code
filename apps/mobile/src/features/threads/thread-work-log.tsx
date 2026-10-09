@@ -352,7 +352,7 @@ function workRowSymbolName(icon: ThreadFeedActivity["icon"]): AppSymbolName {
     case "check":
       return { ios: "checkmark", android: "check" };
     case "command":
-      return { ios: "terminal", android: "terminal" };
+      return { ios: "command", android: "keyboard_command_key" };
     case "computer":
       return { ios: "desktopcomputer", android: "desktop_windows" };
     case "edit":
@@ -1341,7 +1341,7 @@ function toolGroupSummarySymbolName(kind: ToolGroupSummaryKind): AppSymbolName {
     case "edit":
       return { ios: "square.and.pencil", android: "edit" };
     case "command":
-      return { ios: "terminal", android: "terminal" };
+      return { ios: "command", android: "keyboard_command_key" };
     case "device":
       return { ios: "iphone", android: "smartphone" };
     case "browser":
