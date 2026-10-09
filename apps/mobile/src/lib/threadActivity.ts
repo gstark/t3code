@@ -14,8 +14,8 @@ import {
   turnItemNeedsDetailFetch,
 } from "@t3tools/client-runtime/work-log/item-detail";
 import {
+  commandChainLabel,
   commandDisplayText,
-  commandProgramName,
 } from "@t3tools/client-runtime/work-log/command-label";
 import {
   contextCompactionLabel,
@@ -1926,7 +1926,7 @@ function liveToolActivitySummary(activity: ThreadFeedActivity, presentTense: boo
   if (presentation) return presentation.displayName;
   const command = activity.workEntry.command?.trim();
   if (command) {
-    const program = commandProgramName(command);
+    const program = commandChainLabel(command);
     const verb =
       status === "inProgress"
         ? "Running"
@@ -1937,7 +1937,7 @@ function liveToolActivitySummary(activity: ThreadFeedActivity, presentTense: boo
             : status === "stopped"
               ? "Stopped"
               : "Ran";
-    return `${verb} ${program ?? "command"}`;
+    return `${verb} ${program}`;
   }
   return activity.detail ?? activity.summary;
 }

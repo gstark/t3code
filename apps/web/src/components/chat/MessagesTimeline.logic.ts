@@ -16,8 +16,8 @@ import {
 import type { HandoffTimelineRun } from "@t3tools/client-runtime/handoff";
 import { renderCodexDirectivesForCopy } from "@t3tools/shared/codexMarkdownDirectives";
 import {
+  commandChainLabel,
   commandDisplayText,
-  commandProgramName,
 } from "@t3tools/client-runtime/work-log/command-label";
 import {
   liveActivityToolStatus,
@@ -263,7 +263,7 @@ export function liveWorkEntryLabel(
             : status === "stopped"
               ? "Stopped"
               : "Ran";
-    return `${verb} ${commandProgramName(command) ?? "command"}`;
+    return `${verb} ${commandChainLabel(command)}`;
   }
   return workEntryDisplayLabel(entry, workspaceRoot);
 }
