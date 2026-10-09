@@ -2160,6 +2160,16 @@ describe("buildThreadFeed", () => {
 
     const collapsed = deriveThreadFeedPresentation(feed, null, new Set());
     expect(collapsed.map((entry) => entry.id)).toEqual(["work-toggle:work-group:activity-1"]);
+    expect(
+      deriveThreadFeedPresentation(feed, null, new Set(), new Set(), null, false).map((entry) => [
+        entry.id,
+        entry.type === "work-toggle" ? entry.summary : null,
+      ]),
+    ).toEqual([
+      ["work-toggle:work-group:activity-1", "command activity-1"],
+      ["work-toggle:work-group:activity-2", "command activity-2"],
+      ["work-toggle:work-group:activity-3", "command activity-3"],
+    ]);
     expect(collapsed[0]).toMatchObject({
       type: "work-toggle",
       groupId: "work-group:activity-1",

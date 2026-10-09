@@ -592,6 +592,9 @@ export function useSettingsRestore(onRestored?: () => void) {
       ...(settings.composerCollapseOnScroll !== DEFAULT_UNIFIED_SETTINGS.composerCollapseOnScroll
         ? ["Collapse composer on scroll"]
         : []),
+      ...(settings.groupToolCalls !== DEFAULT_UNIFIED_SETTINGS.groupToolCalls
+        ? ["Group tool calls"]
+        : []),
       ...(settings.composerRichTextEnabled !== DEFAULT_UNIFIED_SETTINGS.composerRichTextEnabled
         ? ["Rich text composer"]
         : []),
@@ -660,6 +663,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       settings.confirmThreadDelete,
       settings.confirmThreadUnpin,
       settings.composerCollapseOnScroll,
+      settings.groupToolCalls,
       settings.composerRichTextEnabled,
       settings.sendShortcut,
       settings.followUpBehavior,
@@ -777,6 +781,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       proactivePanelsEnabled: DEFAULT_UNIFIED_SETTINGS.proactivePanelsEnabled,
       showSkillsInSlashMenu: DEFAULT_UNIFIED_SETTINGS.showSkillsInSlashMenu,
       composerCollapseOnScroll: DEFAULT_UNIFIED_SETTINGS.composerCollapseOnScroll,
+      groupToolCalls: DEFAULT_UNIFIED_SETTINGS.groupToolCalls,
       composerRichTextEnabled: DEFAULT_UNIFIED_SETTINGS.composerRichTextEnabled,
       sendShortcut: DEFAULT_UNIFIED_SETTINGS.sendShortcut,
       followUpBehavior: DEFAULT_UNIFIED_SETTINGS.followUpBehavior,
@@ -2712,6 +2717,28 @@ export function GeneralSettingsPanel() {
                 updateSettings({ composerCollapseOnScroll: Boolean(checked) })
               }
               aria-label="Collapse composer on scroll"
+            />
+          }
+        />
+
+        <SettingsRow
+          {...searchableSetting("group-tool-calls")}
+          description="Fold consecutive tool calls into one row in the conversation. Turn this off to show each call as its own row."
+          resetAction={
+            settings.groupToolCalls !== DEFAULT_UNIFIED_SETTINGS.groupToolCalls ? (
+              <SettingResetButton
+                label="group tool calls"
+                onClick={() =>
+                  updateSettings({ groupToolCalls: DEFAULT_UNIFIED_SETTINGS.groupToolCalls })
+                }
+              />
+            ) : null
+          }
+          control={
+            <Switch
+              checked={settings.groupToolCalls}
+              onCheckedChange={(checked) => updateSettings({ groupToolCalls: Boolean(checked) })}
+              aria-label="Group tool calls"
             />
           }
         />

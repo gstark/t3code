@@ -372,6 +372,12 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["composer rest resting scroll wheel conversation timeline shrink minimize"],
   },
   {
+    id: "group-tool-calls",
+    title: "Group tool calls",
+    to: "/settings/general",
+    searchTerms: ["tool calls commands collapse expand timeline rows separate individual steps"],
+  },
+  {
     id: "send-shortcut",
     title: "Send shortcut",
     to: "/settings/general",

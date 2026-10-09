@@ -138,6 +138,7 @@ import {
   resolveNativeMarkdownTypography,
 } from "../../lib/appearancePreferences";
 import { useAppearancePreferences } from "../settings/appearance/AppearancePreferencesProvider";
+import { useGroupToolCalls } from "./use-group-tool-calls";
 import { markdownFileIconSource } from "@t3tools/mobile-markdown-text/file-icons";
 import { PierreEntryIcon } from "../../components/PierreEntryIcon";
 import { markdownLinkIconSource } from "@t3tools/mobile-markdown-text/link-icons";
@@ -2448,6 +2449,7 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
     }
     return ids;
   }, [expandedWorkGroups]);
+  const groupToolCalls = useGroupToolCalls();
   const presentedFeed = useMemo(
     () =>
       appendPendingThreadMessages(
@@ -2457,6 +2459,7 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
           expandedTurnIds,
           expandedWorkGroupIds,
           props.activeWorkStartedAt,
+          groupToolCalls,
         ),
         props.feed,
         props.queuedMessages,
@@ -2468,6 +2471,7 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
       props.activeWorkStartedAt,
       props.feed,
       props.latestTurn,
+      groupToolCalls,
     ],
   );
   const setupAnchorIndex = presentedFeed.findIndex(

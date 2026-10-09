@@ -1898,6 +1898,18 @@ describe("deriveMessagesTimelineRows", () => {
       hiddenCount: 3,
       summary: "Ran 3 commands",
     });
+    expect(
+      deriveMessagesTimelineRows({ ...input, timelineEntries, groupToolCalls: false }).map(
+        (row) => row.id,
+      ),
+    ).toEqual([
+      "turn-fold:turn-1",
+      "assistant-final-entry",
+      "work-entry-after-text-0",
+      "work-entry-after-text-1",
+      "work-entry-after-text-2",
+      "assistant-meta:assistant-final",
+    ]);
     expect(rows.at(-1)).toMatchObject({
       kind: "assistant-meta",
       message: { id: "assistant-final" },
@@ -2722,8 +2734,9 @@ describe("deriveMessagesTimelineRows", () => {
     expect(rows.some((row) => row.kind === "thinking")).toBe(false);
   });
 
-  it("keeps an actually running tool in the shared activity row", () => {
+  it.each([true, false])("keeps an actually running tool live (grouped: %s)", (groupToolCalls) => {
     const rows = deriveMessagesTimelineRows({
+      groupToolCalls,
       timelineEntries: [
         {
           id: "running-command-entry",
@@ -2783,6 +2796,15 @@ describe("deriveMessagesTimelineRows", () => {
       supportsConversationRollback: false,
     });
 
+    if (!groupToolCalls) {
+      // Each call is its own row; only the running one is live.
+      expect(rows.map((row) => row.kind)).toEqual(["working", "work-live", "work", "work"]);
+      expect(rows.find((row) => row.kind === "work-live")).toMatchObject({
+        active: true,
+        groupedEntries: [{ id: "running-command" }],
+      });
+      return;
+    }
     expect(rows.map((row) => row.kind)).toEqual(["working", "work-live"]);
     expect(rows.some((row) => row.kind === "thinking")).toBe(false);
     expect(rows.find((row) => row.kind === "work-live")).toMatchObject({

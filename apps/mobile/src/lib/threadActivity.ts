@@ -251,6 +251,7 @@ const presentedActivityGroupsCache = new WeakMap<
     readonly unsettledTurnId: TurnId | null;
     readonly isWorking: boolean;
     readonly activeTail: boolean;
+    readonly groupToolCalls: boolean;
     readonly rows: ReadonlyArray<ThreadFeedEntry>;
   }
 >();
@@ -1790,6 +1791,8 @@ export function deriveThreadFeedPresentation(
   expandedTurnIds: ReadonlySet<TurnId>,
   expandedWorkGroupIds: ReadonlySet<string> = new Set(),
   activeWorkStartedAt: string | null = null,
+  /** False shows every tool call as its own row instead of folding consecutive calls. */
+  groupToolCalls = true,
 ): ThreadFeedEntry[] {
   const sourceFeed = feed.filter(
     (entry) =>
@@ -1847,7 +1850,7 @@ export function deriveThreadFeedPresentation(
       result.push(row);
     }
     if (!collapsedEntryIds.has(entry.id)) {
-      const runTurnId = activityRunTurnId(entry);
+      const runTurnId = groupToolCalls ? activityRunTurnId(entry) : null;
       if (runTurnId !== null) {
         let end = index + 1;
         while (
@@ -1878,7 +1881,9 @@ export function deriveThreadFeedPresentation(
         expandedWorkGroupIds,
         unsettledTurnId,
         isWorking,
-        isActiveTailGroup,
+        // Ungrouped rows have no shared live slot; each running call is live on its own.
+        groupToolCalls && isActiveTailGroup,
+        groupToolCalls,
       );
     }
   }
@@ -2074,6 +2079,7 @@ function appendPresentedFeedEntry(
   unsettledTurnId: TurnId | null,
   isWorking: boolean,
   activeTail: boolean,
+  groupToolCalls: boolean,
 ): void {
   if (entry.type !== "activity-group") {
     result.push(entry);
@@ -2090,6 +2096,7 @@ function appendPresentedFeedEntry(
     cached.unsettledTurnId !== unsettledTurnId ||
     cached.isWorking !== isWorking ||
     cached.activeTail !== activeTail ||
+    cached.groupToolCalls !== groupToolCalls ||
     cached.rows.some(
       (row) =>
         (row.type === "work-toggle" && expandedWorkGroupIds.has(row.groupId) !== row.expanded) ||
@@ -2104,8 +2111,9 @@ function appendPresentedFeedEntry(
       unsettledTurnId,
       isWorking,
       activeTail,
+      groupToolCalls,
     );
-    cached = { unsettledTurnId, isWorking, activeTail, rows };
+    cached = { unsettledTurnId, isWorking, activeTail, groupToolCalls, rows };
     presentedActivityGroupsCache.set(entry, cached);
   }
   for (const row of cached.rows) {
@@ -2120,6 +2128,7 @@ function appendActivityGroupRows(
   unsettledTurnId: TurnId | null,
   isWorking: boolean,
   activeTail: boolean,
+  groupToolCalls: boolean,
 ): void {
   const activities = visibleActivityGroupEntries(entry, unsettledTurnId, isWorking);
   if (activities.length === 0) {
@@ -2128,15 +2137,19 @@ function appendActivityGroupRows(
   let groupableRun: ThreadFeedActivity[] = [];
   const flushGroupableRun = (isTrailingRun: boolean) => {
     if (groupableRun.length === 0) return;
-    appendToolGroupRows(
-      result,
-      entry,
-      groupableRun,
-      expandedWorkGroupIds,
-      unsettledTurnId,
-      isWorking,
-      activeTail && isTrailingRun,
-    );
+    for (const run of groupToolCalls
+      ? [groupableRun]
+      : groupableRun.map((activity) => [activity])) {
+      appendToolGroupRows(
+        result,
+        entry,
+        run,
+        expandedWorkGroupIds,
+        unsettledTurnId,
+        isWorking,
+        activeTail && isTrailingRun,
+      );
+    }
     groupableRun = [];
   };
   for (const activity of activities) {
