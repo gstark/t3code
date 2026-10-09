@@ -68,6 +68,7 @@ import {
   AcpRegistrySetProviderResult,
 } from "./acpRegistry.ts";
 import { ExternalLauncherError, LaunchEditorInput } from "./editor.ts";
+import { WorkReportError, WorkReportStartInput, WorkReportStartResult } from "./workReport.ts";
 import {
   AuthAccessStreamError,
   AuthAccessStreamEvent,
@@ -395,6 +396,7 @@ export const WS_METHODS = {
   projectsEnsureScratch: "projects.ensureScratch",
   projectsCreateNew: "projects.createNew",
 
+  workReportStart: "workReport.start",
   shellOpenInEditor: "shell.openInEditor",
 
   filesystemBrowse: "filesystem.browse",
@@ -1268,6 +1270,13 @@ const WsProjectsCreateNewRpc = Rpc.make(WS_METHODS.projectsCreateNew, {
   error: Schema.Union([OrchestrationDispatchCommandError, EnvironmentAuthorizationError]),
 });
 
+// Starts a work report thread in the reports folder project, or returns the running one.
+const WsWorkReportStartRpc = Rpc.make(WS_METHODS.workReportStart, {
+  payload: WorkReportStartInput,
+  success: WorkReportStartResult,
+  error: Schema.Union([WorkReportError, EnvironmentAuthorizationError]),
+});
+
 const WsShellOpenInEditorRpc = Rpc.make(WS_METHODS.shellOpenInEditor, {
   payload: LaunchEditorInput,
   error: Schema.Union([ExternalLauncherError, EnvironmentAuthorizationError]),
@@ -2030,6 +2039,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsProjectsSearchEntriesRpc,
   WsProjectsEnsureScratchRpc,
   WsProjectsCreateNewRpc,
+  WsWorkReportStartRpc,
   WsProjectsWriteFileRpc,
   WsProjectsMutateRpc,
   WsShellOpenInEditorRpc,

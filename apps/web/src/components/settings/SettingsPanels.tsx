@@ -98,6 +98,7 @@ import { BackgroundActivitySettingsRow } from "./BackgroundActivitySettings";
 import { AdvancedSettings } from "./AdvancedSettings";
 import { PullRequestLinksOpenInAppSetting } from "./IntegrationsSettings";
 import { StorageCleanupSections } from "./StorageSettings";
+import { WorkReportSettingsSection } from "~/workReport/WorkReportSettingsSection";
 
 const RESPONSE_STREAMING_MODE_LABELS: Record<ResponseStreamingMode, string> = {
   turn: "Wait for the full response",
@@ -1038,6 +1039,8 @@ export function GeneralSettingsPanel() {
           }
         />
       </SettingsSection>
+
+      <WorkReportSettingsSection />
     </SettingsPageContainer>
   );
 }

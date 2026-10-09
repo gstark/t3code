@@ -68,6 +68,7 @@ import {
   SettingsIcon,
   SquarePenIcon,
   TextSearchIcon,
+  FileChartColumnIcon,
   UserPlusIcon,
 } from "lucide-react";
 import { openThreadFind } from "./chat/threadFindStore";
@@ -142,6 +143,7 @@ import {
   newProjectId,
 } from "../lib/utils";
 import { buildThreadRouteParams } from "../threadRoutes";
+import { useWorkReport } from "../workReport/useWorkReport";
 import { useAvailableSettingsSearchItems } from "./settings/useAvailableSettingsSearchItems";
 import {
   applyWslEnvironmentConfiguration,
@@ -359,6 +361,7 @@ function OpenCommandPaletteDialog(props: {
   readonly initialContext: CommandPaletteReturnContext | undefined;
 }) {
   const navigate = useNavigate();
+  const { run: runWorkReport, available: workReportAvailable } = useWorkReport();
   const pathname = useLocation({ select: (location) => location.pathname });
   const { openChildSearch, setOpen } = props;
   // Keyed by palette session: the intent and restored search only seed this
@@ -1492,6 +1495,19 @@ function OpenCommandPaletteDialog(props: {
       await navigate({ to: "/usage" });
     },
   });
+
+  if (workReportAvailable) {
+    actionItems.push({
+      kind: "action",
+      value: "action:work-report",
+      searchTerms: ["work report", "report", "summary", "client", "settled", "suggestions"],
+      title: "Run work report",
+      icon: <FileChartColumnIcon className={ITEM_ICON_CLASS} />,
+      run: async () => {
+        runWorkReport();
+      },
+    });
+  }
 
   actionItems.push({
     kind: "action",
