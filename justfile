@@ -6,6 +6,9 @@ fork_repo := "gstark/t3code"
 tap := "gstark/tap"
 cask := "t3-code-mine"
 signing_identity := "Gavin Stark (JBRC9C74U7)"
+release_base_url := "https://github.com/gstark/t3code/releases/download"
+# Hosts whose `t3 service` runs the mine build. `just remotes` updates them.
+remote_hosts := "o4s-dev dds-dev"
 
 default:
     @just --list
@@ -133,7 +136,7 @@ release: _require-mine
     git -C "$tap_dir" commit -m "{{ cask }} $version"
     git -C "$tap_dir" push
 
-    echo "Released $version. Run 'just install' to install it."
+    echo "Released $version. Run 'just install' and 'just remotes' to install it."
 
 # Install or upgrade the mine build from the Homebrew tap
 install:
@@ -147,7 +150,42 @@ install:
     fi
     echo "Quit and reopen T3 Code to use the new build."
 
-# Merge a new official release, typecheck, release, and install. Pass "force" to build even with no new release
+# Switch each remote host's background service to a mine release (default: the newest)
+remotes version="":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    version="{{ version }}"
+    if [[ -z "$version" ]]; then
+      version="$(gh release list -R {{ fork_repo }} -L 1 --json tagName -q '.[0].tagName')"
+    fi
+    version="${version#v}"
+
+    # The mine-cli-archives workflow attaches the Linux archives after `just release`.
+    for attempt in $(seq 1 40); do
+      if gh release view "v$version" -R {{ fork_repo }} --json assets -q '.assets[].name' | grep -qx SHA256SUMS; then
+        break
+      fi
+      if [[ "$attempt" -eq 40 ]]; then
+        echo "v$version has no Linux archives after 20 minutes. Check the 'Mine CLI archives' workflow." >&2
+        exit 1
+      fi
+      echo "Waiting for the Linux archives of v$version..."
+      sleep 30
+    done
+
+    failed=()
+    for host in {{ remote_hosts }}; do
+      echo "== $host: updating to $version"
+      if ! ssh "$host" "T3CODE_RELEASE_BASE_URL={{ release_base_url }} \$HOME/.local/bin/t3 update $version --yes"; then
+        failed+=("$host")
+      fi
+    done
+    if [[ ${#failed[@]} -gt 0 ]]; then
+      echo "Update failed on: ${failed[*]}" >&2
+      exit 1
+    fi
+
+# Merge a new official release, typecheck, release, install, and update remotes. Pass "force" to build even with no new release
 update mode="": _require-mine
     #!/usr/bin/env bash
     set -euo pipefail
@@ -165,6 +203,7 @@ update mode="": _require-mine
     pnpm typecheck
     just release
     just install
+    just remotes
 
 # Print the newest official (non-nightly, non-preview) release tag
 _latest-release:
