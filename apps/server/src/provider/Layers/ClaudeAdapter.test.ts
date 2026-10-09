@@ -1314,6 +1314,7 @@ describe("ClaudeAdapterLive", () => {
             name: "Bash",
             input: {
               command: "ls",
+              description: " List project files ",
             },
           },
         },
@@ -1384,7 +1385,16 @@ describe("ClaudeAdapterLive", () => {
       assert.equal(toolStarted?.type, "item.started");
       if (toolStarted?.type === "item.started") {
         assert.equal(toolStarted.payload.itemType, "command_execution");
+        assert.equal(toolStarted.payload.intent, "List project files");
       }
+      const toolCompleted = runtimeEvents.findLast(
+        (event) =>
+          event.type === "item.completed" && event.payload.itemType === "command_execution",
+      );
+      assert.equal(
+        toolCompleted?.type === "item.completed" ? toolCompleted.payload.intent : undefined,
+        "List project files",
+      );
 
       const assistantCompletedIndex = runtimeEvents.findIndex(
         (event) =>

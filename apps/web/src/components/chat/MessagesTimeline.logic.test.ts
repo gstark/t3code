@@ -749,6 +749,17 @@ describe("work entry labels", () => {
     expect(workEntryDisplayLabel(commandEntry, undefined)).toBe("vp test run");
   });
 
+  it("labels a command with the agent's stated intent when the provider sends one", () => {
+    const commandEntry = {
+      ...entry,
+      command: "cat failed.txt | tr '\\n' ' '; bash control.sh",
+      intent: "Rerun the failed specs",
+    };
+    expect(liveWorkEntryLabel(commandEntry, undefined, true)).toBe("Rerun the failed specs");
+    expect(liveWorkEntryLabel(commandEntry, undefined, false)).toBe("Rerun the failed specs");
+    expect(workEntryDisplayLabel(commandEntry, undefined)).toBe("Rerun the failed specs");
+  });
+
   it("summarizes the program inside a shell wrapper while preserving the expanded command", () => {
     const command = "/bin/zsh -lc 'vp test run apps/web/src/session-logic.test.ts'";
     const commandEntry = { ...entry, command };

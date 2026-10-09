@@ -7031,7 +7031,7 @@ it.layer(OpenCodeAdapterTestLayer)("OpenCodeAdapterLive", (it) => {
       const sessionID = "http://127.0.0.1:9999/session";
       const messageID = "msg-tools-before-role";
       const start = promiseWithResolvers<OpenCodeEvent>();
-      const input = { command: "pwd" };
+      const input = { command: "pwd", description: "Print working directory" };
       const states = [
         { status: "pending", input, raw: "" },
         { status: "running", input, title: "Working directory", time: { start: 1 } },
@@ -7133,6 +7133,10 @@ it.layer(OpenCodeAdapterTestLayer)("OpenCodeAdapterLive", (it) => {
           ["item.completed", "call-working", "completed"],
           ["item.completed", "call-failed", "failed"],
         ],
+      );
+      NodeAssert.deepEqual(
+        tools.map((event) => event.payload.intent),
+        Array(4).fill("Print working directory"),
       );
       NodeAssert.partialDeepStrictEqual(tools[2]?.payload.data, {
         command: "pwd",

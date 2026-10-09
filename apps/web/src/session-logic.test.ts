@@ -1092,6 +1092,36 @@ describe("deriveWorkLogEntries", () => {
     expect(deriveWorkLogEntries(activities)).toHaveLength(2);
   });
 
+  it("keeps the provider's intent across a tool's lifecycle updates", () => {
+    const activities: OrchestrationThreadActivity[] = [
+      makeActivity({
+        id: "intent-updated",
+        kind: "tool.updated",
+        summary: "Command run",
+        payload: {
+          itemType: "command_execution",
+          toolCallId: "call-intent",
+          intent: " Rerun the failed specs ",
+          data: { command: "bash control.sh" },
+        },
+      }),
+      makeActivity({
+        id: "intent-completed",
+        kind: "tool.completed",
+        summary: "Command run",
+        payload: {
+          itemType: "command_execution",
+          toolCallId: "call-intent",
+          status: "completed",
+          data: { command: "bash control.sh" },
+        },
+      }),
+    ];
+
+    const [entry] = deriveWorkLogEntries(activities);
+    expect(entry?.intent).toBe("Rerun the failed specs");
+  });
+
   it("unwraps PowerShell command wrappers for displayed command text", () => {
     const activities: OrchestrationThreadActivity[] = [
       makeActivity({

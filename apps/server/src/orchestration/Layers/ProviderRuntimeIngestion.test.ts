@@ -4050,6 +4050,7 @@ describe("ProviderRuntimeIngestion", () => {
           kind: "computer",
         },
         detail: "Bash: vp test run",
+        intent: "Run the test suite",
         data: {
           toolName: "Bash",
           input: { command: "vp test run" },
@@ -4088,6 +4089,7 @@ describe("ProviderRuntimeIngestion", () => {
         kind: "computer",
       },
       detail: "Bash: vp test run",
+      intent: "Run the test suite",
       data: {
         toolName: "Bash",
         input: { command: "vp test run" },
