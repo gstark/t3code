@@ -73,6 +73,7 @@ import * as TextGeneration from "./textGeneration/TextGeneration.ts";
 import { ProviderInstanceRegistryHydrationLive } from "./provider/Layers/ProviderInstanceRegistryHydration.ts";
 import * as TerminalManager from "./terminal/Manager.ts";
 import * as McpHttpServer from "./mcp/McpHttpServer.ts";
+import * as WorkReport from "./workReport/WorkReport.ts";
 import * as McpSessionRegistry from "./mcp/McpSessionRegistry.ts";
 import * as PreviewAutomationBroker from "./mcp/PreviewAutomationBroker.ts";
 import * as DeviceService from "./device/DeviceService.ts";
@@ -510,6 +511,8 @@ const ProviderInstallationRefreshLive = Layer.effectDiscard(
 );
 
 const RuntimeCoreDependenciesLive = ReactorLayerLive.pipe(
+  // Shared by the WebSocket RPC and the MCP tools, which resolve it per request.
+  Layer.provideMerge(WorkReport.layer),
   Layer.provideMerge(ProviderInstallationRefreshLive),
   Layer.provideMerge(ReplayMarkers.layer),
   Layer.provideMerge(ProviderAuthServiceLive),

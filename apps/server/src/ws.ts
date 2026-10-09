@@ -156,6 +156,7 @@ import * as RemoteOpenTargets from "./environment/RemoteOpenTargets.ts";
 import * as BackgroundPolicy from "./background/BackgroundPolicy.ts";
 import * as EnvironmentAuth from "./auth/EnvironmentAuth.ts";
 import { requiredScopeForRpcMethod, requiredScopeForDeviceList } from "./auth/RpcAuthorization.ts";
+import * as WorkReport from "./workReport/WorkReport.ts";
 import * as ProcessDiagnostics from "./diagnostics/ProcessDiagnostics.ts";
 import * as ProcessResourceMonitor from "./diagnostics/ProcessResourceMonitor.ts";
 import * as ResourceTelemetry from "./resourceTelemetry/ResourceTelemetry.ts";
@@ -554,6 +555,7 @@ const makeWsRpcLayer = (
         }
       };
       const checkpointDiffQuery = yield* CheckpointDiffQuery.CheckpointDiffQuery;
+      const workReport = yield* WorkReport.WorkReport;
       const keybindings = yield* Keybindings.Keybindings;
       const environmentTheme = yield* EnvironmentTheme.EnvironmentThemeService;
       const usageLimitSources = yield* UsageLimitSources.UsageLimitSources;
@@ -3363,6 +3365,10 @@ const makeWsRpcLayer = (
           }),
         [WS_METHODS.projectsCreateNew]: (input) =>
           observeRpcEffect(WS_METHODS.projectsCreateNew, createNewProject(input), {
+            "rpc.aggregate": "orchestration",
+          }),
+        [WS_METHODS.workReportStart]: (input) =>
+          observeRpcEffect(WS_METHODS.workReportStart, workReport.start(input), {
             "rpc.aggregate": "orchestration",
           }),
         [WS_METHODS.projectCloneCancel]: (input) =>

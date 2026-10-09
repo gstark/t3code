@@ -64,6 +64,7 @@ import {
   SquarePenIcon,
   SunIcon,
   TextSearchIcon,
+  FileChartColumnIcon,
 } from "lucide-react";
 import {
   useCallback,
@@ -141,6 +142,7 @@ import {
 } from "../lib/utils";
 import { selectThreadTerminalUiState, useTerminalUiStateStore } from "../terminalUiStateStore";
 import { buildThreadRouteParams, resolveThreadRouteTarget } from "../threadRoutes";
+import { useWorkReport } from "../workReport/useWorkReport";
 import { useAvailableSettingsSearchItems } from "./settings/useAvailableSettingsSearchItems";
 import {
   applyWslEnvironmentConfiguration,
@@ -733,6 +735,7 @@ function OpenCommandPaletteDialog(props: {
   readonly clearOpenIntent: () => void;
 }) {
   const navigate = useNavigate();
+  const { run: runWorkReport, available: workReportAvailable } = useWorkReport();
   const pathname = useLocation({ select: (location) => location.pathname });
   const { clearOpenIntent, openIntent, openOverlayMode, setOpen } = props;
   const [query, setQuery] = useState(openIntent?.kind === "search" ? openIntent.query : "");
@@ -2273,6 +2276,19 @@ function OpenCommandPaletteDialog(props: {
       await navigate({ to: "/usage" });
     },
   });
+
+  if (workReportAvailable) {
+    actionItems.push({
+      kind: "action",
+      value: "action:work-report",
+      searchTerms: ["work report", "report", "summary", "client", "settled", "suggestions"],
+      title: "Run work report",
+      icon: <FileChartColumnIcon className={ITEM_ICON_CLASS} />,
+      run: async () => {
+        runWorkReport();
+      },
+    });
+  }
 
   actionItems.push({
     kind: "action",
