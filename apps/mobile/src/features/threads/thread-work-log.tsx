@@ -1187,13 +1187,7 @@ const ThreadWorkLogRow = function ThreadWorkLogRow(
               </View>
             ))}
           </FilePreviewGallery>
-          <ScrollView
-            nestedScrollEnabled
-            directionalLockEnabled
-            showsVerticalScrollIndicator
-            className="max-h-60"
-            contentContainerStyle={{ paddingRight: 8 }}
-          >
+          <View className="pr-2">
             {reasoning ? (
               props.renderReasoning(reasoning.text)
             ) : call ? (
@@ -1248,7 +1242,7 @@ const ThreadWorkLogRow = function ThreadWorkLogRow(
               </Text>
             ) : null}
             {streamsOutput ? null : exitLine}
-          </ScrollView>
+          </View>
           {streamsOutput ? (
             <>
               <ThreadCommandOutput
