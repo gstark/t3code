@@ -115,6 +115,7 @@ import {
   ChevronRightIcon,
   ChevronUpIcon,
   CircleAlertIcon,
+  CommandIcon,
   DownloadIcon,
   EyeIcon,
   GlobeIcon,
@@ -126,7 +127,6 @@ import {
   SearchIcon,
   SmartphoneIcon,
   SquarePenIcon,
-  TerminalIcon,
   Undo2Icon,
   WrenchIcon,
   XIcon,
@@ -631,7 +631,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   }, [settlingListIdentity]);
 
   const suspendEndScrollMaintenanceForDisclosure = useCallback(
-    (anchorKey: string, collapsed = false) => {
+    (anchorKey: string, collapsed = false, revealRowIds: readonly string[] = []) => {
       disclosureAnchorKeyRef.current = anchorKey;
       setDisclosureToggleSettling(true);
       if (disclosureSettleFrameRef.current !== null) {
@@ -650,6 +650,14 @@ export const MessagesTimeline = memo(function MessagesTimeline({
           // Closing output can reveal the end without a scroll event.
           if (collapsed && resolveTimelineIsAtEnd(listRef.current?.getState()) === true) {
             onToolOutputCollapsedAtEnd?.();
+          }
+          // Opened content below the fold scrolls into view.
+          if (!collapsed) {
+            const viewport = listRef.current?.getScrollableNode();
+            revealRowIds
+              .map((id) => viewport?.querySelector(`[data-timeline-row-id="${CSS.escape(id)}"]`))
+              .find(Boolean)
+              ?.scrollIntoView({ block: "nearest", behavior: "smooth" });
           }
         });
       });
@@ -688,7 +696,11 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   );
   const onToggleWorkGroup = useCallback(
     (groupId: string, anchorKey: string) => {
-      suspendEndScrollMaintenanceForDisclosure(anchorKey, expandedWorkGroupIds.has(groupId));
+      // Summary and live headers open a separate details row; activity groups open in place.
+      suspendEndScrollMaintenanceForDisclosure(anchorKey, expandedWorkGroupIds.has(groupId), [
+        `${groupId}:details`,
+        anchorKey,
+      ]);
       setExpandedWorkGroupIds((existing) => {
         const next = new Set(existing);
         if (next.has(groupId)) {
@@ -2671,6 +2683,7 @@ function ActivityGroupTimelineRow({
             disclosureAnchorKey={row.id}
             groupedEntries={omitSupersededLifecycleMarkers(entries, (entry) => entry)}
             isExpandedToolGroup
+            headerShowsSingleEntry={row.entries.length === 1}
           />,
         );
       } else {
@@ -2955,12 +2968,15 @@ const WorkGroupSection = memo(function WorkGroupSection({
   groupedEntries,
   isExpandedToolGroup,
   displayLabel,
+  headerShowsSingleEntry = true,
 }: {
   anchorKey: string;
   disclosureAnchorKey?: string;
   groupedEntries: Extract<MessagesTimelineRow, { kind: "work" }>["groupedEntries"];
   isExpandedToolGroup: boolean;
   displayLabel?: string | undefined;
+  /** The disclosure header already labels a lone entry, so show only its details. */
+  headerShowsSingleEntry?: boolean;
 }) {
   const { workspaceRoot, routeThreadKey, onToggleWorkEntry } = use(TimelineRowCtx);
   const onToggleStandaloneEntry = useCallback(
@@ -2973,6 +2989,16 @@ const WorkGroupSection = memo(function WorkGroupSection({
   );
 
   if (nonEmptyEntries.length === 0) return null;
+  if (isExpandedToolGroup && headerShowsSingleEntry && nonEmptyEntries.length === 1) {
+    return (
+      <SimpleWorkEntryRow
+        workEntry={nonEmptyEntries[0]!}
+        workspaceRoot={workspaceRoot}
+        isExpandedToolGroupEntry
+        detailsOnly
+      />
+    );
+  }
   if (isExpandedToolGroup) {
     return (
       <ExpandedWorkGroupEntries
@@ -4370,7 +4396,7 @@ function WorkEntryIcon({ name, className }: { name: WorkEntryIconName; className
     case "square-pen":
       return <SquarePenIcon className={className} aria-hidden />;
     case "terminal":
-      return <TerminalIcon className={className} aria-hidden />;
+      return <CommandIcon className={className} aria-hidden />;
     case "wrench":
       return <WrenchIcon className={className} aria-hidden />;
     case "x":
@@ -4708,6 +4734,7 @@ const SimpleWorkEntryRow = memo(function SimpleWorkEntryRow(props: {
   workspaceRoot: string | undefined;
   isExpandedToolGroupEntry: boolean;
   displayLabel?: string | undefined;
+  detailsOnly?: boolean;
   onToggleEntry?: ((collapsed: boolean) => void) | undefined;
 }) {
   const { workEntry, workspaceRoot, isExpandedToolGroupEntry, displayLabel } = props;
@@ -4727,6 +4754,7 @@ const SimpleWorkEntryRow = memo(function SimpleWorkEntryRow(props: {
       workspaceRoot={workspaceRoot}
       isExpandedToolGroupEntry={isExpandedToolGroupEntry}
       displayLabel={displayLabel}
+      detailsOnly={props.detailsOnly}
       onToggleEntry={props.onToggleEntry}
     />
   );
@@ -4737,14 +4765,18 @@ const PlainWorkEntryRow = memo(function PlainWorkEntryRow(props: {
   workspaceRoot: string | undefined;
   isExpandedToolGroupEntry: boolean;
   displayLabel?: string | undefined;
+  /** Render the expanded details without the heading row. */
+  detailsOnly?: boolean | undefined;
   onToggleEntry?: ((collapsed: boolean) => void) | undefined;
 }) {
-  const { workEntry, workspaceRoot, isExpandedToolGroupEntry, displayLabel } = props;
+  const { workEntry, workspaceRoot, isExpandedToolGroupEntry, displayLabel, detailsOnly } = props;
   const { threadRef, onImageExpand, timestampFormat } = use(TimelineRowCtx);
   const groupView = use(WorkGroupViewCtx);
-  const [expanded, setExpanded] = useState(
+  const [expandedState, setExpanded] = useState(
     () => groupView?.state.expandedEntries.has(workEntry.id) ?? false,
   );
+  const expanded = detailsOnly === true || expandedState;
+  const rowRef = useRef<HTMLDivElement>(null);
   const toggleExpanded = () => {
     const next = !expanded;
     if (groupView) {
@@ -4755,6 +4787,15 @@ const PlainWorkEntryRow = memo(function PlainWorkEntryRow(props: {
       props.onToggleEntry?.(!next);
     }
     setExpanded(next);
+    // After the timeline settles, scroll opened details into view, including
+    // inside an expanded group's own scroller.
+    if (next) {
+      requestAnimationFrame(() =>
+        requestAnimationFrame(() =>
+          rowRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" }),
+        ),
+      );
+    }
   };
   const iconConfig = workToneIcon(workEntry.tone);
   const showWarningIndicator = workEntry.sourceActivityKind === "runtime.warning";
@@ -4803,7 +4844,8 @@ const PlainWorkEntryRow = memo(function PlainWorkEntryRow(props: {
     ? buildToolCallExpandedBody(
         workEntry,
         workspaceRoot,
-        previewText,
+        // Without its heading, the body must carry the full command.
+        detailsOnly ? "" : previewText,
         viewedImage ? viewedImagePath : null,
       )
     : null;
@@ -4847,8 +4889,46 @@ const PlainWorkEntryRow = memo(function PlainWorkEntryRow(props: {
       }
     : {};
 
+  const details = expanded ? (
+    <>
+      {viewedImage && threadRef ? (
+        <div
+          className="mt-1 ms-7 cursor-default"
+          onClick={stopRowToggle}
+          onPointerDown={stopRowToggle}
+        >
+          <ChatMarkdownAssetImage
+            environmentId={threadRef.environmentId}
+            resource={viewedImage.resource}
+            alt={viewedImage.alt}
+            srcFragment={viewedImage.srcFragment}
+            workspaceRoot={workspaceRoot}
+            maxHeightRem={16}
+            onImageExpand={onImageExpand}
+          />
+        </div>
+      ) : null}
+      {workEntry.questionAnswer ? (
+        <QuestionAnswerHistory answer={workEntry.questionAnswer} />
+      ) : null}
+      {canExpand && expandedBody && !workEntry.questionAnswer ? (
+        <div
+          className="mt-1 ms-7 cursor-default rounded-md bg-muted/40 px-3 py-2"
+          onClick={stopRowToggle}
+          onPointerDown={stopRowToggle}
+        >
+          <pre className={toolCallExpandedBodyClassName}>{expandedBody}</pre>
+        </div>
+      ) : null}
+    </>
+  ) : null;
+  if (detailsOnly && (expandedBody || viewedImage || workEntry.questionAnswer)) {
+    return <div className="mb-1 px-0.5">{details}</div>;
+  }
+
   return (
     <div
+      ref={rowRef}
       className={cn(
         "group/timeline-row relative flex flex-col rounded-md px-0.5 transition-colors",
         isExpandedToolGroupEntry ? "py-0" : "py-0.5",
@@ -4923,35 +5003,7 @@ const PlainWorkEntryRow = memo(function PlainWorkEntryRow(props: {
           </span>
         </div>
       </div>
-      {expanded && viewedImage && threadRef ? (
-        <div
-          className="mt-1 ms-7 cursor-default"
-          onClick={stopRowToggle}
-          onPointerDown={stopRowToggle}
-        >
-          <ChatMarkdownAssetImage
-            environmentId={threadRef.environmentId}
-            resource={viewedImage.resource}
-            alt={viewedImage.alt}
-            srcFragment={viewedImage.srcFragment}
-            workspaceRoot={workspaceRoot}
-            maxHeightRem={16}
-            onImageExpand={onImageExpand}
-          />
-        </div>
-      ) : null}
-      {expanded && workEntry.questionAnswer ? (
-        <QuestionAnswerHistory answer={workEntry.questionAnswer} />
-      ) : null}
-      {expanded && canExpand && expandedBody && !workEntry.questionAnswer ? (
-        <div
-          className="mt-1 ms-7 cursor-default rounded-md bg-muted/40 px-3 py-2"
-          onClick={stopRowToggle}
-          onPointerDown={stopRowToggle}
-        >
-          <pre className={toolCallExpandedBodyClassName}>{expandedBody}</pre>
-        </div>
-      ) : null}
+      {details}
     </div>
   );
 });
