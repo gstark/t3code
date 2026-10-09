@@ -1528,6 +1528,14 @@ function summarizeToolRequest(toolName: string, input: Record<string, unknown>):
   return `${toolName}: ${serialized.slice(0, 397)}...`;
 }
 
+/** The Bash tool's `description` states why Claude runs the command; clients use it as the label. */
+function commandIntent(tool: Pick<ToolInFlight, "itemType" | "input">): { intent?: string } {
+  const description = tool.input.description;
+  if (tool.itemType !== "command_execution" || typeof description !== "string") return {};
+  const intent = description.trim();
+  return intent ? { intent } : {};
+}
+
 function titleForTool(itemType: CanonicalItemType): string {
   switch (itemType) {
     case "command_execution":
@@ -2811,6 +2819,7 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
           itemType: tool.itemType,
           status: status === "completed" ? "completed" : "failed",
           title: tool.title,
+          ...commandIntent(tool),
           ...(tool.detail ? { detail: tool.detail } : {}),
           data: {
             toolName: tool.toolName,
@@ -3053,6 +3062,7 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
             itemType: nextTool.itemType,
             status: "inProgress",
             title: nextTool.title,
+            ...commandIntent(nextTool),
             ...(nextTool.detail ? { detail: nextTool.detail } : {}),
             ...(nextTool.agentId ? { agentId: nextTool.agentId } : {}),
             ...(nextTool.parentToolUseId ? { parentToolUseId: nextTool.parentToolUseId } : {}),
@@ -3160,6 +3170,7 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
           itemType: tool.itemType,
           status: "inProgress",
           title: tool.title,
+          ...commandIntent(tool),
           ...(tool.detail ? { detail: tool.detail } : {}),
           ...(tool.agentId ? { agentId: tool.agentId } : {}),
           ...(tool.parentToolUseId ? { parentToolUseId: tool.parentToolUseId } : {}),
@@ -3236,6 +3247,7 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
           itemType: tool.itemType,
           status: toolResult.isError ? "failed" : "inProgress",
           title: tool.title,
+          ...commandIntent(tool),
           ...(tool.detail ? { detail: tool.detail } : {}),
           ...(tool.agentId ? { agentId: tool.agentId } : {}),
           ...(tool.parentToolUseId ? { parentToolUseId: tool.parentToolUseId } : {}),
@@ -3290,6 +3302,7 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
           itemType: tool.itemType,
           status: itemStatus,
           title: tool.title,
+          ...commandIntent(tool),
           ...(tool.detail ? { detail: tool.detail } : {}),
           ...(tool.agentId ? { agentId: tool.agentId } : {}),
           ...(tool.parentToolUseId ? { parentToolUseId: tool.parentToolUseId } : {}),
