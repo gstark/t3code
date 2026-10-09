@@ -26,6 +26,7 @@ import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { readPullRequestListPreferences } from "../pullRequest/pullRequestListPreferences";
 import { isSidebarUtilityPage, useNavigateToMainApp } from "./mainAppLocation";
 import { SidebarThreadUndoNotice } from "./SidebarThreadUndoNotice";
+import { SidebarWorkReportRow } from "./SidebarWorkReportRow";
 import { SidebarProviderUpdatePill } from "./SidebarProviderUpdatePill";
 import { SidebarUpdateArchitectureWarning, SidebarUpdatePill } from "./SidebarUpdatePill";
 import { PullRequestGlyph } from "~/components/pullRequest/pullRequestIcons";
@@ -209,6 +210,7 @@ export const SidebarChromeFooter = memo(function SidebarChromeFooter() {
       <SidebarThreadUndoNotice />
       <SidebarProviderUpdatePill />
       <SidebarUpdateArchitectureWarning />
+      <SidebarWorkReportRow />
       <SidebarUtilityMenu />
     </SidebarFooter>
   );
