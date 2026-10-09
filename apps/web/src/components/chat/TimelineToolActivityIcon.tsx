@@ -16,7 +16,7 @@ import {
   SearchIcon,
   SmartphoneIcon,
   SquarePenIcon,
-  TerminalIcon,
+  CommandIcon,
   HammerIcon,
   WrenchIcon,
   Code2Icon,
@@ -265,7 +265,7 @@ function WorkEntryIcon({ name, className }: { name: WorkEntryIconName; className
     case "square-pen":
       return <SquarePenIcon className={className} aria-hidden />;
     case "terminal":
-      return <TerminalIcon className={className} aria-hidden />;
+      return <CommandIcon className={className} aria-hidden />;
     case "wrench":
       return <WrenchIcon className={className} aria-hidden />;
     case "x":

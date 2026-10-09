@@ -394,7 +394,7 @@ function workRowSymbolName(icon: ThreadFeedActivity["icon"]): WorkContentIcon {
     case "check":
       return { ios: "checkmark", android: "check" };
     case "command":
-      return { ios: "terminal", android: "terminal" };
+      return { ios: "command", android: "keyboard_command_key" };
     case "computer":
       return "computer";
     case "code":
@@ -1618,7 +1618,7 @@ function toolGroupSummarySymbolName(kind: ToolGroupSummaryKind): AppSymbolName {
     case "thread-create":
       return { ios: "bubble.left", android: "chat" };
     case "command":
-      return { ios: "terminal", android: "terminal" };
+      return { ios: "command", android: "keyboard_command_key" };
     case "device":
       return { ios: "iphone", android: "smartphone" };
     case "browser":

@@ -450,6 +450,7 @@ const ConversationTimeline = memo(function ConversationTimeline({
 
   const disclosurePinsEndRef = useRef(false);
   const disclosureCollapsedRef = useRef(false);
+  const disclosureRevealRowIdsRef = useRef<readonly string[]>([]);
   const pinDisclosureToEnd = () => {
     if (!disclosurePinsEndRef.current) return;
     const element = listRef.current?.getScrollableNode();
@@ -478,13 +479,27 @@ const ConversationTimeline = memo(function ConversationTimeline({
         ) {
           onToolOutputCollapsedAtEnd?.();
         }
+        // Opened content below the fold scrolls into view.
+        if (!disclosureCollapsedRef.current) {
+          const viewport = listRef.current?.getScrollableNode();
+          disclosureRevealRowIdsRef.current
+            .map((id) => viewport?.querySelector(`[data-timeline-row-id="${CSS.escape(id)}"]`))
+            .find(Boolean)
+            ?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+        }
+        disclosureRevealRowIdsRef.current = [];
       });
     });
   };
 
-  const suspendEndScrollMaintenanceForDisclosure = (anchorKey: string, collapsed = false) => {
+  const suspendEndScrollMaintenanceForDisclosure = (
+    anchorKey: string,
+    collapsed = false,
+    revealRowIds: readonly string[] = [],
+  ) => {
     disclosureAnchorKeyRef.current = anchorKey;
     disclosureCollapsedRef.current = collapsed;
+    disclosureRevealRowIdsRef.current = revealRowIds;
     disclosurePinsEndRef.current = resolveTimelineIsAtEnd(listRef.current?.getState()) === true;
     setDisclosureToggleSettling(true);
     scheduleDisclosureSettle();
@@ -509,7 +524,11 @@ const ConversationTimeline = memo(function ConversationTimeline({
     });
   };
   const onToggleWorkGroup = (groupId: string, anchorKey: string) => {
-    suspendEndScrollMaintenanceForDisclosure(anchorKey, expandedWorkGroupIds.has(groupId));
+    // Summary and live headers open a separate details row; activity groups open in place.
+    suspendEndScrollMaintenanceForDisclosure(anchorKey, expandedWorkGroupIds.has(groupId), [
+      `${groupId}:details`,
+      anchorKey,
+    ]);
     setExpandedWorkGroupIds((existing) => {
       const next = new Set(existing);
       if (next.has(groupId)) {

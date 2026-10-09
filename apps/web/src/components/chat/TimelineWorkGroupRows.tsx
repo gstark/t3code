@@ -82,6 +82,16 @@ export const WorkGroupSection = memo(function WorkGroupSection({
   if (isExpandedToolGroup && nonEmptyEntries.every((entry) => entry.itemType === "reasoning")) {
     return <ReasoningTraceContent entries={nonEmptyEntries} />;
   }
+  // A lone entry needs no inner disclosure: the group header already names it.
+  if (isExpandedToolGroup && nonEmptyEntries.length === 1) {
+    return (
+      <SimpleWorkEntryRow
+        workEntry={nonEmptyEntries[0]!}
+        workspaceRoot={workspaceRoot}
+        detailsOnly
+      />
+    );
+  }
   if (isExpandedToolGroup) {
     return (
       <ExpandedWorkGroupEntries
