@@ -283,6 +283,40 @@ function assistantMessage(updatedAt = "2026-06-20T00:00:03.000Z") {
 }
 
 describe("buildThreadFeed", () => {
+  it("shows each tool call as its own row when grouping is off", () => {
+    const commands = [1, 2, 3].map((index) =>
+      projected(
+        {
+          ...command(`2026-06-20T00:00:0${index}.000Z`),
+          id: TurnItemId.make(`item-command-${index}`),
+          ordinal: index,
+        },
+        index - 1,
+      ),
+    );
+    const feed = buildThreadFeed(commands);
+    const cache = createThreadFeedCache();
+    const present = (groupToolCalls: boolean) =>
+      deriveThreadFeedPresentation(
+        feed,
+        { runId, status: "running", startedAt: null, completedAt: null },
+        new Set(),
+        new Set(),
+        null,
+        false,
+        cache,
+        groupToolCalls,
+      ).map((entry) => entry.id);
+
+    expect(present(true)).toEqual(["work-toggle:work-group:local:thread-1:item-command-1"]);
+    expect(present(false)).toEqual([
+      "work-toggle:work-group:local:thread-1:item-command-1",
+      "work-toggle:work-group:local:thread-1:item-command-2",
+      "work-toggle:work-group:local:thread-1:item-command-3",
+    ]);
+    expect(present(true)).toEqual(["work-toggle:work-group:local:thread-1:item-command-1"]);
+  });
+
   it("keeps async answers in question history instead of user bubbles", () => {
     const requestId = RuntimeRequestId.make("question");
     const question: OrchestrationV2TurnItem = {

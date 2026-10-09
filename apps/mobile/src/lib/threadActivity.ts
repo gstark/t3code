@@ -336,6 +336,7 @@ const presentedActivityGroupsCache = new WeakMap<
     readonly activeRunId: RunId | null;
     readonly isWorking: boolean;
     readonly activeTail: boolean;
+    readonly groupToolCalls: boolean;
     readonly rows: ReadonlyArray<ThreadFeedEntry>;
   }
 >();
@@ -1325,6 +1326,7 @@ interface ThreadFeedPresentationBuild {
   readonly expandedWorkGroupIds: ReadonlySet<string>;
   readonly activeWorkStartedAt: string | null;
   readonly runlessWorkActive: boolean;
+  readonly groupToolCalls: boolean;
   readonly rows: ReadonlyArray<ThreadFeedEntry>;
   /** Feed entry `entry` is a user message whose rows start at `rowsLength`. */
   readonly restarts: ReadonlyArray<{ readonly entry: number; readonly rowsLength: number }>;
@@ -1367,12 +1369,14 @@ function presentationRestart(
   expandedWorkGroupIds: ReadonlySet<string>,
   activeWorkStartedAt: string | null,
   runlessWorkActive: boolean,
+  groupToolCalls: boolean,
 ): { readonly entry: number; readonly rowsLength: number; readonly index: number } | null {
   if (
     previous === null ||
     !latestRunsEqual(previous.latestRun, latestRun) ||
     previous.activeWorkStartedAt !== activeWorkStartedAt ||
     previous.runlessWorkActive !== runlessWorkActive ||
+    previous.groupToolCalls !== groupToolCalls ||
     !setsEqual(previous.expandedRunIds, expandedRunIds) ||
     !setsEqual(previous.expandedWorkGroupIds, expandedWorkGroupIds)
   ) {
@@ -1399,6 +1403,8 @@ export function deriveThreadFeedPresentation(
   activeWorkStartedAt: string | null = null,
   runlessWorkActive = false,
   cache?: ThreadFeedCache,
+  /** False shows every tool call as its own row instead of folding consecutive calls. */
+  groupToolCalls = true,
 ): ThreadFeedEntry[] {
   const previous = cache?.presentation ?? null;
   const restart = presentationRestart(
@@ -1409,6 +1415,7 @@ export function deriveThreadFeedPresentation(
     expandedWorkGroupIds,
     activeWorkStartedAt,
     runlessWorkActive,
+    groupToolCalls,
   );
   const start = restart?.entry ?? 0;
   const result: ThreadFeedEntry[] =
@@ -1555,7 +1562,9 @@ export function deriveThreadFeedPresentation(
         expandedWorkGroupIds,
         activeRunId,
         isWorking,
-        isActiveTailGroup,
+        // Ungrouped rows have no shared live slot; each running call is live on its own.
+        groupToolCalls && isActiveTailGroup,
+        groupToolCalls,
       );
     }
   }
@@ -1647,6 +1656,7 @@ export function deriveThreadFeedPresentation(
       expandedWorkGroupIds,
       activeWorkStartedAt,
       runlessWorkActive,
+      groupToolCalls,
       rows: result,
       restarts: cleanRestarts,
       firstEntryByRun,
@@ -1690,6 +1700,7 @@ function appendPresentedFeedEntry(
   activeRunId: RunId | null,
   isWorking: boolean,
   activeTail: boolean,
+  groupToolCalls: boolean,
 ): void {
   if (entry.type !== "activity-group") {
     result.push(entry);
@@ -1711,13 +1722,22 @@ function appendPresentedFeedEntry(
     cached.activeRunId !== activeRunId ||
     cached.isWorking !== isWorking ||
     cached.activeTail !== activeTail ||
+    cached.groupToolCalls !== groupToolCalls ||
     cached.rows.some(
       (row) => row.type === "work-toggle" && expandedWorkGroupIds.has(row.groupId) !== row.expanded,
     )
   ) {
     const rows: ThreadFeedEntry[] = [];
-    appendActivityGroupRows(rows, entry, expandedWorkGroupIds, activeRunId, isWorking, activeTail);
-    cached = { activeRunId, isWorking, activeTail, rows };
+    appendActivityGroupRows(
+      rows,
+      entry,
+      expandedWorkGroupIds,
+      activeRunId,
+      isWorking,
+      activeTail,
+      groupToolCalls,
+    );
+    cached = { activeRunId, isWorking, activeTail, groupToolCalls, rows };
     presentedActivityGroupsCache.set(entry, cached);
   }
   for (const row of cached.rows) {
@@ -1732,6 +1752,7 @@ function appendActivityGroupRows(
   activeRunId: RunId | null,
   isWorking: boolean,
   activeTail: boolean,
+  groupToolCalls: boolean,
 ): void {
   const groupAnchorIdByActivityId = new Map<string, string>();
   let groupAnchorId: string | null = null;
@@ -1756,16 +1777,31 @@ function appendActivityGroupRows(
   let groupableRun: ThreadFeedActivity[] = [];
   const flushGroupableRun = (isTrailingRun: boolean) => {
     if (groupableRun.length === 0) return;
-    appendToolGroupRows(
-      result,
-      entry,
-      groupableRun,
-      `work-group:${groupAnchorIdByActivityId.get(groupableRun[0]!.id) ?? groupableRun[0]!.id}`,
-      expandedWorkGroupIds,
-      activeRunId,
-      isWorking,
-      activeTail && isTrailingRun,
-    );
+    if (groupToolCalls) {
+      appendToolGroupRows(
+        result,
+        entry,
+        groupableRun,
+        `work-group:${groupAnchorIdByActivityId.get(groupableRun[0]!.id) ?? groupableRun[0]!.id}`,
+        expandedWorkGroupIds,
+        activeRunId,
+        isWorking,
+        activeTail && isTrailingRun,
+      );
+    } else {
+      for (const activity of groupableRun) {
+        appendToolGroupRows(
+          result,
+          entry,
+          [activity],
+          `work-group:${activity.id}`,
+          expandedWorkGroupIds,
+          activeRunId,
+          isWorking,
+          activeTail && isTrailingRun,
+        );
+      }
+    }
     groupableRun = [];
   };
   for (const activity of activities) {

@@ -1100,6 +1100,16 @@ describe("deriveMessagesTimelineRows", () => {
             row.hiddenCount === count),
       ),
     ).toBe(true);
+    // Ungrouped, each call is its own row.
+    const ungroupedIds = deriveMessagesTimelineRows({
+      ...input,
+      timelineEntries,
+      expandedRunIds: new Set([runId]),
+      groupToolCalls: false,
+    }).map((row) => row.id);
+    for (let index = 0; index < count; index += 1) {
+      expect(ungroupedIds).toContain(`work-entry-after-text-${index}`);
+    }
 
     const failedEntries = timelineEntries.map((entry) =>
       entry.kind === "work" && entry.id === "work-entry-after-text-0"
@@ -1677,8 +1687,9 @@ describe("deriveMessagesTimelineRows", () => {
     });
   });
 
-  it("keeps an actually running tool in the shared activity row", () => {
+  it.each([true, false])("keeps an actually running tool live (grouped: %s)", (groupToolCalls) => {
     const rows = deriveMessagesTimelineRows({
+      groupToolCalls,
       timelineEntries: [
         {
           id: "running-command-entry",
@@ -1738,6 +1749,15 @@ describe("deriveMessagesTimelineRows", () => {
       supportsConversationRollback: false,
     });
 
+    if (!groupToolCalls) {
+      // Each call is its own row; only the running one is live.
+      expect(rows.map((row) => row.kind)).toEqual(["working", "work-live", "work", "work"]);
+      expect(rows.find((row) => row.kind === "work-live")).toMatchObject({
+        active: true,
+        groupedEntries: [{ id: "running-command" }],
+      });
+      return;
+    }
     expect(rows.map((row) => row.kind)).toEqual(["working", "work-live"]);
     expect(rows.some((row) => row.kind === "thinking")).toBe(false);
     expect(rows.find((row) => row.kind === "work-live")).toMatchObject({
