@@ -2,6 +2,7 @@ import { useAtomMount } from "@effect/atom-react";
 import { useCallback, useMemo } from "react";
 
 import { EnvironmentProject, EnvironmentThreadShell } from "@t3tools/client-runtime/state/shell";
+import { describeGitActionError } from "@t3tools/client-runtime/errors";
 import type { AtomCommandResult } from "@t3tools/client-runtime/state/runtime";
 import {
   createVcsStatusRevalidationAtomFamily,
@@ -206,7 +207,7 @@ export function useSelectedThreadGitActions() {
           : await vcsActionManager.track(appAtomRegistry, target, { operation, label }, run);
       if (AsyncResult.isFailure(result)) {
         const error = Cause.squash(result.cause);
-        const message = error instanceof Error ? error.message : "Git action failed.";
+        const message = describeGitActionError(error, "Git action failed.");
         setPendingConnectionError(message);
         showGitActionResult({ type: "error", title: "Git action failed", description: message });
         return null;
