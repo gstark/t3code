@@ -69,17 +69,35 @@ Write the technical summary for personal work, if there was any.
 
 ### reports/YYYY-MM-DD/suggestions.md
 
-Group by repository. Under each repository:
+Find the moments where an agent struggled: a user corrected it, a command
+failed again and again, it redid work, or it lacked information. A smooth
+thread has nothing to teach. Skip it.
 
-- \`### AGENTS.md entries\`: rules an agent would have needed to avoid
-  mistakes or wasted turns in these threads. Write each one in the words it
-  would have in AGENTS.md.
-- \`### Skills\`: workflows that the threads repeated and that a skill could
-  hold. Give each a name, a one-line description, and its steps.
-- \`### Lint rules\`: rules that would have caught rework or failures in these
-  threads. Name the linter and the rule, or describe a custom rule. Each lint
-  rule must cite the thread title and the failure behind it. Do not suggest
-  generic rules that no thread shows a need for.
+Before you suggest a change to a repository, read its AGENTS.md or CLAUDE.md,
+its lint config, and its CI config. Do not suggest what already exists. If a
+check exists but nothing runs it, suggest that something runs it.
+
+Group by repository. Under each repository, put each suggestion under the fix
+that matches the problem:
+
+- \`### Navigation pointers\`: the agent took long to find a file or fact.
+  Give the line to add to AGENTS.md.
+- \`### Checks\`: a lint rule, type, test, hook, or CI job could have caught
+  the mistake. Name the tool and the rule.
+- \`### Review rules\`: a judgement call that no check can enforce. Write the
+  rule for a code reviewer, not for AGENTS.md.
+- \`### Access\`: the agent needed information it could not get.
+- \`### Skills\`: a workflow that the threads repeated. Give its name, a
+  one-line description, and its steps.
+- \`### Deletions\`: AGENTS.md lines that the threads show do nothing.
+
+If a repository has no pre-commit hook and no CI job that runs lint,
+typecheck, and tests, report that first.
+
+Each suggestion must cite the thread titles and turn indexes that show the
+problem. Do not write a suggestion that you cannot cite. Sort by the number
+of threads that show the problem, then by cost. An empty section is correct
+when no thread shows a need.
 
 Do not edit any repository other than this folder. The suggestions are for the
 user to apply.
