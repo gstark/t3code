@@ -102,7 +102,7 @@ release: _require-mine
     git push origin mine
     gh release create "$tag" "$dmg" -R {{ fork_repo }} \
       --target "$(git rev-parse HEAD)" \
-      --title "T3 Code (mine) $version" \
+      --title "G$ Code (mine) $version" \
       --notes "Build of the mine branch at $(git rev-parse --short HEAD), based on upstream v${base}." \
       --latest=false
 
@@ -115,20 +115,20 @@ release: _require-mine
       sha256 "$sha"
 
       url "https://github.com/{{ fork_repo }}/releases/download/v#{version}/T3-Code-#{version}-arm64.dmg"
-      name "T3 Code (mine)"
-      desc "Personal fork build of T3 Code"
+      name "G$ Code (mine)"
+      desc "Personal fork build of T3 Code, rebranded G$ Code"
       homepage "https://github.com/{{ fork_repo }}/tree/mine"
 
       depends_on arch: :arm64
       depends_on macos: :ventura
       conflicts_with cask: "t3-code"
 
-      app "T3 Code (Alpha).app"
+      app "G$ Code (Alpha).app"
 
       # The build is signed but not notarized, so remove the quarantine flag to let it open.
       postflight do
         system_command "/usr/bin/xattr",
-                       args: ["-dr", "com.apple.quarantine", "#{appdir}/T3 Code (Alpha).app"]
+                       args: ["-dr", "com.apple.quarantine", "#{appdir}/G$ Code (Alpha).app"]
       end
     end
     EOF

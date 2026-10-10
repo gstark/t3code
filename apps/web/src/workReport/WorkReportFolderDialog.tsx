@@ -55,7 +55,7 @@ function WorkReportFolderDialog({ onClose }: { onClose: () => void }) {
         <DialogHeader>
           <DialogTitle>Choose a reports folder</DialogTitle>
           <DialogDescription>
-            Work reports and the client list are saved in this folder on the server. T3 Code creates
+            Work reports and the client list are saved in this folder on the server. G$ Code creates
             the folder if it does not exist and adds it as a project.
           </DialogDescription>
         </DialogHeader>
