@@ -3045,6 +3045,45 @@ it.layer(TestLayer)("GitVcsDriver core integration", (it) => {
       }),
     );
 
+    it.effect("explains a push the remote rejects as non-fast-forward", () =>
+      Effect.gen(function* () {
+        const driver = yield* GitVcsDriver.GitVcsDriver;
+        const cwd = yield* makeTmpDir();
+        const remote = yield* makeTmpDir("git-remote-");
+        const otherClone = yield* makeTmpDir("git-other-");
+        yield* initRepoWithCommit(cwd);
+        yield* git(remote, ["init", "--bare"]);
+        yield* git(cwd, ["remote", "add", "origin", remote]);
+        yield* driver.pushCurrentBranch(cwd, null);
+
+        yield* git(otherClone, ["clone", remote, "."]);
+        yield* writeTextFile(otherClone, "theirs.txt", "theirs\n");
+        yield* git(otherClone, ["add", "theirs.txt"]);
+        yield* git(otherClone, [
+          "-c",
+          "user.name=Other",
+          "-c",
+          "user.email=other@example.com",
+          "commit",
+          "-m",
+          "Theirs",
+        ]);
+        yield* git(otherClone, ["push"]);
+
+        yield* writeTextFile(cwd, "ours.txt", "ours\n");
+        yield* driver.prepareCommitContext(cwd);
+        yield* driver.commit(cwd, "Ours", "");
+
+        const error = yield* driver.pushCurrentBranch(cwd, null).pipe(Effect.flip);
+        assert.instanceOf(error, GitCommandError);
+        assert.equal(
+          error.detail,
+          "Push rejected: the remote branch has commits that this branch does not have. Pull, then push again.",
+        );
+        assert.notInclude(error.message, remote);
+      }),
+    );
+
     it.effect("allows pushes to run longer than the default command timeout", () =>
       Effect.gen(function* () {
         const delegate = yield* ChildProcessSpawner.ChildProcessSpawner;

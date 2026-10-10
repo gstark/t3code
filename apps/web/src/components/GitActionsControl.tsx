@@ -1,5 +1,6 @@
 import { useAtomValue } from "@effect/atom-react";
 import { type ScopedThreadRef } from "@t3tools/contracts";
+import { describeGitActionError } from "@t3tools/client-runtime/errors";
 import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,
@@ -1451,7 +1452,7 @@ export default function GitActionsControl({
           stackedThreadToast({
             type: "error",
             title: "Action failed",
-            description: error instanceof Error ? error.message : "An error occurred.",
+            description: describeGitActionError(error, "An error occurred."),
             ...(scopedToastData !== undefined ? { data: scopedToastData } : {}),
           }),
         );
