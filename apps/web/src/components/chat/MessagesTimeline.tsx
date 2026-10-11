@@ -4456,7 +4456,7 @@ function buildToolCallExpandedBody(
 }
 
 const toolCallExpandedBodyClassName =
-  "max-h-64 cursor-text overflow-auto whitespace-pre-wrap break-words font-mono text-secondary-label text-(length:--font-size-code,var(--text-2xs)) leading-relaxed select-text";
+  "cursor-text overflow-auto whitespace-pre-wrap break-words font-mono text-secondary-label text-(length:--font-size-code,var(--text-2xs)) leading-relaxed select-text";
 
 function workEntryIconName(workEntry: TimelineWorkEntry): WorkEntryIconName {
   if (
@@ -4685,7 +4685,7 @@ function AgentSpawnMemberRow({
           onClick={stopRowToggle}
           onPointerDown={stopRowToggle}
         >
-          <pre className={toolCallExpandedBodyClassName}>{body}</pre>
+          <pre className={cn("max-h-64", toolCallExpandedBodyClassName)}>{body}</pre>
         </div>
       ) : null}
     </div>
