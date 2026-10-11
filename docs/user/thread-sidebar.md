@@ -168,7 +168,12 @@ On web and desktop, use **Agents** to follow work delegated to subagents.
 
 Expand a tool call in the conversation to see its full command and output.
 Summaries shorten shell wrappers and can still describe the latest call after it
-finishes; the call's own result shows its status.
+finishes; the call's own result shows its status. When the agent states why it
+runs a command, the summary shows that reason instead of the command.
+
+Consecutive tool calls fold into one row. To show each call as its own row, turn
+off **Group tool calls** in **Settings → General** on web and desktop, or in
+**Settings → Thread behavior** on mobile.
 
 ## Snooze until later
 
