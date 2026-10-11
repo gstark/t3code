@@ -17,6 +17,7 @@ import type {
 } from "@t3tools/contracts";
 import { useNavigate } from "@tanstack/react-router";
 import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
 import {
   type MouseEvent,
   useCallback,
@@ -95,6 +96,7 @@ import { Textarea } from "~/components/ui/textarea";
 import { stackedThreadToast, toastManager, type ThreadToastData } from "~/components/ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { useOpenInPreferredEditor } from "~/editorPreferences";
+import { useLocalStorage } from "~/hooks/useLocalStorage";
 import {
   useGitStackedAction,
   useSourceControlActionRunning,
@@ -318,7 +320,7 @@ function getMenuActionDisabledReason({
   const isBehind = gitStatus.behindCount > 0;
   const terminology = getSourceControlPresentation(gitStatus.sourceControlProvider).terminology;
 
-  if (item.id === "commit") {
+  if (item.id === "commit" || item.id === "commit_push" || item.id === "commit_push_pr") {
     if (!hasChanges) {
       return "Worktree is clean. Make changes before committing.";
     }
@@ -364,6 +366,8 @@ function getMenuActionDisabledReason({
   }
   return `Create ${terminology.singular} is currently unavailable.`;
 }
+
+const CommitPreferenceSchema = Schema.NullOr(Schema.Literals(["commit", "commit_push"]));
 
 const COMMIT_DIALOG_TITLE = "Commit changes";
 const COMMIT_DIALOG_DESCRIPTION =
@@ -1126,14 +1130,36 @@ export default function GitActionsControl({
     return gitStatusForActions?.isDefaultRef ?? false;
   }, [gitStatusForActions?.isDefaultRef]);
 
+  // Remembers, per project, whether the user wants "Commit" or "Commit & push"
+  // instead of the default "Commit, push & PR". Worktree threads share it.
+  const projectId = activeServerThread?.projectId ?? activeDraftThread?.projectId ?? null;
+  const [commitPreference, setCommitPreference] = useLocalStorage(
+    `t3code:git-commit-preference:${activeEnvironmentId ?? ""}:${projectId ?? gitCwd}`,
+    null,
+    CommitPreferenceSchema,
+  );
+
   const gitActionMenuItems = useMemo(
-    () => buildMenuItems(gitStatusForActions, isGitActionRunning, hasPrimaryRemote),
-    [gitStatusForActions, hasPrimaryRemote, isGitActionRunning],
+    () =>
+      buildMenuItems(
+        gitStatusForActions,
+        isGitActionRunning,
+        hasPrimaryRemote,
+        isDefaultRef,
+        commitPreference,
+      ),
+    [gitStatusForActions, hasPrimaryRemote, isDefaultRef, isGitActionRunning, commitPreference],
   );
   const quickAction = useMemo(
     () =>
-      resolveQuickAction(gitStatusForActions, isGitActionRunning, isDefaultRef, hasPrimaryRemote),
-    [gitStatusForActions, hasPrimaryRemote, isDefaultRef, isGitActionRunning],
+      resolveQuickAction(
+        gitStatusForActions,
+        isGitActionRunning,
+        isDefaultRef,
+        hasPrimaryRemote,
+        commitPreference,
+      ),
+    [gitStatusForActions, hasPrimaryRemote, isDefaultRef, isGitActionRunning, commitPreference],
   );
   const quickActionDisabledReason = quickAction.disabled
     ? (quickAction.hint ?? "This action is currently unavailable.")
@@ -1491,6 +1517,7 @@ export default function GitActionsControl({
     const commitMessage = dialogCommitMessage.trim();
 
     setIsCommitDialogOpen(false);
+    setCommitPreference("commit");
     setDialogCommitMessage("");
     setExcludedFiles(new Set());
     setIsEditingFiles(false);
@@ -1581,6 +1608,16 @@ export default function GitActionsControl({
       void runGitActionWithToast({ action: "create_pr" });
       return;
     }
+    if (item.dialogAction === "commit_push") {
+      setCommitPreference("commit_push");
+      void runGitActionWithToast({ action: "commit_push" });
+      return;
+    }
+    if (item.dialogAction === "commit_push_pr") {
+      setCommitPreference(null);
+      void runGitActionWithToast({ action: "commit_push_pr" });
+      return;
+    }
     setExcludedFiles(new Set());
     setIsEditingFiles(false);
     setIsCommitDialogOpen(true);
@@ -1590,6 +1627,7 @@ export default function GitActionsControl({
     if (!isCommitDialogOpen) return;
     const commitMessage = dialogCommitMessage.trim();
     setIsCommitDialogOpen(false);
+    setCommitPreference("commit");
     setDialogCommitMessage("");
     setExcludedFiles(new Set());
     setIsEditingFiles(false);
