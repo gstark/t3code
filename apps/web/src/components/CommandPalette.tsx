@@ -160,6 +160,7 @@ import {
   enumerateCommandPaletteItems,
   type CommandPaletteActionItem,
   type CommandPaletteOpenIntent,
+  type CommandPaletteProject,
   type CommandPaletteSubmenuItem,
   type CommandPaletteView,
   filterCommandPaletteGroups,
@@ -192,7 +193,11 @@ import {
 import { ThreadRowLeadingStatus, ThreadRowTrailingStatus } from "./ThreadStatusIndicators";
 import { primaryServerKeybindingsAtom, primaryServerProvidersAtom } from "../state/server";
 import { deriveProviderInstanceEntries, type ProviderInstanceEntry } from "../providerInstances";
-import { resolveShortcutCommand, threadJumpIndexFromCommand } from "../keybindings";
+import {
+  resolveShortcutCommand,
+  threadJumpCommandForIndex,
+  threadJumpIndexFromCommand,
+} from "../keybindings";
 import { CommandDialog, CommandDialogPopup, CommandFooterAction } from "./ui/command";
 import { Button } from "./ui/button";
 import { Kbd, KbdGroup } from "./ui/kbd";
@@ -674,7 +679,7 @@ function CommandPaletteDialog(props: {
             ? "Search project contents"
             : "Command palette"
       }
-      className={cn("overflow-hidden", props.mode === "content" && "h-105")}
+      className={cn("max-w-2xl overflow-hidden", props.mode === "content" && "h-105")}
       data-command-palette="true"
       data-palette-mode={props.mode}
       data-testid="command-palette"
@@ -702,6 +707,25 @@ function CommandPaletteDialog(props: {
   );
 }
 
+// Whether Shift is down while the palette is open. Rows that can open in a
+// worktree preview that action while it is held.
+function useShiftHeld(): boolean {
+  const [shiftHeld, setShiftHeld] = useState(false);
+  useEffect(() => {
+    const sync = (event: globalThis.KeyboardEvent) => setShiftHeld(event.shiftKey);
+    const reset = () => setShiftHeld(false);
+    window.addEventListener("keydown", sync, true);
+    window.addEventListener("keyup", sync, true);
+    window.addEventListener("blur", reset);
+    return () => {
+      window.removeEventListener("keydown", sync, true);
+      window.removeEventListener("keyup", sync, true);
+      window.removeEventListener("blur", reset);
+    };
+  }, []);
+  return shiftHeld;
+}
+
 function OpenCommandPaletteDialog(props: {
   readonly openIntent: CommandPaletteOpenIntent | null;
   readonly setOpen: (open: boolean) => void;
@@ -718,6 +742,7 @@ function OpenCommandPaletteDialog(props: {
   const deferredQuery = useDeferredValue(query);
   const isActionsOnly = deferredQuery.startsWith(">");
   const [highlightedItemValue, setHighlightedItemValue] = useState<string | null>(null);
+  const shiftHeld = useShiftHeld();
   const clientSettings = useClientSettings();
   const createProject = useAtomCommand(projectEnvironment.create, {
     reportFailure: false,
@@ -1311,6 +1336,23 @@ function OpenCommandPaletteDialog(props: {
     ],
   );
 
+  const newThreadProjectRef = useCallback(
+    (project: CommandPaletteProject) => {
+      const group = projectGroupByTargetKey.get(`${project.environmentId}:${project.id}`);
+      const contextualRefBelongsToGroup =
+        contextualProjectRef !== null &&
+        group?.memberProjectRefs.some(
+          (projectRef) =>
+            projectRef.environmentId === contextualProjectRef.environmentId &&
+            projectRef.projectId === contextualProjectRef.projectId,
+        );
+      return contextualRefBelongsToGroup
+        ? contextualProjectRef
+        : scopeProjectRef(project.environmentId, project.id);
+    },
+    [contextualProjectRef, projectGroupByTargetKey],
+  );
+
   const projectThreadItems = useMemo(
     () =>
       enumerateCommandPaletteItems([
@@ -1354,19 +1396,10 @@ function OpenCommandPaletteDialog(props: {
           },
           icon: projectFavicon,
           runProject: async (project) => {
-            const group = projectGroupByTargetKey.get(`${project.environmentId}:${project.id}`);
-            const contextualRefBelongsToGroup =
-              contextualProjectRef !== null &&
-              group?.memberProjectRefs.some(
-                (projectRef) =>
-                  projectRef.environmentId === contextualProjectRef.environmentId &&
-                  projectRef.projectId === contextualProjectRef.projectId,
-              );
-            await handleNewThread(
-              contextualRefBelongsToGroup
-                ? contextualProjectRef
-                : scopeProjectRef(project.environmentId, project.id),
-            );
+            await handleNewThread(newThreadProjectRef(project));
+          },
+          runProjectInWorktree: async (project) => {
+            await handleNewThread(newThreadProjectRef(project), { envMode: "worktree" });
           },
         }),
         ...(scratchTargetEnvironmentId === null
@@ -1384,8 +1417,8 @@ function OpenCommandPaletteDialog(props: {
             ]),
       ]),
     [
-      contextualProjectRef,
       handleNewThread,
+      newThreadProjectRef,
       pickerProjects,
       projectEnvironmentLocationById,
       projectGroupByTargetKey,
@@ -3038,6 +3071,18 @@ function OpenCommandPaletteDialog(props: {
       platform: navigator.platform,
       context: { modelPickerOpen: false },
     });
+    const worktreeJumpIndex = worktreeJumpIndexFromEvent(event);
+    if (worktreeJumpIndex !== null) {
+      const matchingItem = displayedGroups
+        .flatMap((group) => group.items)
+        .find((item) => item.shortcutCommand === threadJumpCommandForIndex(worktreeJumpIndex));
+      if (matchingItem?.kind === "action" && matchingItem.runInWorktree) {
+        event.preventDefault();
+        event.stopPropagation();
+        executeItem(matchingItem, { inWorktree: true });
+        return;
+      }
+    }
     if (threadJumpIndexFromCommand(command ?? "") !== null) {
       event.preventDefault();
       event.stopPropagation();
@@ -3056,6 +3101,23 @@ function OpenCommandPaletteDialog(props: {
       setOpen(false);
       void copyActiveThreadReference();
       return;
+    }
+
+    if (
+      event.key === "Enter" &&
+      event.shiftKey &&
+      !event.altKey &&
+      !isPrimaryModifierPressed(event)
+    ) {
+      const highlightedItem = displayedGroups
+        .flatMap((group) => group.items)
+        .find((item) => item.value === highlightedItemValue);
+      if (highlightedItem?.kind === "action" && highlightedItem.runInWorktree) {
+        event.preventDefault();
+        event.stopPropagation();
+        executeItem(highlightedItem, { inWorktree: true });
+        return;
+      }
     }
 
     if (addProjectCloneFlow?.step === "repository" && event.key === "Enter") {
@@ -3100,7 +3162,17 @@ function OpenCommandPaletteDialog(props: {
     }
   }
 
-  function executeItem(item: CommandPaletteActionItem | CommandPaletteSubmenuItem): void {
+  // Shift plus the jump shortcut (⇧⌘1 to ⇧⌘9) runs a row in a new worktree.
+  function worktreeJumpIndexFromEvent(event: KeyboardEvent<HTMLInputElement>): number | null {
+    if (!event.shiftKey || event.altKey || !isPrimaryModifierPressed(event)) return null;
+    const digit = /^Digit([1-9])$/.exec(event.code)?.[1];
+    return digit ? Number(digit) - 1 : null;
+  }
+
+  function executeItem(
+    item: CommandPaletteActionItem | CommandPaletteSubmenuItem,
+    options?: { readonly inWorktree?: boolean },
+  ): void {
     if (item.disabled) {
       return;
     }
@@ -3114,7 +3186,8 @@ function OpenCommandPaletteDialog(props: {
       setOpen(false);
     }
 
-    void item.run().catch((error: unknown) => {
+    const run = options?.inWorktree && item.runInWorktree ? item.runInWorktree : item.run;
+    void run().catch((error: unknown) => {
       toastManager.add(
         stackedThreadToast({
           type: "error",
@@ -3348,16 +3421,30 @@ function OpenCommandPaletteDialog(props: {
           ? "Select"
           : undefined;
 
-  const footerTrailing = canOpenProjectFromFileManager ? (
-    <CommandFooterAction
-      disabled={isPickingProjectFolder}
-      onClick={() => {
-        void handleOpenProjectFromFileManager();
-      }}
-    >
-      {`Open in ${fileManagerName}`}
-    </CommandFooterAction>
-  ) : null;
+  const hasWorktreeItems = displayedGroups.some((group) =>
+    group.items.some((item) => item.kind === "action" && item.runInWorktree !== undefined),
+  );
+  const footerTrailing =
+    canOpenProjectFromFileManager || hasWorktreeItems ? (
+      <div className="flex items-center gap-3">
+        {hasWorktreeItems ? (
+          <KbdGroup>
+            <Kbd>Shift</Kbd>
+            <span>New worktree</span>
+          </KbdGroup>
+        ) : null}
+        {canOpenProjectFromFileManager ? (
+          <CommandFooterAction
+            disabled={isPickingProjectFolder}
+            onClick={() => {
+              void handleOpenProjectFromFileManager();
+            }}
+          >
+            {`Open in ${fileManagerName}`}
+          </CommandFooterAction>
+        ) : null}
+      </div>
+    ) : null;
 
   return (
     <CommandPaletteContent
@@ -3445,6 +3532,7 @@ function OpenCommandPaletteDialog(props: {
         highlightedItemValue={highlightedItemValue}
         isActionsOnly={isActionsOnly}
         keybindings={keybindings}
+        shiftHeld={shiftHeld}
         onExecuteItem={executeItem}
         {...(addProjectCloneFlow?.step === "repository"
           ? {

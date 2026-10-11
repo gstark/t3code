@@ -151,6 +151,8 @@ export interface CommandPaletteActionItem extends CommandPaletteItem {
   readonly kind: "action";
   readonly keepOpen?: boolean;
   readonly run: () => Promise<void>;
+  /** Runs the item in a new worktree. Rows that have it show a worktree button. */
+  readonly runInWorktree?: () => Promise<void>;
 }
 
 export interface CommandPaletteSubmenuItem extends CommandPaletteItem {
@@ -213,6 +215,7 @@ export function buildProjectActionItems(input: {
   valuePrefix: string;
   icon: (project: CommandPaletteProject) => ReactNode;
   runProject: (project: CommandPaletteProject) => Promise<void>;
+  runProjectInWorktree?: (project: CommandPaletteProject) => Promise<void>;
   searchTerms?: (project: CommandPaletteProject) => ReadonlyArray<string>;
   renderDescription?: (project: CommandPaletteProject) => ReactNode;
   shortcutCommand?: KeybindingCommand;
@@ -233,6 +236,9 @@ export function buildProjectActionItems(input: {
     run: async () => {
       await input.runProject(project);
     },
+    ...(input.runProjectInWorktree !== undefined
+      ? { runInWorktree: () => input.runProjectInWorktree!(project) }
+      : {}),
   }));
 }
 
