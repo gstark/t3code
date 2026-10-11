@@ -1,12 +1,18 @@
 import type { GitActionActivityPayload } from "@t3tools/contracts";
-import { ChevronRightIcon, CloudUploadIcon, GitBranchPlusIcon, GitCommitIcon } from "lucide-react";
+import {
+  ChevronRightIcon,
+  CloudUploadIcon,
+  GitBranchPlusIcon,
+  GitCommitIcon,
+  Trash2Icon,
+} from "lucide-react";
 import { type MouseEvent, type ReactNode, useState } from "react";
 
 import { PullRequestGlyph } from "~/components/pullRequest/pullRequestIcons";
 import { cn } from "~/lib/utils";
 
 /**
- * Timeline record of a commit, push, or pull request made from the git
+ * Timeline record of a commit, push, pull request, or land made from the git
  * controls. Collapsed it shows the action's summary; expanded it lists each
  * step the action took.
  */
@@ -17,13 +23,17 @@ export function GitActionCard(props: {
 }) {
   const { label, gitAction, onOpenPr } = props;
   const [expanded, setExpanded] = useState(false);
-  const { branch, commit, push, pr } = gitAction;
-  const Icon =
-    pr.status !== "skipped_not_requested"
-      ? PullRequestGlyph.pullRequest
-      : push.status === "pushed"
-        ? CloudUploadIcon
-        : GitCommitIcon;
+  const { branch, commit, push, pr, land } = gitAction;
+  const merged = land?.fromSha && land.toSha ? { fromSha: land.fromSha, toSha: land.toSha } : null;
+  const Icon = merged
+    ? PullRequestGlyph.merged
+    : land
+      ? Trash2Icon
+      : pr.status !== "skipped_not_requested"
+        ? PullRequestGlyph.pullRequest
+        : push.status === "pushed"
+          ? CloudUploadIcon
+          : GitCommitIcon;
 
   return (
     <div className="mt-2 rounded-lg bg-secondary dark:bg-input/20">
@@ -54,6 +64,14 @@ export function GitActionCard(props: {
               {commit.subject}
             </GitActionStep>
           ) : null}
+          {land && merged ? (
+            <GitActionStep icon={<PullRequestGlyph.merged />} term="Merge">
+              <Code>{land.branch}</Code> into <Code>{land.baseBranch}</Code>{" "}
+              <Code>
+                {merged.fromSha.slice(0, 7)}..{merged.toSha.slice(0, 7)}
+              </Code>
+            </GitActionStep>
+          ) : null}
           {push.status === "pushed" ? (
             <GitActionStep icon={<CloudUploadIcon />} term="Push">
               {push.branch ? <Code>{push.branch}</Code> : "Branch"}
@@ -64,6 +82,12 @@ export function GitActionCard(props: {
                 </>
               ) : null}
               {push.setUpstream ? " (set upstream)" : null}
+            </GitActionStep>
+          ) : null}
+          {land ? (
+            <GitActionStep icon={<Trash2Icon />} term="Cleanup">
+              Removed worktree <Code>{land.removedWorktreePath}</Code> and branch{" "}
+              <Code>{land.branch}</Code>
             </GitActionStep>
           ) : null}
           {pr.status !== "skipped_not_requested" ? (

@@ -15,9 +15,17 @@ export const GitStackedAction = Schema.Literals([
   "create_pr",
   "commit_push",
   "commit_push_pr",
+  "land",
 ]);
 export type GitStackedAction = typeof GitStackedAction.Type;
-export const GitActionProgressPhase = Schema.Literals(["branch", "commit", "push", "pr"]);
+export const GitActionProgressPhase = Schema.Literals([
+  "branch",
+  "commit",
+  "merge",
+  "push",
+  "pr",
+  "cleanup",
+]);
 export type GitActionProgressPhase = typeof GitActionProgressPhase.Type;
 export const GitActionProgressKind = Schema.Literals([
   "action_started",
@@ -333,6 +341,22 @@ export const GitActionActivityPayload = Schema.Struct({
     headBranch: Schema.optional(TrimmedNonEmptyStringSchema),
     title: Schema.optional(TrimmedNonEmptyStringSchema),
   }),
+  /**
+   * Present when a `land` action removed a worktree. The SHAs are absent when
+   * the branch had no commits to merge and the action only cleaned up.
+   */
+  land: Schema.optional(
+    Schema.Struct({
+      branch: TrimmedNonEmptyStringSchema,
+      baseBranch: TrimmedNonEmptyStringSchema,
+      mainCheckoutPath: TrimmedNonEmptyStringSchema,
+      removedWorktreePath: TrimmedNonEmptyStringSchema,
+      /** The base branch before the merge; `fromSha..toSha` is the merged range. */
+      fromSha: Schema.optional(TrimmedNonEmptyStringSchema),
+      /** The merge commit, or the branch head when the merge fast-forwarded. */
+      toSha: Schema.optional(TrimmedNonEmptyStringSchema),
+    }),
+  ),
 });
 export type GitActionActivityPayload = typeof GitActionActivityPayload.Type;
 
