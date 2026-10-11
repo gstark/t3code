@@ -73,6 +73,7 @@ import {
   useTheme,
 } from "../../hooks/useTheme";
 import { useLocalStorage } from "../../hooks/useLocalStorage";
+import { WorkReportSettingsSection } from "~/workReport/WorkReportSettingsSection";
 import {
   useScopedSettings,
   useScopedSettingsMixed,
@@ -2383,6 +2384,8 @@ export function GeneralSettingsPanel() {
           </>
         ) : null}
       </SettingsSection>
+
+      <WorkReportSettingsSection />
 
       <SettingsSection id="behavior" title="Behavior">
         <NotificationSettings />
