@@ -148,6 +148,15 @@ export function makeAcpPlanUpdatedEvent(input: {
   };
 }
 
+/** ACP agents such as Grok put their reason for a shell command in `rawInput.description`. */
+function acpCommandIntent(toolCall: AcpToolCallState): { intent?: string } {
+  const rawInput = toolCall.data.rawInput;
+  if (toolCall.kind !== "execute" || typeof rawInput !== "object" || rawInput === null) return {};
+  const description = (rawInput as { description?: unknown }).description;
+  const intent = typeof description === "string" ? description.trim() : "";
+  return intent ? { intent } : {};
+}
+
 export function makeAcpToolCallEvent(input: {
   readonly stamp: AcpEventStamp;
   readonly provider: ProviderDriverKind;
@@ -172,6 +181,7 @@ export function makeAcpToolCallEvent(input: {
       ...(runtimeStatus ? { status: runtimeStatus } : {}),
       ...(input.toolCall.title ? { title: input.toolCall.title } : {}),
       ...(input.toolCall.detail ? { detail: input.toolCall.detail } : {}),
+      ...acpCommandIntent(input.toolCall),
       ...(Object.keys(input.toolCall.data).length > 0 ? { data: input.toolCall.data } : {}),
     },
     raw: {

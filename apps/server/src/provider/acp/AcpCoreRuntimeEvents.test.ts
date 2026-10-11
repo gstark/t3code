@@ -174,7 +174,10 @@ describe("AcpCoreRuntimeEvents", () => {
           status: "completed",
           title: "Terminal",
           detail: "bun run test",
-          data: { command: "bun run test" },
+          data: {
+            command: "bun run test",
+            rawInput: { command: "bun run test", description: "Run the test suite" },
+          },
         },
         rawPayload: { sessionId: "session-1" },
       }),
@@ -183,6 +186,7 @@ describe("AcpCoreRuntimeEvents", () => {
       payload: {
         itemType: "command_execution",
         status: "completed",
+        intent: "Run the test suite",
       },
     });
 

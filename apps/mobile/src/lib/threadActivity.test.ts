@@ -549,6 +549,37 @@ describe("buildThreadFeed", () => {
     expect(row?.getCopyText()).toBe(`Command run\n${command}\n\n${command}`);
   });
 
+  it("labels a command row with its intent and keeps the command in the body", () => {
+    const command = "bash control.sh > ctl.log 2>&1";
+    const thread = makeThread({
+      id: ThreadId.make("thread-command-intent"),
+      projectId: ProjectId.make("project-1"),
+      title: "Command intent",
+      activities: [
+        makeActivity({
+          id: EventId.make("command-intent"),
+          kind: "tool.completed",
+          tone: "tool",
+          summary: "Command run",
+          createdAt: "2026-09-01T00:00:00.000Z",
+          payload: {
+            itemType: "command_execution",
+            intent: "Rerun the failed specs",
+            data: { command },
+          },
+        }),
+      ],
+    });
+
+    const [group] = buildThreadFeed(thread);
+    expect(group?.type).toBe("activity-group");
+    if (group?.type !== "activity-group") return;
+    const [row] = group.activities;
+    expect(workEntryRowLabel(row!.workEntry)).toBe("Rerun the failed specs");
+    expect(workEntryRowLabel(row!.workEntry, true)).toBe("Rerun the failed specs");
+    expect(row?.getFullDetail()).toContain(command);
+  });
+
   it("keeps OpenCode detail-only output when it equals the command", () => {
     const command = "printf hello";
     const thread = makeThread({

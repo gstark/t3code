@@ -2489,6 +2489,11 @@ export function makeOpenCodeAdapter(
                 ? (part.state.title ?? part.tool)
                 : part.tool;
             const detail = detailFromToolPart(part);
+            // OpenCode's bash tool requires a `description` of why it runs the command.
+            const intent =
+              itemType === "command_execution" && typeof part.state.input.description === "string"
+                ? part.state.input.description.trim()
+                : "";
             const payload = {
               itemType,
               ...(part.state.status === "error"
@@ -2498,6 +2503,7 @@ export function makeOpenCodeAdapter(
                   : { status: "inProgress" as const }),
               ...(title ? { title } : {}),
               ...(detail ? { detail } : {}),
+              ...(intent ? { intent } : {}),
               data: {
                 tool: part.tool,
                 state: part.state,

@@ -3,7 +3,7 @@ export { worktreeSetupAgentStarted } from "@t3tools/client-runtime/worktree-setu
 import * as Equal from "effect/Equal";
 import { shallow } from "zustand/vanilla/shallow";
 import { renderCodexDirectivesForCopy } from "@t3tools/client-runtime/codex-markdown-directives";
-import { commandProgramName } from "@t3tools/client-runtime/work-log/command-label";
+import { commandChainLabel } from "@t3tools/client-runtime/work-log/command-label";
 import {
   liveActivityToolStatus,
   normalizeCompactToolLabel,
@@ -47,6 +47,7 @@ const TIMELINE_MINIMAP_PERSISTENT_GUTTER = 48;
 function singleToolCallLabel(entry: WorkLogEntry): string {
   const toolPresentation = resolveWorkEntryToolPresentation(entry, "completed");
   if (toolPresentation) return toolPresentation.displayName;
+  if (entry.intent) return entry.intent;
   const command = entry.command?.trim();
   if (command) return command;
   const heading = normalizeCompactToolLabel(entry.toolTitle || entry.label);
@@ -56,6 +57,7 @@ function singleToolCallLabel(entry: WorkLogEntry): string {
 export function workEntryDisplayLabel(entry: WorkLogEntry, workspaceRoot: string | undefined) {
   const toolPresentation = resolveWorkEntryToolPresentation(entry);
   if (toolPresentation) return toolPresentation.displayName;
+  if (entry.intent) return entry.intent;
   if (entry.command) return entry.command;
   if (entry.detail) return entry.detail;
   const [firstPath] = entry.changedFiles ?? [];
@@ -80,6 +82,7 @@ export function liveWorkEntryLabel(
     toolLifecycleStatus: status,
   });
   if (toolPresentation) return toolPresentation.displayName;
+  if (entry.intent) return entry.intent;
   const command = entry.command?.trim();
   if (command) {
     const verb =
@@ -92,7 +95,7 @@ export function liveWorkEntryLabel(
             : status === "stopped"
               ? "Stopped"
               : "Ran";
-    return `${verb} ${commandProgramName(command) ?? "command"}`;
+    return `${verb} ${commandChainLabel(command)}`;
   }
   return workEntryDisplayLabel(entry, workspaceRoot);
 }

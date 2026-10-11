@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { commandProgramName } from "./commandLabel.ts";
+import { commandChainLabel, commandProgramName } from "./commandLabel.ts";
 
 describe("commandProgramName", () => {
   it.each([
@@ -475,5 +475,22 @@ describe("commandProgramName", () => {
 
   it("bounds nested command wrappers", () => {
     expect(commandProgramName(`${"command ".repeat(9)}git status`)).toBeNull();
+  });
+});
+
+describe("commandChainLabel", () => {
+  it.each([
+    [
+      `cat failed.txt | tr '\\n' ' '; echo; bash control.sh > ctl.log 2>&1; grep -E "x|y" ctl.log; grep -c "z" rails.log`,
+      "cat, tr, echo, bash, grep, grep",
+    ],
+    ["cd apps/web && vp test run foo.test.ts", "vp"],
+    ["/bin/zsh -lc 'vp test run apps/web/src/session-logic.test.ts'", "vp"],
+    ["cat <<EOF > notes.txt\nhello\nEOF\nls", "cat, ls"],
+    ['while ! grep -q "done" e2e.log; do sleep 20; done; tail e2e.log', "tail"],
+    ["[[ -f a && -f b ]] && make", "command"],
+    ["for f in *.ts; do echo $f; done", "command"],
+  ])("labels %j as %j", (command, label) => {
+    expect(commandChainLabel(command)).toBe(label);
   });
 });
