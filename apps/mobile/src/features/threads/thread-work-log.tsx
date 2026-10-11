@@ -352,7 +352,7 @@ function workRowSymbolName(icon: ThreadFeedActivity["icon"]): AppSymbolName {
     case "check":
       return { ios: "checkmark", android: "check" };
     case "command":
-      return { ios: "terminal", android: "terminal" };
+      return { ios: "command", android: "keyboard_command_key" };
     case "computer":
       return { ios: "desktopcomputer", android: "desktop_windows" };
     case "edit":
@@ -897,17 +897,9 @@ const ThreadWorkLogRow = memo(function ThreadWorkLogRow(
               {props.renderImage({ href: viewedImagePath, alt: null, title: null })}
             </View>
           ) : null}
-          <ScrollView
-            nestedScrollEnabled
-            directionalLockEnabled
-            showsVerticalScrollIndicator
-            className="max-h-60"
-            contentContainerStyle={{ paddingRight: 8 }}
-          >
-            <Text selectable className="font-mono text-2xs leading-normal text-foreground-muted">
-              {fullDetail}
-            </Text>
-          </ScrollView>
+          <Text selectable className="pr-2 font-mono text-2xs leading-normal text-foreground-muted">
+            {fullDetail}
+          </Text>
         </Animated.View>
       ) : null}
     </Animated.View>
@@ -1349,7 +1341,7 @@ function toolGroupSummarySymbolName(kind: ToolGroupSummaryKind): AppSymbolName {
     case "edit":
       return { ios: "square.and.pencil", android: "edit" };
     case "command":
-      return { ios: "terminal", android: "terminal" };
+      return { ios: "command", android: "keyboard_command_key" };
     case "device":
       return { ios: "iphone", android: "smartphone" };
     case "browser":
