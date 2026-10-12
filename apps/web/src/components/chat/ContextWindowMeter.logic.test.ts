@@ -5,6 +5,7 @@ import {
   formatContextWindowCompactionMessage,
   hasAvailableCompactionProvider,
   hasDismissedResumeCompaction,
+  resolveCompactDisabledReason,
   resolveContextWindowModelDisplayName,
   shouldOfferResumeCompaction,
   shouldReserveContextWindowMeter,
@@ -284,5 +285,48 @@ describe("shouldReserveContextWindowMeter", () => {
     expect(shouldReserveContextWindowMeter({ ...loadingStartedThread, meterEnabled: false })).toBe(
       false,
     );
+  });
+});
+
+describe("resolveCompactDisabledReason", () => {
+  const ready = {
+    hasProject: true,
+    isServerThread: true,
+    providerSupportsCompaction: true,
+    hasCompactableConversation: true,
+    environmentUnavailable: false,
+    threadDetailLoading: false,
+    isPreparingWorktree: false,
+    isWorking: false,
+    hasPendingApproval: false,
+    hasPendingUserInput: false,
+    hasPlanFollowUp: false,
+    feedbackUploading: false,
+  };
+
+  it("allows compaction when nothing blocks it", () => {
+    expect(resolveCompactDisabledReason(ready)).toBeNull();
+  });
+
+  it("names the blocking condition", () => {
+    expect(resolveCompactDisabledReason({ ...ready, isWorking: true })).toBe(
+      "Wait for the agent to finish before compacting",
+    );
+    expect(resolveCompactDisabledReason({ ...ready, hasPendingUserInput: true })).toBe(
+      "Answer the agent's question before compacting",
+    );
+    expect(resolveCompactDisabledReason({ ...ready, hasCompactableConversation: false })).toBe(
+      "Send a message before compacting",
+    );
+  });
+
+  it("reports a missing provider capability before a transient block", () => {
+    expect(
+      resolveCompactDisabledReason({
+        ...ready,
+        providerSupportsCompaction: false,
+        isWorking: true,
+      }),
+    ).toBe("Compaction is unavailable for this provider");
   });
 });

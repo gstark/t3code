@@ -404,6 +404,7 @@ import { ComposerSurface } from "./chat/ComposerSurface";
 import {
   hasAvailableCompactionProvider,
   hasDismissedResumeCompaction,
+  resolveCompactDisabledReason,
   shouldOfferResumeCompaction,
 } from "./chat/ContextWindowMeter.logic";
 import { deriveLatestContextWindowSnapshot, formatContextWindowTokens } from "../lib/contextWindow";
@@ -6397,28 +6398,22 @@ export default function ChatView(props: ChatViewProps) {
     activeThread?.messages.some(
       (message) => message.role === "user" && !isCompactCommandMessage(message),
     ) ?? false;
-  const compactThreadUnavailable =
-    !activeThread ||
-    !activeThreadHasCompactableConversation ||
-    !activeProject ||
-    !isServerThread ||
-    !manualCompactionProviderAvailable ||
-    isWorking ||
-    threadDetailLoading ||
-    isPreparingWorktree ||
-    activeEnvironmentUnavailable ||
-    feedbackUploading ||
-    pendingApprovals.length > 0 ||
-    pendingUserInputs.length > 0 ||
-    showPlanFollowUpPrompt;
+  const compactDisabledReason = resolveCompactDisabledReason({
+    hasProject: Boolean(activeProject),
+    isServerThread: Boolean(activeThread) && isServerThread,
+    providerSupportsCompaction: manualCompactionProviderAvailable,
+    hasCompactableConversation: activeThreadHasCompactableConversation,
+    environmentUnavailable: activeEnvironmentUnavailable,
+    threadDetailLoading,
+    isPreparingWorktree,
+    isWorking,
+    hasPendingApproval: pendingApprovals.length > 0,
+    hasPendingUserInput: pendingUserInputs.length > 0,
+    hasPlanFollowUp: showPlanFollowUpPrompt,
+    feedbackUploading,
+  });
+  const compactThreadUnavailable = compactDisabledReason !== null;
   const compactDisabled = compactThreadUnavailable;
-  const compactDisabledReason = compactDisabled
-    ? !activeProject
-      ? "Choose a project before compacting"
-      : !manualCompactionProviderAvailable
-        ? "Compaction is unavailable for this provider"
-        : "Compacting is unavailable right now"
-    : null;
   const resumeCompactionBannerItem = useMemo<ComposerBannerStackItem | null>(() => {
     if (
       !activeThread ||
