@@ -16,13 +16,30 @@ function formatPercentage(value: number | null): string | null {
   return `${Math.round(value)}%`;
 }
 
+const USAGE_BAR_SEGMENTS = [0, 1, 2, 3];
+
+/** Splits usage into quarter cells so the gaps mark the full length and the 25% steps at any fill level. */
 function ContextWindowUsageBar(props: { percentage: number; color: string; className: string }) {
+  const segmentSize = 100 / USAGE_BAR_SEGMENTS.length;
   return (
-    <span className={cn("block overflow-hidden rounded-full bg-muted/60", props.className)}>
-      <span
-        className="block h-full rounded-full transition-[width,background-color] duration-500 ease-out motion-reduce:transition-none"
-        style={{ width: `${props.percentage}%`, backgroundColor: props.color }}
-      />
+    <span className={cn("flex gap-0.5", props.className)}>
+      {USAGE_BAR_SEGMENTS.map((index) => {
+        const fill = Math.max(
+          0,
+          Math.min(1, (props.percentage - index * segmentSize) / segmentSize),
+        );
+        return (
+          <span
+            key={index}
+            className="block h-full flex-1 overflow-hidden rounded-xs bg-muted-foreground/20"
+          >
+            <span
+              className="block h-full transition-[width,background-color] duration-500 ease-out motion-reduce:transition-none"
+              style={{ width: `${fill * 100}%`, backgroundColor: props.color }}
+            />
+          </span>
+        );
+      })}
     </span>
   );
 }
@@ -48,7 +65,9 @@ export function ContextWindowMeter(props: {
   const isOverloaded = normalizedPercentage > 90;
   const usageColor = isOverloaded
     ? "var(--color-error)"
-    : "color-mix(in oklab, var(--color-muted-foreground) 72%, transparent)";
+    : normalizedPercentage >= 75
+      ? "var(--color-warning)"
+      : "color-mix(in oklab, var(--color-foreground) 80%, transparent)";
   const usageSummary =
     usage.maxTokens !== null && usedPercentage
       ? `${usedPercentage} · ${formatContextWindowTokens(usage.usedTokens)}/${formatContextWindowTokens(usage.maxTokens ?? null)}`
@@ -72,7 +91,7 @@ export function ContextWindowMeter(props: {
                   <ContextWindowUsageBar
                     percentage={normalizedPercentage}
                     color={usageColor}
-                    className="h-1 w-12"
+                    className="h-1.5 w-16"
                   />
                 ) : null}
                 {usageSummary}
@@ -137,7 +156,7 @@ export function ContextWindowMeter(props: {
               <ContextWindowUsageBar
                 percentage={normalizedPercentage}
                 color={usageColor}
-                className="h-1.5 w-full"
+                className="h-2 w-full"
               />
             </div>
           ) : null}
