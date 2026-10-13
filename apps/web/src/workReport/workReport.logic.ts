@@ -1,4 +1,5 @@
-import type { OrchestrationThreadShell, WorkReportSettings } from "@t3tools/contracts";
+import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/shell";
+import type { WorkReportSettings } from "@t3tools/contracts";
 
 const HOUR_MS = 60 * 60 * 1000;
 /** Matches the server: a first report, with no cursor yet, covers the last 7 days. */
@@ -17,7 +18,7 @@ export function workReportCountSince(settings: WorkReportSettings, nowMs: number
 /** Threads settled after `since`, leaving out the reports folder's own threads. */
 export function countPendingWorkReportThreads(
   threads: ReadonlyArray<
-    Pick<OrchestrationThreadShell, "projectId" | "settledOverride" | "settledAt">
+    Pick<EnvironmentThreadShell, "projectId" | "settledOverride" | "settledAt">
   >,
   input: { readonly since: string; readonly reportsProjectId: string | null },
 ): number {

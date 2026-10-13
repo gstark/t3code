@@ -9,7 +9,8 @@ import {
 } from "../../providerInstances";
 import { getTriggerDisplayModelName, type ModelEsque } from "./providerIconUtils";
 
-const CLAUDE_RESUME_COMPACTION_MINUTES = 70;
+// Used when the provider did not report its cache TTL: Claude's 1h cache plus slack.
+const CLAUDE_RESUME_COMPACTION_FALLBACK_MS = 70 * 60_000;
 const CLAUDE_RESUME_COMPACTION_TOKENS = 100_000;
 
 export function providerSupportsManualCompaction(
@@ -60,10 +61,13 @@ export function hasDismissedResumeCompaction(
   });
 }
 
+/** True once a large Claude context's prompt cache has expired, so the next
+    turn would re-read all of it uncached. */
 export function shouldOfferResumeCompaction(input: {
   readonly provider: string | null | undefined;
   readonly usedTokens: number | null | undefined;
   readonly updatedAt: string | null | undefined;
+  readonly promptCacheTtlMs?: number | undefined;
   readonly now: string;
 }): boolean {
   if (
@@ -78,7 +82,7 @@ export function shouldOfferResumeCompaction(input: {
   return (
     Number.isFinite(updatedAt) &&
     Number.isFinite(now) &&
-    now - updatedAt >= CLAUDE_RESUME_COMPACTION_MINUTES * 60_000
+    now - updatedAt >= (input.promptCacheTtlMs ?? CLAUDE_RESUME_COMPACTION_FALLBACK_MS)
   );
 }
 
@@ -141,6 +145,7 @@ export function shouldReserveContextWindowMeter(input: {
  * order, so the reason names the first thing the user must fix.
  */
 export function resolveCompactDisabledReason(input: {
+  readonly canOperateThread: boolean;
   readonly hasProject: boolean;
   readonly isServerThread: boolean;
   readonly providerSupportsCompaction: boolean;
@@ -149,11 +154,13 @@ export function resolveCompactDisabledReason(input: {
   readonly threadDetailLoading: boolean;
   readonly isPreparingWorktree: boolean;
   readonly isWorking: boolean;
+  readonly isRevertingCheckpoint: boolean;
   readonly hasPendingApproval: boolean;
   readonly hasPendingUserInput: boolean;
   readonly hasPlanFollowUp: boolean;
   readonly feedbackUploading: boolean;
 }): string | null {
+  if (!input.canOperateThread) return "This connection cannot change threads.";
   if (!input.hasProject) return "Choose a project before compacting";
   if (!input.providerSupportsCompaction) return "Compaction is unavailable for this provider";
   if (!input.isServerThread || !input.hasCompactableConversation) {
@@ -163,9 +170,18 @@ export function resolveCompactDisabledReason(input: {
   if (input.threadDetailLoading) return "Wait for the thread to load";
   if (input.isPreparingWorktree) return "Wait for the worktree to be ready";
   if (input.isWorking) return "Wait for the agent to finish before compacting";
+  if (input.isRevertingCheckpoint) return "Wait for the checkpoint restore to finish";
   if (input.hasPendingApproval) return "Answer the pending approval before compacting";
   if (input.hasPendingUserInput) return "Answer the agent's question before compacting";
   if (input.hasPlanFollowUp) return "Respond to the plan before compacting";
   if (input.feedbackUploading) return "Wait for the feedback upload to finish";
   return null;
+}
+
+export function formatContextWindowCost(cost: {
+  readonly amount: number;
+  readonly currency: string;
+}): string {
+  const fractionDigits = Math.abs(cost.amount) > 0 && Math.abs(cost.amount) < 0.01 ? 4 : 2;
+  return `${cost.currency} ${cost.amount.toFixed(fractionDigits)}`;
 }
