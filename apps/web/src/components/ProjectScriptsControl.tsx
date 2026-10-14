@@ -6,6 +6,7 @@ import {
   type T3ProjectFileScript,
   type ResolvedKeybindingsConfig,
 } from "@t3tools/contracts";
+import type { JustRecipe } from "@t3tools/shared/justfile";
 import { useAtomValue } from "@effect/atom-react";
 import { DEFAULT_RESOLVED_KEYBINDINGS } from "@t3tools/shared/keybindings";
 import {
@@ -58,6 +59,7 @@ import {
 export type { NewProjectScriptInput, ProjectScriptActionResult };
 
 const NO_FILE_SCRIPTS: ReadonlyArray<T3ProjectFileScript> = [];
+const NO_JUST_RECIPES: ReadonlyArray<JustRecipe> = [];
 
 interface ProjectScriptsControlProps {
   displayMode?: "toolbar" | "panel";
@@ -67,8 +69,11 @@ interface ProjectScriptsControlProps {
   scripts: ReadonlyArray<ProjectScript>;
   /** Scripts declared in the project's checked-in t3.json, offered for import. */
   fileScripts?: ReadonlyArray<T3ProjectFileScript>;
+  /** Recipes from the project's justfile, run directly without saving. */
+  justRecipes?: ReadonlyArray<JustRecipe>;
   preferredScriptId?: string | null;
   onRunScript?: ((script: ProjectScript) => void) | undefined;
+  onRunJustRecipe?: ((recipe: JustRecipe) => void) | undefined;
   onAddScript: (input: NewProjectScriptInput) => Promise<ProjectScriptActionResult>;
   onUpdateScript: (
     scriptId: string,
@@ -84,8 +89,10 @@ export default function ProjectScriptsControl({
   environmentId,
   scripts,
   fileScripts = NO_FILE_SCRIPTS,
+  justRecipes = NO_JUST_RECIPES,
   preferredScriptId = null,
   onRunScript,
+  onRunJustRecipe,
   onAddScript,
   onUpdateScript,
   onDeleteScript,
@@ -125,6 +132,15 @@ export default function ProjectScriptsControl({
       ),
     [fileScripts, scripts],
   );
+  // A recipe already saved as an action shows once, as that action.
+  const runnableRecipes = useMemo(
+    () =>
+      justRecipes.filter(
+        (recipe) => !scripts.some((script) => script.command === `just ${recipe.name}`),
+      ),
+    [justRecipes, scripts],
+  );
+  const hasMenuExtras = importableScripts.length > 0 || runnableRecipes.length > 0;
 
   const openAddDialog = () => {
     setEditorRequest({ scriptId: null, initial: EMPTY_PROJECT_SCRIPT_INPUT });
@@ -189,6 +205,27 @@ export default function ProjectScriptsControl({
     </>
   );
 
+  const justMenuItems = runnableRecipes.length > 0 && (
+    <>
+      {(scripts.length > 0 || importableScripts.length > 0) && <MenuSeparator />}
+      <MenuGroup>
+        <MenuGroupLabel>From justfile</MenuGroupLabel>
+        {runnableRecipes.map((recipe) => (
+          <MenuItem
+            density={presentation === "menu" ? "touch" : "default"}
+            key={recipe.name}
+            {...(recipe.doc ? { title: recipe.doc } : {})}
+            disabled={!onRunJustRecipe}
+            onClick={() => onRunJustRecipe?.(recipe)}
+          >
+            <ScriptIcon icon="play" className="size-4" />
+            <MenuItemLabel>{recipe.name}</MenuItemLabel>
+          </MenuItem>
+        ))}
+      </MenuGroup>
+    </>
+  );
+
   const scriptItems = (
     <>
       {scripts.map((script) => {
@@ -243,6 +280,7 @@ export default function ProjectScriptsControl({
         );
       })}
       {importMenuItems}
+      {justMenuItems}
       <MenuItem density={presentation === "menu" ? "touch" : "default"} onClick={openAddDialog}>
         <PlusIcon className="size-4" />
         <MenuItemLabel>{isPanel ? "Add project script" : "Add action"}</MenuItemLabel>
@@ -267,7 +305,7 @@ export default function ProjectScriptsControl({
               </MenuShortcut>
             </MenuItem>
           )}
-          {scripts.length > 0 || importableScripts.length > 0 ? (
+          {scripts.length > 0 || hasMenuExtras ? (
             <MenuSub
               open={actionsMenuOpen.scripts}
               onOpenChange={(open) =>
@@ -370,9 +408,9 @@ export default function ProjectScriptsControl({
             </MenuPopup>
           </Menu>
         </ActionGroup>
-      ) : scripts.length > 0 || importableScripts.length > 0 ? (
-        // No one-click action (only a settle action, or only t3.json imports),
-        // so the saved actions stay reachable through this menu.
+      ) : scripts.length > 0 || hasMenuExtras ? (
+        // No one-click action (only a settle action, t3.json imports, or justfile
+        // recipes), so the saved actions stay reachable through this menu.
         isPanel ? (
           <div
             role="group"
