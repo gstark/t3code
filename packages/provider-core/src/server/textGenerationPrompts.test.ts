@@ -44,6 +44,27 @@ describe("buildCommitMessagePrompt", () => {
     expect(result.prompt).toContain("Return a JSON object with keys: subject, body, branch.");
   });
 
+  it("adds the thread conversation only when there is one", () => {
+    const base = { branch: "main", stagedSummary: "M a.ts", stagedPatch: "diff" };
+    const withContext = buildCommitMessagePrompt({
+      ...base,
+      threadContext: "USER:\nFix the login loop",
+    });
+    expect(withContext.prompt).toContain("Conversation that produced this change.");
+    expect(withContext.prompt).toContain("Fix the login loop");
+    expect(buildCommitMessagePrompt(base).prompt).not.toContain("Conversation that produced");
+    expect(
+      buildPrContentPrompt({
+        baseBranch: "main",
+        headBranch: "fix/login",
+        commitSummary: "fix login",
+        diffSummary: "a.ts",
+        diffPatch: "diff",
+        threadContext: "USER:\nFix the login loop",
+      }).prompt,
+    ).toContain("Fix the login loop");
+  });
+
   it("shows (detached) when branch is null", () => {
     const result = buildCommitMessagePrompt({
       branch: null,

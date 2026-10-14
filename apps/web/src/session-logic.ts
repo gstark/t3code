@@ -557,6 +557,12 @@ function projectedWorkEntry(row: OrchestrationV2ProjectedTurnItem): WorkLogEntry
         detail: item.prompt ?? item.requestKind,
         toolData: item,
       };
+    case "git_action":
+      return {
+        ...common,
+        label: item.summary,
+        gitAction: item.gitAction,
+      };
     case "user_input_request":
       return {
         ...common,

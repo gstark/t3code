@@ -583,6 +583,8 @@ function itemIcon(item: OrchestrationV2TurnItem): ThreadFeedActivity["icon"] {
       return "zap";
     case "secret_request":
       return "lock";
+    case "git_action":
+      return "check";
   }
 }
 
@@ -641,6 +643,8 @@ function itemSummary(
       return "Thread created";
     case "secret_request":
       return item.label;
+    case "git_action":
+      return item.summary;
     case "dynamic_tool": {
       const classified = classifyToolActivity({
         itemType: "dynamic_tool_call",
@@ -700,6 +704,8 @@ function itemPreview(item: OrchestrationV2TurnItem): string | null {
       return item.targetThreadId;
     case "secret_request":
       return item.reason || null;
+    case "git_action":
+      return item.gitAction.commit.subject ?? item.gitAction.pr.url ?? null;
     case "subagent":
       return item.result ?? item.progress ?? item.prompt;
     case "dynamic_tool":

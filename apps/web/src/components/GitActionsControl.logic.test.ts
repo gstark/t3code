@@ -501,13 +501,13 @@ describe("when: ref is behind upstream", () => {
 });
 
 describe("when: ref has diverged from upstream", () => {
-  it("resolveQuickAction returns a disabled sync hint", () => {
+  it("resolveQuickAction rebases and pushes", () => {
     const quick = resolveQuickAction(status({ aheadCount: 2, behindCount: 1 }), false);
     assert.deepEqual(quick, {
-      label: "Sync ref",
-      disabled: true,
-      kind: "show_hint",
-      hint: "Branch has diverged from upstream. Rebase/merge first.",
+      label: "Rebase & push",
+      disabled: false,
+      kind: "run_action",
+      action: "push",
     });
   });
 });

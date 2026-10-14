@@ -1,3 +1,4 @@
+import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import { assert, it } from "@effect/vitest";
 import {
   CommandId,
@@ -23,6 +24,7 @@ import * as Layer from "effect/Layer";
 import * as SqlClient from "effect/sql/SqlClient";
 import * as SqlitePersistence from "../persistence/Sqlite.ts";
 import { CodexProviderCapabilitiesV2 } from "./Adapters/CodexAdapterV2.ts";
+import { askAgentToResolveRebase } from "../git/askAgentToResolveRebase.ts";
 import * as Orchestrator from "./Orchestrator.ts";
 import * as ProjectionStore from "./ProjectionStore.ts";
 import * as ProviderAdapterRegistry from "./ProviderAdapterRegistry.ts";
@@ -622,5 +624,101 @@ it.effect("keeps delegated child pull-request links independent of the parent", 
     const parentAfterChildLink = yield* projections.getThreadProjection(parentThreadId);
     assert.deepEqual(parentAfterChildLink.thread.linkedPullRequest, parentPullRequest);
     assert.deepEqual(parentAfterChildLink.thread.pullRequests, parent.thread.pullRequests);
+  }).pipe(Effect.provide(layerTest)),
+);
+
+it.effect("records a git action as a runless row that the next turn start reads", () =>
+  Effect.gen(function* () {
+    const orchestrator = yield* Orchestrator.OrchestratorV2;
+    const projections = yield* ProjectionStore.ProjectionStoreV2;
+    const threadId = ThreadId.make("thread:git-action");
+    yield* orchestrator.dispatch({
+      type: "thread.create",
+      commandId: CommandId.make("create-git-action"),
+      threadId,
+      projectId: ProjectId.make("project:git-action"),
+      title: "Git action",
+      modelSelection,
+      runtimeMode: "full-access",
+      interactionMode: "default",
+      branch: "feature/git-action",
+      worktreePath: null,
+      createdBy: "user",
+      creationSource: "web",
+    });
+    yield* orchestrator.dispatch({
+      type: "thread.git-action.record",
+      commandId: CommandId.make("record-git-action"),
+      threadId,
+      turnItemId: TurnItemId.make("git-action:1"),
+      summary: "Committed abc1234",
+      gitAction: {
+        action: "commit",
+        branch: { status: "skipped_not_requested" },
+        commit: { status: "created", commitSha: "abc1234def", subject: "fix: a thing" },
+        push: { status: "skipped_not_requested" },
+        pr: { status: "skipped_not_requested" },
+      },
+    });
+
+    const recorded = yield* projections.getThreadProjection(threadId);
+    assert.deepEqual(recorded.runs, []);
+    assert.deepEqual(
+      recorded.visibleTurnItems.map((row) => [row.item.type, row.item.runId]),
+      [["git_action", null]],
+    );
+
+    yield* orchestrator.dispatch({
+      type: "message.dispatch",
+      commandId: CommandId.make("start-after-git-action"),
+      threadId,
+      messageId: MessageId.make("message:after-git-action"),
+      text: "Keep going",
+      attachments: [],
+      dispatchMode: { type: "start_immediately" },
+      createdBy: "user",
+      creationSource: "web",
+    });
+    const runId = (yield* projections.getThreadProjection(threadId)).runs[0]!.id;
+    const context = yield* projections.getTurnStartContext(threadId, runId);
+    assert.include(
+      context.turnItems.map((item) => item.id),
+      TurnItemId.make("git-action:1"),
+    );
+  }).pipe(Effect.provide(layerTest)),
+);
+
+it.effect("hands a conflicted rebase to the thread's agent as a system notification", () =>
+  Effect.gen(function* () {
+    const orchestrator = yield* Orchestrator.OrchestratorV2;
+    const projections = yield* ProjectionStore.ProjectionStoreV2;
+    const threadId = ThreadId.make("thread:rebase-conflict");
+    yield* orchestrator.dispatch({
+      type: "thread.create",
+      commandId: CommandId.make("create-rebase-conflict"),
+      threadId,
+      projectId: ProjectId.make("project:rebase-conflict"),
+      title: "Rebase conflict",
+      modelSelection,
+      runtimeMode: "full-access",
+      interactionMode: "default",
+      branch: "feature",
+      worktreePath: null,
+      createdBy: "user",
+      creationSource: "web",
+    });
+
+    const asked = yield* askAgentToResolveRebase({
+      threadId,
+      conflict: { cwd: "/repo", branch: "feature", onto: "origin/main", files: ["README.md"] },
+    }).pipe(Effect.provide(NodeCrypto.layer));
+
+    assert.isTrue(asked);
+    const projection = yield* projections.getThreadProjection(threadId);
+    assert.lengthOf(projection.runs, 1);
+    const message = projection.messages.find((candidate) => candidate.role === "user");
+    assert.include(message?.text, "- README.md");
+    assert.include(message?.text, "git rebase --continue");
+    assert.equal(message?.notification?.source.kind, "system");
   }).pipe(Effect.provide(layerTest)),
 );
