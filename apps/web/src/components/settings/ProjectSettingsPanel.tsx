@@ -157,6 +157,7 @@ export function ProjectSettingsPanel({
     <ProjectDetail
       key={`${selected.projectKey}:${environmentId ?? "all"}:${checkoutKey ?? "all"}`}
       group={scopedGroup}
+      groupMembers={selected.memberProjects}
       hasOtherMembers={members.length < selected.memberProjects.length}
     />
   );
@@ -164,9 +165,12 @@ export function ProjectSettingsPanel({
 
 function ProjectDetail({
   group,
+  groupMembers,
   hasOtherMembers,
 }: {
   group: SidebarProjectSnapshot;
+  /** Every checkout in the group, even when the settings scope narrows `group`. */
+  groupMembers: ReadonlyArray<SidebarProjectGroupMember>;
   hasOtherMembers: boolean;
 }) {
   const navigate = useNavigate({ from: "/settings" });
@@ -537,12 +541,7 @@ function ProjectDetail({
               </div>
             }
           />
-          {hasOtherMembers ? null : (
-            <ProjectDefaultEnvironmentRow
-              projectKey={group.projectKey}
-              members={group.memberProjects}
-            />
-          )}
+          <ProjectDefaultEnvironmentRow projectKey={group.projectKey} members={groupMembers} />
         </SettingsSection>
         <ProjectDefaultsSettings category="project" />
         <ProjectActionsSettings />
