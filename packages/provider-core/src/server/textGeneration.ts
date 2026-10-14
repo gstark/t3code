@@ -16,6 +16,8 @@ export interface CommitMessageGenerationInput {
   stagedPatch: string;
   /** When true, the model also returns a semantic branch name for the change. */
   includeBranch?: boolean;
+  /** Conversation that produced the change; explains why, never what. */
+  threadContext?: string | undefined;
   policy?: TextGenerationPolicy | undefined;
   /** What model and provider to use for generation. */
   modelSelection: ModelSelection;
@@ -36,6 +38,8 @@ export interface PrContentGenerationInput {
   diffSummary: string;
   diffPatch: string;
   changeRequestTemplate?: string | undefined;
+  /** Conversation that produced the change; explains why, never what. */
+  threadContext?: string | undefined;
   policy?: TextGenerationPolicy | undefined;
   /** What model and provider to use for generation. */
   modelSelection: ModelSelection;

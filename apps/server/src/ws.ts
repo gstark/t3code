@@ -42,6 +42,8 @@ import {
   type OrchestrationClientOrigin,
   type OrchestrationV2Command,
   type GitActionProgressEvent,
+  type GitRunStackedActionInput,
+  GitManagerError,
   type GitManagerServiceError,
   type GitRunStackedActionResult,
   type MessageId,
@@ -203,6 +205,9 @@ import * as VcsProvisioningService from "./vcs/VcsProvisioningService.ts";
 import * as GitWorkflowService from "./git/GitWorkflowService.ts";
 import { refreshPushedPullRequests } from "./git/refreshPushedPullRequests.ts";
 import { linkCreatedPullRequest } from "./git/linkCreatedPullRequest.ts";
+import { recordGitAction } from "./git/recordGitAction.ts";
+import { askAgentToResolveRebase } from "./git/askAgentToResolveRebase.ts";
+import { formatThreadTitleContext } from "@t3tools/provider-core/server/threadTitleContext";
 import * as ReviewService from "./review/ReviewService.ts";
 import * as ProjectEnrichmentService from "./project/ProjectEnrichmentService.ts";
 import * as ProjectService from "./project/ProjectService.ts";
@@ -1759,6 +1764,46 @@ const layerWsRpc = (
       // A landed worktree is gone, so its thread continues in the main checkout
       // on the base branch. Never fails: the land already succeeded, so a lost
       // update is only logged.
+      // The thread's conversation, so generated commit and PR text can say why.
+      // A plain push writes nothing, and a failed read only loses that context.
+      const gitWriterThreadContext = (input: GitRunStackedActionInput) =>
+        input.threadId === undefined || input.action === "push"
+          ? Effect.succeed(undefined)
+          : threadManagement
+              .getThreadRecords(input.threadId, ["messages"], {
+                messageRoles: ["user", "assistant"],
+              })
+              .pipe(
+                Effect.map(
+                  ({ messages }) =>
+                    formatThreadTitleContext(messages.filter((message) => !message.streaming))
+                      .message || undefined,
+                ),
+                Effect.catch(() =>
+                  Effect.logWarning("failed to read thread context for a git action", {
+                    threadId: input.threadId,
+                  }).pipe(Effect.as(undefined)),
+                ),
+              );
+
+      // A rebase that stopped on conflicts goes to the thread's agent. The
+      // action still fails, and its message says who is resolving it.
+      const handOffRebaseConflict = (threadId: ThreadId | undefined, error: GitManagerError) =>
+        threadId === undefined || error.rebaseConflict === undefined
+          ? Effect.succeed(error)
+          : askAgentToResolveRebase({ threadId, conflict: error.rebaseConflict }).pipe(
+              Effect.provideService(Orchestrator.OrchestratorV2, orchestrationEngine),
+              Effect.provideService(Crypto.Crypto, crypto),
+              Effect.map((asked) =>
+                asked
+                  ? new GitManagerError({
+                      ...error,
+                      detail: `${error.detail} Asked the agent to resolve it.`,
+                    })
+                  : error,
+              ),
+            );
+
       const moveLandedThreadToMainCheckout = (
         threadId: ThreadId,
         land: NonNullable<GitRunStackedActionResult["land"]>,
@@ -2851,17 +2896,44 @@ const layerWsRpc = (
             }),
           ),
         [WS_METHODS.gitRunStackedAction]: (input) =>
-          Stream.callback<GitActionProgressEvent, GitManagerServiceError>((queue) =>
-            gitWorkflow
-              .runStackedAction(input, {
-                actionId: input.actionId,
-                progressReporter: {
-                  publish: (event) => Queue.offer(queue, event).pipe(Effect.asVoid),
-                },
-              })
+          Stream.callback<GitActionProgressEvent, GitManagerServiceError>((queue) => {
+            // Clients show the failure event's message, so it waits until a
+            // rebase conflict hand-off can say the agent is resolving it.
+            let failure: Extract<GitActionProgressEvent, { kind: "action_failed" }> | undefined;
+            return gitWriterThreadContext(input)
+              .pipe(
+                Effect.flatMap((threadContext) =>
+                  gitWorkflow.runStackedAction(input, {
+                    actionId: input.actionId,
+                    progressReporter: {
+                      publish: (event) =>
+                        event.kind === "action_failed"
+                          ? Effect.sync(() => {
+                              failure = event;
+                            })
+                          : Queue.offer(queue, event).pipe(Effect.asVoid),
+                    },
+                    ...(threadContext === undefined ? {} : { threadContext }),
+                  }),
+                ),
+                Effect.catchTags({
+                  GitManagerError: (error) =>
+                    handOffRebaseConflict(input.threadId, error).pipe(
+                      Effect.tap((handedOff) =>
+                        Effect.sync(() => {
+                          if (failure) failure = { ...failure, message: handedOff.message };
+                        }),
+                      ),
+                      Effect.flatMap(Effect.fail),
+                    ),
+                }),
+              )
               .pipe(
                 Effect.matchCauseEffect({
-                  onFailure: (cause) => Queue.failCause(queue, cause),
+                  onFailure: (cause) =>
+                    (failure === undefined ? Effect.void : Queue.offer(queue, failure)).pipe(
+                      Effect.andThen(Queue.failCause(queue, cause)),
+                    ),
                   onSuccess: (result) =>
                     (input.threadId === undefined
                       ? Effect.void
@@ -2889,12 +2961,23 @@ const layerWsRpc = (
                           ? Effect.void
                           : moveLandedThreadToMainCheckout(input.threadId, result.land),
                       ),
+                      Effect.andThen(
+                        input.threadId === undefined
+                          ? Effect.void
+                          : recordGitAction({ threadId: input.threadId, result }).pipe(
+                              Effect.provideService(
+                                Orchestrator.OrchestratorV2,
+                                orchestrationEngine,
+                              ),
+                              Effect.provideService(Crypto.Crypto, crypto),
+                            ),
+                      ),
                       Effect.andThen(refreshGitStatus(result.land?.mainCheckoutPath ?? input.cwd)),
                       Effect.andThen(Queue.end(queue).pipe(Effect.asVoid)),
                     ),
                 }),
-              ),
-          ),
+              );
+          }),
         [WS_METHODS.gitResolvePullRequest]: (input) => gitWorkflow.resolvePullRequest(input),
         [WS_METHODS.gitPreparePullRequestThread]: (input) =>
           gitWorkflow

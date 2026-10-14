@@ -22,6 +22,19 @@ function policyInstruction(instruction: string | undefined): ReadonlyArray<strin
   return trimmed ? ["", "Additional instructions:", limitSection(trimmed, 20_000)] : [];
 }
 
+// The patch decides what changed. The conversation only explains why, and it can
+// mention work that was dropped or never staged.
+function threadContextSection(context: string | undefined): ReadonlyArray<string> {
+  const trimmed = context?.trim();
+  return trimmed
+    ? [
+        "",
+        "Conversation that produced this change. Use it for intent and motivation only; describe only what the patch shows:",
+        limitSection(trimmed, 8_000),
+      ]
+    : [];
+}
+
 // ---------------------------------------------------------------------------
 // Commit message
 // ---------------------------------------------------------------------------
@@ -31,6 +44,7 @@ export interface CommitMessagePromptInput {
   stagedSummary: string;
   stagedPatch: string;
   includeBranch?: boolean;
+  threadContext?: string | undefined;
   policy?: TextGenerationPolicy | undefined;
 }
 
@@ -52,6 +66,7 @@ export function buildCommitMessagePrompt(input: CommitMessagePromptInput) {
     ...policyInstruction(input.policy?.commitInstructions),
     "",
     `Branch: ${input.branch ?? "(detached)"}`,
+    ...threadContextSection(input.threadContext),
     "",
     "Staged files:",
     limitSection(input.stagedSummary, 6_000),
@@ -91,6 +106,7 @@ export interface PrContentPromptInput {
   diffSummary: string;
   diffPatch: string;
   changeRequestTemplate?: string | undefined;
+  threadContext?: string | undefined;
   policy?: TextGenerationPolicy | undefined;
 }
 
@@ -121,6 +137,7 @@ export function buildPrContentPrompt(input: PrContentPromptInput) {
     "",
     `Base branch: ${input.baseBranch}`,
     `Head branch: ${input.headBranch}`,
+    ...threadContextSection(input.threadContext),
     "",
     "Commits:",
     limitSection(input.commitSummary, 12_000),

@@ -107,6 +107,7 @@ export function fromRunner(name: string, run: Runner): ProviderTextGeneration {
         stagedSummary: input.stagedSummary,
         stagedPatch: input.stagedPatch,
         includeBranch: input.includeBranch === true,
+        threadContext: input.threadContext,
         policy: input.policy,
       }),
     });
@@ -134,6 +135,7 @@ export function fromRunner(name: string, run: Runner): ProviderTextGeneration {
         diffPatch: input.diffPatch,
         policy: input.policy,
         changeRequestTemplate: input.changeRequestTemplate,
+        threadContext: input.threadContext,
       }),
     });
     return { title: sanitizePrTitle(generated.title), body: generated.body.trim() };

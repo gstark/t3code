@@ -138,7 +138,16 @@ make your first commit before pushing.
 ## Create a pull request
 
 Use a thread's Git actions to commit, push, and create a pull request. T3 Code can generate commit
-messages, review titles, and descriptions from your changes.
+messages, review titles, and descriptions from your changes. The generated text also reads the
+thread's conversation to explain why you made the change. The thread shows each Git action, and
+the agent learns about it at the start of its next turn.
+
+Before a push or pull request, T3 Code fetches the remote. It then rebases the branch onto its
+upstream and onto the default branch when either has new commits. A rebase that rewrites pushed
+commits pushes with `--force-with-lease`. **Land worktree** rebases the branch onto the base
+branch in the worktree before it merges. If a rebase stops on conflicts, the rebase stays in
+progress and the thread's agent is asked to resolve it. Run the action again when the agent is
+done.
 
 An existing fork PR can appear beside the branch even if you pushed without setting an upstream.
 If its badge is missing because several remotes hold that branch, set the branch's upstream to

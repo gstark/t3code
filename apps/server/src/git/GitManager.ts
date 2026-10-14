@@ -95,6 +95,8 @@ export interface GitActionProgressReporter {
 export interface GitRunStackedActionOptions {
   readonly actionId?: string;
   readonly progressReporter?: GitActionProgressReporter;
+  /** Recent conversation from the thread the action runs beside, so messages can say why. */
+  readonly threadContext?: string;
 }
 
 export interface GitRemoteStatusOptions extends GitVcsDriver.GitRemoteStatusOptions {
@@ -114,6 +116,7 @@ export type GitBranchPullRequest = NonNullable<VcsStatusResult["pr"]> & {
 interface SourceControlTextGenerationSettings {
   readonly modelSelection: ModelSelection;
   readonly style: SourceControlWritingStyleSettings;
+  readonly threadContext?: string;
 }
 
 export class GitManager extends Context.Service<
@@ -2097,6 +2100,7 @@ export const make = Effect.gen(function* () {
           branch: input.branch,
           stagedSummary: limitContext(context.stagedSummary, 8_000),
           stagedPatch: limitContext(context.stagedPatch, 50_000),
+          ...(input.settings.threadContext ? { threadContext: input.settings.threadContext } : {}),
           ...(input.includeBranch ? { includeBranch: true } : {}),
           ...(policy ? { policy } : {}),
           modelSelection: input.settings.modelSelection,
@@ -2293,6 +2297,7 @@ export const make = Effect.gen(function* () {
       diffPatch: limitContext(rangeContext.diffPatch, 60_000),
       ...(changeRequestTemplate ? { changeRequestTemplate } : {}),
       ...(policy ? { policy } : {}),
+      ...(settings.threadContext ? { threadContext: settings.threadContext } : {}),
       modelSelection: settings.modelSelection,
     });
 
@@ -2931,6 +2936,126 @@ export const make = Effect.gen(function* () {
     return { branch, worktreePath, mainCheckoutPath, remoteName, baseBranch, merges };
   });
 
+  const failIfRebaseInProgress = Effect.fn("failIfRebaseInProgress")(function* (cwd: string) {
+    for (const dir of ["rebase-merge", "rebase-apply"]) {
+      const gitPath = (yield* gitCore.execute({
+        operation: "GitManager.rebase.gitPath",
+        cwd,
+        args: ["rev-parse", "--git-path", dir],
+      })).stdout.trim();
+      if (
+        yield* fileSystem.exists(path.resolve(cwd, gitPath)).pipe(Effect.orElseSucceed(() => false))
+      ) {
+        return yield* new GitManagerError({
+          operation: "rebase",
+          cwd,
+          detail: `A rebase is in progress in ${cwd}. Finish it with "git rebase --continue" or stop it with "git rebase --abort", then try again.`,
+        });
+      }
+    }
+  });
+
+  /**
+   * Rebases `branch`, checked out in `cwd`, onto `onto` when `onto` has commits
+   * the branch lacks. Returns whether it rewrote anything. A conflict leaves the
+   * rebase in progress so an agent or the user can resolve it in place.
+   */
+  const rebaseOnto = Effect.fn("rebaseOnto")(function* (cwd: string, branch: string, onto: string) {
+    const git = (operation: string, args: readonly string[]) =>
+      gitCore.execute({
+        operation: `GitManager.rebase.${operation}`,
+        cwd,
+        args,
+        allowNonZeroExit: true,
+        timeoutMs: null,
+        // Never wait on an editor for a reworded or squashed commit.
+        env: { ...process.env, GIT_EDITOR: "true" },
+      });
+    const behind = Number(
+      (yield* git("behind", ["rev-list", "--count", `HEAD..${onto}`])).stdout.trim(),
+    );
+    if (!(behind > 0)) return false;
+    const rebase = yield* git("run", ["rebase", "--autostash", onto]);
+    if (rebase.exitCode === 0) return true;
+    const files = (yield* git("conflicts", ["diff", "--name-only", "--diff-filter=U"])).stdout
+      .split("\n")
+      .map((file) => file.trim())
+      .filter(Boolean);
+    if (files.length === 0) {
+      yield* git("abort", ["rebase", "--abort"]);
+      return yield* new GitManagerError({
+        operation: "rebase",
+        cwd,
+        detail: `Rebasing ${branch} onto ${onto} failed: ${rebase.stderr.trim() || "git rebase exited with an error"}.`,
+      });
+    }
+    return yield* new GitManagerError({
+      operation: "rebase",
+      cwd,
+      detail: `Rebasing ${branch} onto ${onto} stopped on conflicts in ${files.join(", ")}. The rebase is still in progress in ${cwd}.`,
+      rebaseConflict: { cwd, branch, onto, files },
+    });
+  });
+
+  /**
+   * Brings the branch up to date before it is pushed: rebases onto its
+   * upstream, then onto the remote default branch. Returns whether history was
+   * rewritten, which makes the push need a lease.
+   */
+  const runSyncStep = Effect.fn("runSyncStep")(function* (
+    cwd: string,
+    branch: string,
+    emit: GitActionProgressEmitter,
+  ) {
+    const remoteName = yield* gitCore
+      .resolvePrimaryRemoteName(cwd)
+      .pipe(Effect.orElseSucceed(() => null));
+    if (remoteName === null) return { rebased: false };
+    yield* emit({ kind: "phase_started", phase: "push", label: "Syncing with remote..." });
+    // Offline or unreachable: push without syncing, as before. The push reports its own failure.
+    const fetched = yield* gitCore
+      .execute({
+        operation: "GitManager.sync.fetch",
+        cwd,
+        args: ["fetch", remoteName],
+        timeoutMs: null,
+      })
+      .pipe(
+        Effect.as(true),
+        Effect.catch((error) =>
+          Effect.logWarning("skipped syncing before push: fetch failed", {
+            cwd,
+            error: error.message,
+          }).pipe(Effect.as(false)),
+        ),
+      );
+    if (!fetched) return { rebased: false };
+    const details = yield* gitCore.statusDetails(cwd);
+    let rebased = false;
+    if (details.upstreamRef && details.behindCount > 0) {
+      rebased = (yield* rebaseOnto(cwd, branch, details.upstreamRef)) || rebased;
+    }
+    const defaultBranch = yield* gitCore
+      .resolveDefaultBranchName(cwd, remoteName)
+      .pipe(Effect.orElseSucceed(() => null));
+    // Same fallback as land: a remote added by hand has no HEAD ref.
+    const baseBranch = defaultBranch ?? "main";
+    const remoteDefault = `${remoteName}/${baseBranch}`;
+    if (
+      branch !== baseBranch &&
+      remoteDefault !== details.upstreamRef &&
+      (yield* gitCore.execute({
+        operation: "GitManager.sync.remoteDefault",
+        cwd,
+        args: ["rev-parse", "--verify", "--quiet", `refs/remotes/${remoteDefault}`],
+        allowNonZeroExit: true,
+      })).exitCode === 0
+    ) {
+      rebased = (yield* rebaseOnto(cwd, branch, remoteDefault)) || rebased;
+    }
+    return { rebased };
+  });
+
   /**
    * Merges the worktree branch into the base branch in the main checkout,
    * runs the worktree's `just worktree-complete` recipe when it has one, then
@@ -3055,7 +3180,7 @@ export const make = Effect.gen(function* () {
       return landResult;
     }
 
-    yield* startPhase("merge", `Merging into ${baseBranch}...`);
+    yield* startPhase("merge", `Updating ${baseBranch}...`);
     yield* read("fetch", ["fetch", remoteName]);
     const hasRemoteBase =
       (yield* git("remoteBase", ["rev-parse", "--verify", "--quiet", `refs/remotes/${remoteBase}`]))
@@ -3078,6 +3203,11 @@ export const make = Effect.gen(function* () {
         yield* read("fastForward", ["merge", "--ff-only", remoteBase]);
       }
     }
+    // Rebasing in the worktree first makes the merge a fast-forward, so any
+    // conflict surfaces where the branch's work happened, not in the main checkout.
+    yield* startPhase("merge", `Rebasing onto ${baseBranch}...`);
+    yield* rebaseOnto(worktreePath, branch, baseBranch);
+    yield* startPhase("merge", `Merging into ${baseBranch}...`);
     const fromSha = yield* read("fromSha", ["rev-parse", "HEAD"]);
     yield* mergeOrFail(branch);
     const toSha = yield* read("toSha", ["rev-parse", "HEAD"]);
@@ -3101,6 +3231,8 @@ export const make = Effect.gen(function* () {
         GitRunStackedActionResult,
         GitManagerServiceError
       > {
+        // Mid-rebase HEAD is detached and the tree may hold conflict markers.
+        yield* failIfRebaseInProgress(input.cwd);
         const initialStatus = yield* gitCore.statusDetails(input.cwd);
         const wantsCommit = isCommitAction(input.action);
         const wantsPush =
@@ -3129,7 +3261,7 @@ export const make = Effect.gen(function* () {
           ...(input.featureBranch ? (["branch"] as const) : []),
           ...(wantsCommit && (!wantsLand || landMerges) ? (["commit"] as const) : []),
           ...(landMerges ? (["merge"] as const) : []),
-          ...(wantsPush ? (["push"] as const) : []),
+          ...(wantsPush || wantsPr ? (["push"] as const) : []),
           ...(wantsPr ? (["pr"] as const) : []),
           ...(wantsLand ? (["cleanup"] as const) : []),
         ];
@@ -3175,6 +3307,11 @@ export const make = Effect.gen(function* () {
                     style: settings.sourceControlWritingStyle,
                   })),
                 ),
+          ),
+          Effect.map((settings): SourceControlTextGenerationSettings =>
+            options?.threadContext
+              ? { ...settings, threadContext: options.threadContext }
+              : settings,
           ),
           Effect.mapError(
             (cause) =>
@@ -3238,18 +3375,30 @@ export const make = Effect.gen(function* () {
             )
           : { status: "skipped_not_requested" as const };
 
-        const push = wantsPush
-          ? yield* progress
-              .emit({
-                kind: "phase_started",
-                phase: "push",
-                label: "Pushing...",
-              })
-              .pipe(
-                Effect.tap(() => Ref.set(currentPhase, Option.some("push"))),
-                Effect.flatMap(() => gitCore.pushCurrentBranch(input.cwd, currentBranch)),
+        const sync =
+          (wantsPush || wantsPr) && currentBranch
+            ? yield* Ref.set(currentPhase, Option.some("push")).pipe(
+                Effect.andThen(runSyncStep(input.cwd, currentBranch, progress.emit)),
               )
-          : { status: "skipped_not_requested" as const };
+            : { rebased: false };
+
+        const push =
+          wantsPush || sync.rebased
+            ? yield* progress
+                .emit({
+                  kind: "phase_started",
+                  phase: "push",
+                  label: "Pushing...",
+                })
+                .pipe(
+                  Effect.tap(() => Ref.set(currentPhase, Option.some("push"))),
+                  Effect.flatMap(() =>
+                    gitCore.pushCurrentBranch(input.cwd, currentBranch, {
+                      forceWithLease: sync.rebased,
+                    }),
+                  ),
+                )
+            : { status: "skipped_not_requested" as const };
 
         const landed = landContext
           ? yield* runLandStep(landContext, progress.emit, (phase) =>
