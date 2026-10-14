@@ -106,6 +106,11 @@ release: _require-mine
       --notes "Build of the mine branch at $(git rev-parse --short HEAD), based on upstream v${base}." \
       --latest=false
 
+    # The desktop app installs this exact version on SSH hosts. Publish the
+    # cask only after the Linux archives exist, or a fresh install fails to
+    # prepare SSH environments with a 404.
+    just _wait-archives "$version"
+
     tap_dir="$(brew --repository {{ tap }})"
     git -C "$tap_dir" pull --ff-only
     mkdir -p "$tap_dir/Casks"
@@ -160,18 +165,7 @@ remotes version="":
     fi
     version="${version#v}"
 
-    # The mine-cli-archives workflow attaches the Linux archives after `just release`.
-    for attempt in $(seq 1 40); do
-      if gh release view "v$version" -R {{ fork_repo }} --json assets -q '.assets[].name' | grep -qx SHA256SUMS; then
-        break
-      fi
-      if [[ "$attempt" -eq 40 ]]; then
-        echo "v$version has no Linux archives after 20 minutes. Check the 'Mine CLI archives' workflow." >&2
-        exit 1
-      fi
-      echo "Waiting for the Linux archives of v$version..."
-      sleep 30
-    done
+    just _wait-archives "$version"
 
     failed=()
     for host in {{ remote_hosts }}; do
@@ -204,6 +198,23 @@ update mode="": _require-mine
     just release
     just install
     just remotes
+
+# Wait until the mine-cli-archives workflow attaches the Linux archives to a release
+_wait-archives version:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    version="{{ version }}"
+    for attempt in $(seq 1 40); do
+      if gh release view "v$version" -R {{ fork_repo }} --json assets -q '.assets[].name' | grep -qx SHA256SUMS; then
+        exit 0
+      fi
+      if [[ "$attempt" -eq 40 ]]; then
+        echo "v$version has no Linux archives after 20 minutes. Check the 'Mine CLI archives' workflow." >&2
+        exit 1
+      fi
+      echo "Waiting for the Linux archives of v$version..."
+      sleep 30
+    done
 
 # Print the newest official (non-nightly, non-preview) release tag
 _latest-release:
