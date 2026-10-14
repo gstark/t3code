@@ -77,6 +77,7 @@ import {
   SquarePenIcon,
   SunIcon,
   TextSearchIcon,
+  TriangleAlertIcon,
   FileChartColumnIcon,
 } from "lucide-react";
 import { requestThreadFindOpen } from "./chat/threadFindActionBus";
@@ -247,6 +248,7 @@ import { legacyProjectCwdPreferenceKey, useUiStateStore } from "../uiStateStore"
 import {
   buildSidebarProjectPickerEntries,
   buildSidebarProjectSnapshots,
+  type SidebarProjectPickerEntry,
 } from "../sidebarProjectGrouping";
 import type { Project } from "../types";
 import { PullRequestGlyph } from "~/components/pullRequest/pullRequestIcons";
@@ -915,8 +917,15 @@ function OpenCommandPaletteDialog(props: {
       buildSidebarProjectPickerEntries({
         groups: projectGroups,
         preferredProjectRef: contextualProjectRef,
+        defaultEnvironmentByProjectKey: clientSettings.projectDefaultEnvironments,
+        isEnvironmentConnected: (environmentId) => environmentIds.includes(environmentId),
       }),
-    [contextualProjectRef, projectGroups],
+    [
+      clientSettings.projectDefaultEnvironments,
+      contextualProjectRef,
+      environmentIds,
+      projectGroups,
+    ],
   );
   const pickerProjects = useMemo(
     () =>
@@ -926,15 +935,19 @@ function OpenCommandPaletteDialog(props: {
       })),
     [projectPickerEntries],
   );
-  const projectGroupByTargetKey = useMemo(
+  const projectEntryByTargetKey = useMemo(
     () =>
       new Map(
-        projectPickerEntries.map(({ group, targetProject }) => [
-          `${targetProject.environmentId}:${targetProject.id}`,
-          group,
+        projectPickerEntries.map((entry) => [
+          `${entry.targetProject.environmentId}:${entry.targetProject.id}`,
+          entry,
         ]),
       ),
     [projectPickerEntries],
+  );
+  const projectGroupByTargetKey = useMemo(
+    () => new Map([...projectEntryByTargetKey].map(([key, entry]) => [key, entry.group])),
+    [projectEntryByTargetKey],
   );
 
   const addProjectEnvironmentOptions = useMemo(() => {
@@ -1268,30 +1281,81 @@ function OpenCommandPaletteDialog(props: {
     ],
   );
 
-  const newThreadProjectRef = useCallback(
-    (project: CommandPaletteProject) => {
-      const group = projectGroupByTargetKey.get(`${project.environmentId}:${project.id}`);
-      const contextualRefBelongsToGroup =
-        contextualProjectRef !== null &&
-        group?.memberProjectRefs.some(
-          (projectRef) =>
-            projectRef.environmentId === contextualProjectRef.environmentId &&
-            projectRef.projectId === contextualProjectRef.projectId,
-        );
-      return contextualRefBelongsToGroup
-        ? contextualProjectRef
-        : scopeProjectRef(project.environmentId, project.id);
+  const buildUnavailableDefaultEnvironmentItem = useCallback(
+    (
+      item: CommandPaletteActionItem,
+      availableMembers: SidebarProjectPickerEntry["availableMembers"],
+      defaultEnvironmentId: EnvironmentId,
+    ): CommandPaletteSubmenuItem => {
+      const defaultLabel =
+        projectEnvironmentLocationById.get(defaultEnvironmentId)?.label ?? "Default environment";
+      const memberItems = availableMembers.map((member): CommandPaletteActionItem => {
+        const location = projectEnvironmentLocationById.get(member.environmentId);
+        const projectRef = scopeProjectRef(member.environmentId, member.id);
+        return {
+          kind: "action",
+          value: `new-thread-in-environment:${member.environmentId}:${member.id}`,
+          searchTerms: [location?.label ?? "", member.workspaceRoot],
+          title: location?.label ?? "Remote",
+          description: member.workspaceRoot,
+          icon: (
+            <EnvironmentMachineIcon
+              kind={location?.machine ?? "server"}
+              className={ITEM_ICON_CLASS}
+            />
+          ),
+          run: async () => {
+            await handleNewThread(projectRef);
+          },
+          runInWorktree: async () => {
+            await handleNewThread(projectRef, { envMode: "worktree" });
+          },
+        };
+      });
+      const { run: _run, runInWorktree: _runInWorktree, ...itemWithoutRun } = item;
+      return {
+        ...itemWithoutRun,
+        kind: "submenu",
+        description: (
+          <span className="flex min-w-0 items-center gap-1 text-warning">
+            <TriangleAlertIcon aria-hidden className="size-3 shrink-0" />
+            <span className="truncate">{defaultLabel} unavailable · choose an environment</span>
+          </span>
+        ),
+        addonIcon: <TriangleAlertIcon className={ADDON_ICON_CLASS} />,
+        groups: [
+          {
+            value: "environments",
+            label: `${defaultLabel} is unavailable. Start in:`,
+            items:
+              memberItems.length > 0
+                ? memberItems
+                : [
+                    {
+                      kind: "action",
+                      value: "new-thread-in-environment:none",
+                      searchTerms: [],
+                      title: "No connected environment has this project",
+                      icon: <TriangleAlertIcon className={ITEM_ICON_CLASS} />,
+                      disabled: true,
+                      run: async () => {},
+                    },
+                  ],
+          },
+        ],
+      };
     },
-    [contextualProjectRef, projectGroupByTargetKey],
+    [handleNewThread, projectEnvironmentLocationById],
   );
 
   const projectThreadItems = useMemo(() => {
     const isScratch = (project: CommandPaletteProject) =>
       isScratchProject(project, scratchWorkspaceRootFor(project.environmentId));
+    // The no-project home shows once, as the "No project" item below.
+    const threadProjects = pickerProjects.filter((project) => !isScratch(project));
     const projectItems = enumerateCommandPaletteItems(
       buildProjectActionItems({
-        // The no-project home shows once, as the "No project" item below.
-        projects: pickerProjects.filter((project) => !isScratch(project)),
+        projects: threadProjects,
         valuePrefix: "new-thread-in",
         searchTerms: (project) => {
           const group = projectGroupByTargetKey.get(`${project.environmentId}:${project.id}`);
@@ -1327,11 +1391,24 @@ function OpenCommandPaletteDialog(props: {
         },
         icon: projectFaviconIcon,
         runProject: async (project) => {
-          await handleNewThread(newThreadProjectRef(project));
+          await handleNewThread(scopeProjectRef(project.environmentId, project.id));
         },
         runProjectInWorktree: async (project) => {
-          await handleNewThread(newThreadProjectRef(project), { envMode: "worktree" });
+          await handleNewThread(scopeProjectRef(project.environmentId, project.id), {
+            envMode: "worktree",
+          });
         },
+      }).map((item, index) => {
+        // A project whose default environment cannot take the thread does not
+        // fall back silently: Enter opens a choice of the connected checkouts.
+        const project = threadProjects[index]!;
+        const entry = projectEntryByTargetKey.get(`${project.environmentId}:${project.id}`);
+        if (!entry || entry.unavailableDefaultEnvironmentId === null) return item;
+        return buildUnavailableDefaultEnvironmentItem(
+          item,
+          entry.availableMembers,
+          entry.unavailableDefaultEnvironmentId,
+        );
       }),
     );
     if (scratchTargetEnvironmentId === null) return projectItems;
@@ -1355,9 +1432,10 @@ function OpenCommandPaletteDialog(props: {
       ...projectItems.slice(noProjectIndex),
     ];
   }, [
+    buildUnavailableDefaultEnvironmentItem,
     handleNewThread,
-    newThreadProjectRef,
     pickerProjects,
+    projectEntryByTargetKey,
     projectEnvironmentLocationById,
     projectGroupByTargetKey,
     scratchTargetEnvironmentId,

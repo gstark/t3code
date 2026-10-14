@@ -10,6 +10,7 @@ import * as Duration from "effect/Duration";
 import * as Schema from "effect/Schema";
 import * as SchemaTransformation from "effect/SchemaTransformation";
 import {
+  EnvironmentId,
   ForwardCompatibleNullable,
   ForwardCompatibleOptional,
   IsoDateTime,
@@ -483,6 +484,10 @@ export const ClientSettingsSchema = Schema.Struct({
     TrimmedNonEmptyString,
     SidebarProjectGroupingMode,
   ).pipe(Schema.withDecodingDefault(Effect.succeed({}))),
+  // Logical project key -> environment that new threads in that project start in.
+  projectDefaultEnvironments: Schema.Record(TrimmedNonEmptyString, EnvironmentId).pipe(
+    Schema.withDecodingDefault(Effect.succeed({})),
+  ),
   sidebarProjectSortOrder: SidebarProjectSortOrder.pipe(
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_SIDEBAR_PROJECT_SORT_ORDER)),
   ),
@@ -1779,6 +1784,9 @@ export const ClientSettingsPatch = Schema.Struct({
   sidebarProjectGroupingMode: Schema.optionalKey(SidebarProjectGroupingMode),
   sidebarProjectGroupingOverrides: Schema.optionalKey(
     Schema.Record(TrimmedNonEmptyString, SidebarProjectGroupingMode),
+  ),
+  projectDefaultEnvironments: Schema.optionalKey(
+    Schema.Record(TrimmedNonEmptyString, EnvironmentId),
   ),
   sidebarProjectSortOrder: Schema.optionalKey(SidebarProjectSortOrder),
   sidebarThreadSortOrder: Schema.optionalKey(SidebarThreadSortOrder),
