@@ -60,14 +60,12 @@ export function buildMenuItems(
   const hasBranch = gitStatus.refName !== null;
   const hasChanges = gitStatus.hasWorkingTreeChanges;
   const hasOpenPr = gitStatus.pr?.state === "open";
-  const isBehind = gitStatus.behindCount > 0;
   const canPushWithoutUpstream = hasOriginRemote && !gitStatus.hasUpstream;
   const canCommit = !isBusy && hasChanges;
   const canPush =
     !isBusy &&
     hasBranch &&
     !hasChanges &&
-    !isBehind &&
     gitStatus.aheadCount > 0 &&
     (gitStatus.hasUpstream || canPushWithoutUpstream);
   const canCreatePr =
@@ -75,7 +73,6 @@ export function buildMenuItems(
     hasBranch &&
     !hasOpenPr &&
     (gitStatus.aheadOfDefaultCount ?? gitStatus.aheadCount) > 0 &&
-    !isBehind &&
     (gitStatus.hasUpstream || canPushWithoutUpstream);
   const canOpenPr = !isBusy && hasOpenPr;
 
@@ -205,12 +202,13 @@ export function resolveQuickAction(
     };
   }
 
+  // Pushing rebases onto the upstream first; a conflict goes to the agent.
   if (isDiverged) {
     return {
-      label: "Sync branch",
-      disabled: true,
-      kind: "show_hint",
-      hint: "Branch has diverged from upstream. Rebase/merge first.",
+      label: "Rebase & push",
+      disabled: false,
+      kind: "run_action",
+      action: "push",
     };
   }
 
@@ -266,7 +264,6 @@ export function getGitActionDisabledReason(input: {
   const hasChanges = gitStatus.hasWorkingTreeChanges;
   const hasOpenPr = gitStatus.pr?.state === "open";
   const isAhead = gitStatus.aheadCount > 0;
-  const isBehind = gitStatus.behindCount > 0;
   const terminology = changeRequestTerminologyFor(gitStatus);
 
   if (item.id === "commit") {
@@ -282,9 +279,6 @@ export function getGitActionDisabledReason(input: {
     }
     if (hasChanges) {
       return "Commit or stash local changes before pushing.";
-    }
-    if (isBehind) {
-      return "Branch is behind upstream. Pull/rebase before pushing.";
     }
     if (!gitStatus.hasUpstream && !hasOriginRemote) {
       return 'Add an "origin" remote before pushing.';
@@ -306,9 +300,6 @@ export function getGitActionDisabledReason(input: {
   }
   if ((gitStatus.aheadOfDefaultCount ?? gitStatus.aheadCount) <= 0) {
     return `No local commits to include in ${terminology.shortLabelWithArticle}.`;
-  }
-  if (isBehind) {
-    return `Branch is behind upstream. Pull/rebase before creating ${terminology.shortLabelWithArticle}.`;
   }
   return `Create ${terminology.shortLabel} is currently unavailable.`;
 }

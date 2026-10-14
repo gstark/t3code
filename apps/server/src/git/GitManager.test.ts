@@ -273,6 +273,37 @@ function makeLandableWorktree() {
   });
 }
 
+/**
+ * A pushed `feature` branch with one commit touching `featureFile`, while
+ * another clone has pushed a commit to main that also writes `featureFile`
+ * when it is README.md, or `main.txt` otherwise.
+ */
+function makeDivergedFeature(featureFile: string) {
+  return Effect.gen(function* () {
+    const repoDir = yield* makeTempDir("t3code-git-manager-");
+    yield* initRepo(repoDir);
+    const remoteDir = yield* createBareRemote();
+    yield* runGit(repoDir, ["remote", "add", "origin", remoteDir]);
+    yield* runGit(repoDir, ["push", "-u", "origin", "main"]);
+    yield* runGit(repoDir, ["checkout", "-b", "feature"]);
+    NodeFS.writeFileSync(NodePath.join(repoDir, featureFile), "feature\n");
+    yield* runGit(repoDir, ["add", featureFile]);
+    yield* runGit(repoDir, ["commit", "-m", "Add feature"]);
+    yield* runGit(repoDir, ["push", "-u", "origin", "feature"]);
+
+    const otherDir = yield* makeTempDir("t3code-git-other-");
+    yield* runGit(otherDir, ["clone", "--branch", "main", remoteDir, "."]);
+    yield* runGit(otherDir, ["config", "user.email", "other@example.com"]);
+    yield* runGit(otherDir, ["config", "user.name", "Other User"]);
+    const mainFile = featureFile === "README.md" ? "README.md" : "main.txt";
+    NodeFS.writeFileSync(NodePath.join(otherDir, mainFile), "main\n");
+    yield* runGit(otherDir, ["add", mainFile]);
+    yield* runGit(otherDir, ["commit", "-m", "Advance main"]);
+    yield* runGit(otherDir, ["push", "origin", "main"]);
+    return { repoDir, remoteDir, otherDir };
+  });
+}
+
 function createTextGeneration(
   overrides: Partial<FakeGitTextGeneration> = {},
 ): TextGeneration.TextGeneration["Service"] {
@@ -2423,6 +2454,31 @@ it.layer(layerGitManagerTest)("GitManager", (it) => {
     }),
   );
 
+  it.effect("gives the commit message writer the thread conversation", () =>
+    Effect.gen(function* () {
+      const repoDir = yield* makeTempDir("t3code-git-manager-");
+      yield* initRepo(repoDir);
+      NodeFS.writeFileSync(NodePath.join(repoDir, "README.md"), "hello\nworld\n");
+      let threadContext: string | undefined = undefined;
+
+      const { manager } = yield* makeManager({
+        textGeneration: {
+          generateCommitMessage: (input) => {
+            threadContext = input.threadContext;
+            return Effect.succeed({ subject: "Greet the world", body: "" });
+          },
+        },
+      });
+      yield* runStackedAction(
+        manager,
+        { cwd: repoDir, action: "commit" },
+        { threadContext: "USER:\nThe README must greet the world." },
+      );
+
+      expect(threadContext).toBe("USER:\nThe README must greet the world.");
+    }),
+  );
+
   it.effect("includes CLAUDE.md for Claude writers only when it differs from AGENTS.md", () =>
     Effect.gen(function* () {
       const repoDir = yield* makeTempDir("t3code-git-manager-");
@@ -2845,6 +2901,104 @@ it.layer(layerGitManagerTest)("GitManager", (it) => {
       expect((yield* runGit(worktreeDir, ["status", "--porcelain"])).stdout.trim()).toBe(
         "?? feature.txt",
       );
+    }),
+  );
+
+  it.effect("rebases a pushed branch onto the updated default branch before pushing", () =>
+    Effect.gen(function* () {
+      const { repoDir, remoteDir, otherDir } = yield* makeDivergedFeature("other.txt");
+
+      const { manager } = yield* makeManager();
+      const result = yield* runStackedAction(manager, { cwd: repoDir, action: "push" });
+
+      expect(result.push.status).toBe("pushed");
+      // The remote branch was rewritten onto the new main, which the lease allowed.
+      const remoteMain = (yield* runGit(otherDir, ["rev-parse", "HEAD"])).stdout.trim();
+      expect(
+        (yield* runGit(
+          remoteDir,
+          ["--git-dir=.", "merge-base", "--is-ancestor", remoteMain, "feature"],
+          true,
+        )).exitCode,
+      ).toBe(0);
+      expect(
+        (yield* runGit(remoteDir, [
+          "--git-dir=.",
+          "log",
+          "-1",
+          "--pretty=%s",
+          "feature",
+        ])).stdout.trim(),
+      ).toBe("Add feature");
+    }),
+  );
+
+  it.effect("leaves a conflicting rebase in progress and reports its files", () =>
+    Effect.gen(function* () {
+      const { repoDir, remoteDir } = yield* makeDivergedFeature("README.md");
+      const remoteFeatureBefore = (yield* runGit(remoteDir, [
+        "--git-dir=.",
+        "rev-parse",
+        "feature",
+      ])).stdout;
+
+      const { manager } = yield* makeManager();
+      const error = yield* runStackedAction(manager, { cwd: repoDir, action: "push" }).pipe(
+        Effect.flip,
+      );
+
+      expect(error).toMatchObject({
+        _tag: "GitManagerError",
+        rebaseConflict: {
+          cwd: repoDir,
+          branch: "feature",
+          onto: "origin/main",
+          files: ["README.md"],
+        },
+      });
+      expect(
+        NodeFS.existsSync(
+          NodePath.resolve(
+            repoDir,
+            (yield* runGit(repoDir, ["rev-parse", "--git-path", "rebase-merge"])).stdout.trim(),
+          ),
+        ),
+      ).toBe(true);
+      expect((yield* runGit(remoteDir, ["--git-dir=.", "rev-parse", "feature"])).stdout).toBe(
+        remoteFeatureBefore,
+      );
+
+      const retry = yield* runStackedAction(manager, { cwd: repoDir, action: "push" }).pipe(
+        Effect.flip,
+      );
+      expect(retry.message).toContain("A rebase is in progress");
+    }),
+  );
+
+  it.effect("rebases a landing branch in its worktree so conflicts stay there", () =>
+    Effect.gen(function* () {
+      const { repoDir, worktreeDir } = yield* makeLandableWorktree();
+      NodeFS.writeFileSync(NodePath.join(worktreeDir, "README.md"), "from the worktree\n");
+      yield* runGit(worktreeDir, ["commit", "-am", "Edit README in worktree"]);
+      NodeFS.writeFileSync(NodePath.join(repoDir, "README.md"), "from main\n");
+      yield* runGit(repoDir, ["commit", "-am", "Edit README on main"]);
+      const mainBefore = (yield* runGit(repoDir, ["rev-parse", "main"])).stdout;
+
+      const { manager } = yield* makeManager();
+      const error = yield* runStackedAction(manager, { cwd: worktreeDir, action: "land" }).pipe(
+        Effect.flip,
+      );
+
+      expect(error).toMatchObject({
+        rebaseConflict: {
+          cwd: NodeFS.realpathSync(worktreeDir),
+          branch: "feature/land",
+          onto: "main",
+          files: ["README.md"],
+        },
+      });
+      expect((yield* runGit(repoDir, ["rev-parse", "main"])).stdout).toBe(mainBefore);
+      expect((yield* runGit(repoDir, ["status", "--porcelain"])).stdout.trim()).toBe("");
     }),
   );
 
@@ -3770,6 +3924,12 @@ it.layer(layerGitManagerTest)("GitManager", (it) => {
         "remote",
         "add",
         "origin",
+        "git@github.com:pingdotgg/codething-mvp.git",
+      ]);
+      // The sync before a push fetches origin; keep that fetch local.
+      yield* runGit(repoDir, [
+        "config",
+        `url.${yield* createBareRemote()}.insteadOf`,
         "git@github.com:pingdotgg/codething-mvp.git",
       ]);
       yield* runGit(repoDir, ["checkout", "-b", "statemachine"]);
@@ -5232,6 +5392,11 @@ it.layer(layerGitManagerTest)("GitManager", (it) => {
             event.kind === "phase_started",
         ),
       ).toEqual([
+        expect.objectContaining({
+          kind: "phase_started",
+          phase: "push",
+          label: "Syncing with remote...",
+        }),
         expect.objectContaining({
           kind: "phase_started",
           phase: "pr",

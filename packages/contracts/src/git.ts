@@ -319,13 +319,7 @@ export const VcsSwitchRefResult = Schema.Struct({
 });
 export type VcsSwitchRefResult = typeof VcsSwitchRefResult.Type;
 
-/**
- * Thread activity kind the server appends after a stacked git action commits,
- * pushes, or opens a pull request beside a thread.
- */
-export const GIT_ACTION_ACTIVITY_KIND = "git.action.completed";
-
-/** Payload of a `git.action.completed` activity: the action's result without its toast. */
+/** A stacked git action's result without its toast, as recorded in the thread. */
 export const GitActionActivityPayload = Schema.Struct({
   action: GitStackedAction,
   branch: Schema.Struct({
@@ -433,10 +427,20 @@ export class TextGenerationError extends Schema.TaggedError<TextGenerationError>
   }
 }
 
+/** A rebase the action started that stopped on conflicts. It is left in progress in `cwd`. */
+export const GitRebaseConflict = Schema.Struct({
+  cwd: TrimmedNonEmptyStringSchema,
+  branch: TrimmedNonEmptyStringSchema,
+  onto: TrimmedNonEmptyStringSchema,
+  files: Schema.Array(TrimmedNonEmptyStringSchema),
+});
+export type GitRebaseConflict = typeof GitRebaseConflict.Type;
+
 export class GitManagerError extends Schema.TaggedError<GitManagerError>()("GitManagerError", {
   operation: Schema.String,
   cwd: Schema.String,
   detail: Schema.String,
+  rebaseConflict: Schema.optional(GitRebaseConflict),
   cause: Schema.optional(Schema.Defect()),
 }) {
   override get message(): string {

@@ -16,6 +16,8 @@ export interface CommitMessageGenerationInput {
   stagedSummary: string;
   stagedPatch: string;
   includeBranch?: boolean;
+  /** Conversation that produced the change; explains why, never what. */
+  threadContext?: string | undefined;
   policy?: TextGenerationPolicy | undefined;
   modelSelection: ModelSelection;
 }

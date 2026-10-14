@@ -82,6 +82,7 @@ export function fromRunner(name: string, run: Runner): ProviderTextGeneration {
         stagedSummary: input.stagedSummary,
         stagedPatch: input.stagedPatch,
         includeBranch: input.includeBranch === true,
+        threadContext: input.threadContext,
         policy: input.policy,
       }),
     });
