@@ -3,6 +3,7 @@ import { composerDraftHasUserContent, useComposerDraftStore } from "~/composerDr
 import { resolveEnvironmentMachineKind, type ScopedProjectRef } from "@t3tools/contracts";
 import { scopedProjectKey, scopeProjectRef } from "@t3tools/client-runtime/environment";
 import { isScratchProject } from "@t3tools/client-runtime/state/projects";
+import { canCreateProjectInEnvironment } from "@t3tools/client-runtime/operations/projects";
 import { FolderPlusIcon } from "lucide-react";
 import { useAtomValue } from "@effect/atom-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -68,6 +69,9 @@ export function DraftHeroHeadline({
   const primaryEnvironmentId = usePrimaryEnvironmentId();
   const projectGroupingSettings = useClientSettings(selectProjectGroupingSettings);
   const projectSortOrder = useClientSettings((settings) => settings.sidebarProjectSortOrder);
+  const projectDefaultEnvironments = useClientSettings(
+    (settings) => settings.projectDefaultEnvironments,
+  );
   const setLogicalProjectDraftThreadId = useComposerDraftStore(
     (store) => store.setLogicalProjectDraftThreadId,
   );
@@ -133,8 +137,17 @@ export function DraftHeroHeadline({
       buildSidebarProjectPickerEntries({
         groups: projectGroups,
         preferredProjectRef: activeProjectRef,
+        defaultEnvironmentByProjectKey: projectDefaultEnvironments,
+        // An unavailable default falls back here: the draft's environment
+        // picker shows where the thread will start.
+        isEnvironmentConnected: (environmentId) =>
+          environments.some(
+            (environment) =>
+              environment.environmentId === environmentId &&
+              canCreateProjectInEnvironment(environment.connection.phase),
+          ),
       }),
-    [activeProjectRef, projectGroups],
+    [activeProjectRef, environments, projectDefaultEnvironments, projectGroups],
   );
   const projectEntryByKey = useMemo(
     () => new Map(projectPickerEntries.map((entry) => [entry.group.projectKey, entry] as const)),
