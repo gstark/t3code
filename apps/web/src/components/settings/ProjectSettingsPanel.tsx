@@ -26,12 +26,14 @@ import {
   type SidebarProjectSnapshot,
 } from "../../sidebarProjectGrouping";
 import { useEnvironments, usePrimaryEnvironmentId } from "../../state/environments";
+import { updateClientSettings, useClientSettings } from "../../hooks/useSettings";
 import { useThreadShells, waitForProjectRemoval } from "../../state/entities";
 import { projectEnvironment } from "../../state/projects";
 import { ProjectFavicon } from "../ProjectFavicon";
 import { Alert, AlertDescription } from "../ui/alert";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
+import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { stackedThreadToast, toastManager } from "../ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import {
@@ -164,6 +166,7 @@ export function ProjectSettingsPanel({
     <ProjectDetail
       key={`${selected.projectKey}:${environmentId ?? "all"}:${checkoutKey ?? "all"}`}
       group={scopedGroup}
+      groupMembers={selected.memberProjects}
       hasOtherMembers={members.length < selected.memberProjects.length}
     />
   );
@@ -171,9 +174,12 @@ export function ProjectSettingsPanel({
 
 function ProjectDetail({
   group,
+  groupMembers,
   hasOtherMembers,
 }: {
   group: SidebarProjectSnapshot;
+  /** Every checkout in the group, even when the settings scope narrows `group`. */
+  groupMembers: ReadonlyArray<SidebarProjectGroupMember>;
   hasOtherMembers: boolean;
 }) {
   const navigate = useNavigate({ from: "/settings" });
@@ -559,6 +565,7 @@ function ProjectDetail({
               </div>
             }
           />
+          <ProjectDefaultEnvironmentRow projectKey={group.projectKey} members={groupMembers} />
         </SettingsSection>
         <ProjectDefaultsSettings category="project" />
         <ProjectActionsSettings />
@@ -622,5 +629,71 @@ function ProjectDetail({
         </Suspense>
       ) : null}
     </>
+  );
+}
+
+const NO_DEFAULT_ENVIRONMENT = "none";
+
+/** Picks the environment new threads in this project start in. Stored per client. */
+function ProjectDefaultEnvironmentRow({
+  projectKey,
+  members,
+}: {
+  projectKey: string;
+  members: ReadonlyArray<SidebarProjectGroupMember>;
+}) {
+  const defaults = useClientSettings((settings) => settings.projectDefaultEnvironments);
+  const { environments } = useEnvironments();
+  const labelById = new Map(environments.map((entry) => [entry.environmentId, entry.label]));
+  const options = [...new Set(members.map((member) => member.environmentId))];
+  const current = defaults[projectKey] ?? null;
+  if (options.length < 2 && current === null) return null;
+
+  const labelFor = (environmentId: EnvironmentId) =>
+    `${labelById.get(environmentId) ?? "Unknown environment"}${options.includes(environmentId) ? "" : " (no checkout)"}`;
+  const setDefault = (environmentId: EnvironmentId | null) => {
+    const { [projectKey]: _previous, ...rest } = defaults;
+    void updateClientSettings({
+      projectDefaultEnvironments:
+        environmentId === null ? rest : { ...rest, [projectKey]: environmentId },
+    });
+  };
+
+  return (
+    <SettingsRow
+      title="Default environment"
+      description="New threads in this project start here. If it is unavailable, the command palette asks you to pick another environment."
+      resetAction={
+        current !== null ? (
+          <SettingResetButton label="default environment" onClick={() => setDefault(null)} />
+        ) : null
+      }
+      control={
+        <Select
+          value={current ?? NO_DEFAULT_ENVIRONMENT}
+          onValueChange={(value) => {
+            if (value === NO_DEFAULT_ENVIRONMENT) setDefault(null);
+            const environmentId = options.find((id) => id === value);
+            if (environmentId) setDefault(environmentId);
+          }}
+        >
+          <SelectTrigger size="sm" className="w-full sm:w-44" aria-label="Default environment">
+            <SelectValue>{current === null ? "None" : labelFor(current)}</SelectValue>
+          </SelectTrigger>
+          <SelectPopup align="end" alignItemWithTrigger={false}>
+            <SelectItem hideIndicator value={NO_DEFAULT_ENVIRONMENT}>
+              None
+            </SelectItem>
+            {(current === null || options.includes(current) ? options : [...options, current]).map(
+              (environmentId) => (
+                <SelectItem hideIndicator key={environmentId} value={environmentId}>
+                  {labelFor(environmentId)}
+                </SelectItem>
+              ),
+            )}
+          </SelectPopup>
+        </Select>
+      }
+    />
   );
 }

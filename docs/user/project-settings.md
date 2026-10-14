@@ -46,6 +46,15 @@ Settings that are environment-wide stay read-only while a project is selected. W
 targets disagree, a control shows **Mixed** until you choose one value. Appearance, keyboard,
 and other phone-only settings ignore the filter.
 
+## Default environment
+
+When the same project is checked out on several environments, open its project settings and
+set **Default environment** to choose where new threads in that project start. The command palette
+and the new-thread project picker use it even when your current thread is on another environment.
+If the default environment is offline or has no checkout of the project, the command palette marks
+the project row and asks you to choose one of the connected environments. Nothing falls back
+without telling you. This preference is saved on this device only.
+
 ## Worktree branch names
 
 In **Settings → Worktrees → Worktree branch naming**, choose a static prefix,

@@ -43,6 +43,14 @@ export interface SidebarProjectPickerEntry {
   group: SidebarProjectSnapshot;
   targetProject: SidebarProjectGroupMember;
   isPreferred: boolean;
+  /**
+   * The project's default environment when it cannot take a new thread: it is
+   * not connected, or it has no checkout of the project. `targetProject` is
+   * then only a fallback, so callers must let the user choose a member.
+   */
+  unavailableDefaultEnvironmentId: EnvironmentId | null;
+  /** Members in connected environments, for the user to choose from. */
+  availableMembers: readonly SidebarProjectGroupMember[];
 }
 
 export function getSidebarProjectSettingsKey(
@@ -170,9 +178,17 @@ export function buildSidebarProjectSnapshots(input: {
   });
 }
 
+/**
+ * Resolves the member each project row targets. A project's default
+ * environment wins when it is connected and has a checkout. Otherwise the
+ * preferred (current) project's environment wins, then the group
+ * representative.
+ */
 export function buildSidebarProjectPickerEntries(input: {
   groups: ReadonlyArray<SidebarProjectSnapshot>;
   preferredProjectRef: ScopedProjectRef | null;
+  defaultEnvironmentByProjectKey: Readonly<Record<string, EnvironmentId>>;
+  isEnvironmentConnected: (environmentId: EnvironmentId) => boolean;
 }) {
   const preferredProjectRef = input.preferredProjectRef;
   const entries = input.groups.flatMap((group): SidebarProjectPickerEntry[] => {
@@ -183,17 +199,26 @@ export function buildSidebarProjectPickerEntries(input: {
             projectRef.projectId === preferredProjectRef.projectId,
         )
       : false;
+    const memberInEnvironment = (environmentId: EnvironmentId) =>
+      (preferredProjectRef?.environmentId === environmentId
+        ? group.memberProjects.find(
+            (project) =>
+              project.environmentId === environmentId &&
+              project.id === preferredProjectRef.projectId,
+          )
+        : undefined) ??
+      group.memberProjects.find((project) => project.environmentId === environmentId);
+
+    const defaultEnvironmentId = input.defaultEnvironmentByProjectKey[group.projectKey] ?? null;
+    const defaultProject =
+      defaultEnvironmentId !== null && input.isEnvironmentConnected(defaultEnvironmentId)
+        ? memberInEnvironment(defaultEnvironmentId)
+        : undefined;
     const preferredProject = preferredProjectRef
-      ? (group.memberProjects.find(
-          (project) =>
-            project.environmentId === preferredProjectRef.environmentId &&
-            project.id === preferredProjectRef.projectId,
-        ) ??
-        group.memberProjects.find(
-          (project) => project.environmentId === preferredProjectRef.environmentId,
-        ))
-      : null;
+      ? memberInEnvironment(preferredProjectRef.environmentId)
+      : undefined;
     const targetProject =
+      defaultProject ??
       preferredProject ??
       group.memberProjects.find(
         (project) => project.environmentId === group.environmentId && project.id === group.id,
@@ -201,7 +226,20 @@ export function buildSidebarProjectPickerEntries(input: {
       group.memberProjects[0];
     if (!targetProject) return [];
 
-    return [{ group, targetProject, isPreferred }];
+    return [
+      {
+        group,
+        targetProject,
+        isPreferred,
+        unavailableDefaultEnvironmentId:
+          defaultEnvironmentId !== null && defaultProject === undefined
+            ? defaultEnvironmentId
+            : null,
+        availableMembers: group.memberProjects.filter((project) =>
+          input.isEnvironmentConnected(project.environmentId),
+        ),
+      },
+    ];
   });
   const preferredIndex = entries.findIndex((entry) => entry.isPreferred);
   if (preferredIndex <= 0) return entries;
