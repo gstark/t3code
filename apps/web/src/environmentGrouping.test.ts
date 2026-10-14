@@ -30,6 +30,10 @@ const repositoryIdentity = {
     remoteUrl: "https://github.com/example/shared-repo.git",
   },
 };
+const noDefaultEnvironments = {
+  defaultEnvironmentByProjectKey: {},
+  isEnvironmentConnected: () => true,
+};
 const defaultGroupingSettings = {
   sidebarProjectGroupingMode: "repository" as const,
   sidebarProjectGroupingOverrides: {},
@@ -424,6 +428,7 @@ describe("environment grouping", () => {
     ]);
 
     const [pickerEntry] = buildSidebarProjectPickerEntries({
+      ...noDefaultEnvironments,
       groups: snapshots,
       preferredProjectRef: {
         environmentId: primaryEnvironmentId,
@@ -482,6 +487,7 @@ describe("environment grouping", () => {
     });
 
     const entries = buildSidebarProjectPickerEntries({
+      ...noDefaultEnvironments,
       groups,
       preferredProjectRef: {
         environmentId: remoteEnvironmentId,
@@ -546,6 +552,7 @@ describe("environment grouping", () => {
     });
 
     const entries = buildSidebarProjectPickerEntries({
+      ...noDefaultEnvironments,
       groups,
       preferredProjectRef: {
         environmentId: remoteEnvironmentId,
@@ -564,6 +571,66 @@ describe("environment grouping", () => {
     expect(fallback?.targetProject).toMatchObject({
       environmentId: primaryEnvironmentId,
       id: fallbackPrimary.id,
+    });
+  });
+
+  describe("project default environment", () => {
+    const thirdEnvironmentId = EnvironmentId.make("env-third");
+    const primary = makeProject({ repositoryIdentity });
+    const remote = makeProject({
+      id: ProjectId.make("project-remote"),
+      environmentId: remoteEnvironmentId,
+      repositoryIdentity,
+    });
+    const groups = buildSidebarProjectSnapshots({
+      projects: [primary, remote],
+      settings: defaultGroupingSettings,
+      primaryEnvironmentId,
+      resolveEnvironmentLabel: () => null,
+    });
+    const projectKey = repositoryIdentity.canonicalKey;
+
+    it("targets the default environment over the current project's environment", () => {
+      const [entry] = buildSidebarProjectPickerEntries({
+        groups,
+        preferredProjectRef: { environmentId: primaryEnvironmentId, projectId: primary.id },
+        defaultEnvironmentByProjectKey: { [projectKey]: remoteEnvironmentId },
+        isEnvironmentConnected: () => true,
+      });
+      expect(entry?.targetProject.id).toBe(remote.id);
+      expect(entry?.unavailableDefaultEnvironmentId).toBeNull();
+    });
+
+    it("reports a disconnected default environment and offers the connected members", () => {
+      const [entry] = buildSidebarProjectPickerEntries({
+        groups,
+        preferredProjectRef: null,
+        defaultEnvironmentByProjectKey: { [projectKey]: remoteEnvironmentId },
+        isEnvironmentConnected: (environmentId) => environmentId !== remoteEnvironmentId,
+      });
+      expect(entry?.unavailableDefaultEnvironmentId).toBe(remoteEnvironmentId);
+      expect(entry?.availableMembers.map((member) => member.id)).toEqual([primary.id]);
+    });
+
+    it("reports a default environment that has no checkout of the project", () => {
+      const [entry] = buildSidebarProjectPickerEntries({
+        groups,
+        preferredProjectRef: null,
+        defaultEnvironmentByProjectKey: { [projectKey]: thirdEnvironmentId },
+        isEnvironmentConnected: () => true,
+      });
+      expect(entry?.unavailableDefaultEnvironmentId).toBe(thirdEnvironmentId);
+      expect(entry?.availableMembers.map((member) => member.id)).toEqual([primary.id, remote.id]);
+    });
+
+    it("keeps the current behavior when no default is set", () => {
+      const [entry] = buildSidebarProjectPickerEntries({
+        groups,
+        preferredProjectRef: { environmentId: remoteEnvironmentId, projectId: remote.id },
+        ...noDefaultEnvironments,
+      });
+      expect(entry?.targetProject.id).toBe(remote.id);
+      expect(entry?.unavailableDefaultEnvironmentId).toBeNull();
     });
   });
 
