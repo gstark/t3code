@@ -4174,6 +4174,69 @@ it.layer(layerGitManagerTest)("GitManager", (it) => {
     }),
   );
 
+  it.effect("lands while the main checkout is on another branch", () =>
+    Effect.gen(function* () {
+      const { repoDir, worktreeDir } = yield* makeLandableWorktree();
+      yield* runGit(repoDir, ["checkout", "-b", "other"]);
+      NodeFS.writeFileSync(NodePath.join(worktreeDir, "feature.txt"), "feature\n");
+
+      const { manager } = yield* makeManager();
+      const result = yield* runStackedAction(manager, { cwd: worktreeDir, action: "land" });
+
+      const localMain = (yield* runGit(repoDir, ["rev-parse", "main"])).stdout.trim();
+      expect(result.land?.toSha).toBe(localMain);
+      expect((yield* runGit(repoDir, ["show", "main:feature.txt"])).stdout).toBe("feature\n");
+      expect((yield* runGit(repoDir, ["branch", "--show-current"])).stdout.trim()).toBe("other");
+      expect((yield* runGit(repoDir, ["status", "--porcelain"])).stdout.trim()).toBe("");
+      expect(NodeFS.existsSync(NodePath.join(repoDir, "feature.txt"))).toBe(false);
+      // Pushing would push the main checkout's branch, which is not main.
+      expect(result.toast.cta).toEqual({ kind: "none" });
+      expect(NodeFS.existsSync(worktreeDir)).toBe(false);
+      expect((yield* runGit(repoDir, ["branch", "--list", "feature/land"])).stdout.trim()).toBe("");
+    }),
+  );
+
+  it.effect("fast-forwards main in the worktree that has it checked out", () =>
+    Effect.gen(function* () {
+      const { repoDir, worktreeDir } = yield* makeLandableWorktree();
+      yield* runGit(repoDir, ["checkout", "-b", "other"]);
+      const mainDir = NodePath.join(yield* makeTempDir("t3code-git-worktree-"), "main");
+      yield* runGit(repoDir, ["worktree", "add", mainDir, "main"]);
+      NodeFS.writeFileSync(NodePath.join(worktreeDir, "feature.txt"), "feature\n");
+
+      const { manager } = yield* makeManager();
+      yield* runStackedAction(manager, { cwd: worktreeDir, action: "land" });
+
+      expect((yield* runGit(mainDir, ["status", "--porcelain"])).stdout.trim()).toBe("");
+      expect(NodeFS.readFileSync(NodePath.join(mainDir, "feature.txt"), "utf8")).toBe("feature\n");
+    }),
+  );
+
+  it.effect("refuses to land when main is checked out elsewhere with uncommitted changes", () =>
+    Effect.gen(function* () {
+      const { repoDir, worktreeDir } = yield* makeLandableWorktree();
+      yield* runGit(repoDir, ["checkout", "-b", "other"]);
+      const mainDir = NodePath.join(yield* makeTempDir("t3code-git-worktree-"), "main");
+      yield* runGit(repoDir, ["worktree", "add", mainDir, "main"]);
+      NodeFS.writeFileSync(NodePath.join(mainDir, "README.md"), "edited\n");
+      NodeFS.writeFileSync(NodePath.join(worktreeDir, "feature.txt"), "feature\n");
+      const mainBefore = (yield* runGit(repoDir, ["rev-parse", "main"])).stdout;
+
+      const { manager } = yield* makeManager();
+      const error = yield* runStackedAction(manager, { cwd: worktreeDir, action: "land" }).pipe(
+        Effect.flip,
+      );
+
+      expect(error.message).toContain(
+        `The checkout of main at ${NodeFS.realpathSync(mainDir)} has uncommitted changes`,
+      );
+      expect((yield* runGit(repoDir, ["rev-parse", "main"])).stdout).toBe(mainBefore);
+      expect((yield* runGit(worktreeDir, ["status", "--porcelain"])).stdout.trim()).toBe(
+        "?? feature.txt",
+      );
+    }),
+  );
+
   it.effect("rebases a pushed branch onto the updated default branch before pushing", () =>
     Effect.gen(function* () {
       const { repoDir, remoteDir, otherDir } = yield* makeDivergedFeature("other.txt");
@@ -4253,6 +4316,30 @@ it.layer(layerGitManagerTest)("GitManager", (it) => {
         },
       });
       expect((yield* runGit(repoDir, ["rev-parse", "main"])).stdout).toBe(mainBefore);
+      expect((yield* runGit(repoDir, ["status", "--porcelain"])).stdout.trim()).toBe("");
+    }),
+  );
+
+  it.effect("keeps a landing conflict in the worktree while the main checkout is elsewhere", () =>
+    Effect.gen(function* () {
+      const { repoDir, worktreeDir } = yield* makeLandableWorktree();
+      NodeFS.writeFileSync(NodePath.join(worktreeDir, "README.md"), "from the worktree\n");
+      yield* runGit(worktreeDir, ["commit", "-am", "Edit README in worktree"]);
+      NodeFS.writeFileSync(NodePath.join(repoDir, "README.md"), "from main\n");
+      yield* runGit(repoDir, ["commit", "-am", "Edit README on main"]);
+      yield* runGit(repoDir, ["checkout", "-b", "other"]);
+      const mainBefore = (yield* runGit(repoDir, ["rev-parse", "main"])).stdout;
+
+      const { manager } = yield* makeManager();
+      const error = yield* runStackedAction(manager, { cwd: worktreeDir, action: "land" }).pipe(
+        Effect.flip,
+      );
+
+      expect(error).toMatchObject({
+        rebaseConflict: { cwd: NodeFS.realpathSync(worktreeDir), files: ["README.md"] },
+      });
+      expect((yield* runGit(repoDir, ["rev-parse", "main"])).stdout).toBe(mainBefore);
+      expect((yield* runGit(repoDir, ["branch", "--show-current"])).stdout.trim()).toBe("other");
       expect((yield* runGit(repoDir, ["status", "--porcelain"])).stdout.trim()).toBe("");
     }),
   );
