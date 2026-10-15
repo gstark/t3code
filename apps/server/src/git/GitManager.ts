@@ -3028,10 +3028,10 @@ export const make = Effect.gen(function* () {
 
   /**
    * Checks that the worktree at `cwd` can land before anything is committed:
-   * it is a linked worktree on a branch, and the main checkout is on the base
-   * branch. `merges` is false when there is nothing to commit and the branch
-   * has no commits beyond the base, so landing only cleans up the worktree.
-   * Only a merge needs a clean main checkout.
+   * it is a linked worktree on a branch. `merges` is false when there is
+   * nothing to commit and the branch has no commits beyond the base, so
+   * landing only cleans up the worktree. `baseCheckoutPath` is the worktree
+   * that has the base branch checked out, or null; only a merge needs it clean.
    */
   const prepareLand = Effect.fn("prepareLand")(function* (
     cwd: string,
@@ -3057,10 +3057,16 @@ export const make = Effect.gen(function* () {
       return yield* fail("Only a linked worktree can land.");
     }
     const worktreePath = yield* read("worktreePath", cwd, ["rev-parse", "--show-toplevel"]);
+    const worktrees = (yield* read("worktreeList", cwd, ["worktree", "list", "--porcelain"]))
+      .split("\n\n")
+      .map((entry) => {
+        const lines = entry.split("\n");
+        const field = (name: string) =>
+          lines.find((line) => line.startsWith(`${name} `))?.slice(name.length + 1);
+        return { path: field("worktree"), branch: field("branch") };
+      });
     // The first entry of `git worktree list` is always the main checkout.
-    const mainCheckoutPath = (yield* read("worktreeList", cwd, ["worktree", "list", "--porcelain"]))
-      .split("\n")[0]
-      ?.replace(/^worktree /, "");
+    const mainCheckoutPath = worktrees[0]?.path;
     if (!mainCheckoutPath) {
       return yield* fail("Could not find the main checkout.");
     }
@@ -3075,19 +3081,27 @@ export const make = Effect.gen(function* () {
       hasWorkingTreeChanges ||
       Number(yield* read("aheadCount", cwd, ["rev-list", "--count", `${baseBranch}..${branch}`])) >
         0;
-    if (merges && (yield* read("mainStatus", mainCheckoutPath, ["status", "--porcelain"]))) {
+    const baseCheckoutPath =
+      worktrees.find((worktree) => worktree.branch === `refs/heads/${baseBranch}`)?.path ?? null;
+    if (
+      merges &&
+      baseCheckoutPath &&
+      (yield* read("baseStatus", baseCheckoutPath, ["status", "--porcelain"]))
+    ) {
       return yield* fail(
-        `The main checkout at ${mainCheckoutPath} has uncommitted changes. Commit or discard them, then land again.`,
-      );
-    }
-    const mainBranch = yield* read("mainBranch", mainCheckoutPath, ["branch", "--show-current"]);
-    if (mainBranch !== baseBranch) {
-      return yield* fail(
-        `The main checkout at ${mainCheckoutPath} is on ${mainBranch || "a detached HEAD"}. Switch it to ${baseBranch}, then land again.`,
+        `The checkout of ${baseBranch} at ${baseCheckoutPath} has uncommitted changes. Commit or discard them, then land again.`,
       );
     }
 
-    return { branch, worktreePath, mainCheckoutPath, remoteName, baseBranch, merges };
+    return {
+      branch,
+      worktreePath,
+      mainCheckoutPath,
+      baseCheckoutPath,
+      remoteName,
+      baseBranch,
+      merges,
+    };
   });
 
   const failIfRebaseInProgress = Effect.fn("failIfRebaseInProgress")(function* (cwd: string) {
@@ -3211,19 +3225,23 @@ export const make = Effect.gen(function* () {
   });
 
   /**
-   * Merges the worktree branch into the base branch in the main checkout,
-   * then removes the worktree and deletes the branch. The base branch is not
-   * pushed; the completion toast offers that as a separate action.
-   * A branch with no commits beyond the base skips the merge.
-   * Stops on conflicts or a diverged base without undoing anything, so the
-   * user can see and resolve the state in the main checkout.
+   * The base branch moves as a ref, so no checkout has to be on it; a checkout on
+   * it fast-forwards too. The base is not pushed; the completion toast offers that.
+   * Stops on conflicts or a diverged base without undoing anything.
    */
   const runLandStep = Effect.fn("runLandStep")(function* (
     land: Effect.Success<ReturnType<typeof prepareLand>>,
     emit: GitActionProgressEmitter,
     setPhase: (phase: GitActionProgressPhase) => Effect.Effect<void>,
   ) {
-    const { branch, worktreePath, mainCheckoutPath: main, remoteName, baseBranch } = land;
+    const {
+      branch,
+      worktreePath,
+      mainCheckoutPath: main,
+      baseCheckoutPath,
+      remoteName,
+      baseBranch,
+    } = land;
     const remoteBase = `${remoteName}/${baseBranch}`;
     const fail = (detail: string) =>
       new GitManagerError({ operation: "land", cwd: worktreePath, detail });
@@ -3240,16 +3258,27 @@ export const make = Effect.gen(function* () {
         .pipe(Effect.map((result) => result.stdout.trim()));
     const startPhase = (phase: GitActionProgressPhase, label: string) =>
       setPhase(phase).pipe(Effect.andThen(emit({ kind: "phase_started", phase, label })));
-    const mergeOrFail = Effect.fn("runLandStep.merge")(function* (ref: string) {
-      if ((yield* git("merge", ["merge", "--no-edit", ref])).exitCode === 0) return;
-      const conflicts = (yield* read("conflicts", ["diff", "--name-only", "--diff-filter=U"]))
-        .split("\n")
-        .filter(Boolean);
-      return yield* fail(
-        conflicts.length > 0
-          ? `Merging ${ref} into ${baseBranch} conflicts in ${conflicts.join(", ")}. Resolve the merge in ${main}, or run "git merge --abort" there.`
-          : `Merging ${ref} into ${baseBranch} failed in ${main}.`,
-      );
+    // Moves the base branch to `ref`, which must contain it. Passing the old
+    // value to update-ref fails safely if the base branch moved meanwhile.
+    const fastForwardBase = Effect.fn("runLandStep.fastForwardBase")(function* (ref: string) {
+      const result = baseCheckoutPath
+        ? yield* gitCore.execute({
+            operation: "GitManager.land.fastForward",
+            cwd: baseCheckoutPath,
+            args: ["merge", "--ff-only", ref],
+            allowNonZeroExit: true,
+          })
+        : yield* git("fastForward", [
+            "update-ref",
+            `refs/heads/${baseBranch}`,
+            yield* read("refSha", ["rev-parse", ref]),
+            yield* read("baseSha", ["rev-parse", `refs/heads/${baseBranch}`]),
+          ]);
+      if (result.exitCode !== 0) {
+        return yield* fail(
+          `Could not fast-forward ${baseBranch} to ${ref}: ${result.stderr.trim() || "git exited with an error"}.`,
+        );
+      }
     });
 
     const removeWorktree = Effect.fn("runLandStep.removeWorktree")(function* (done: string) {
@@ -3301,24 +3330,22 @@ export const make = Effect.gen(function* () {
         );
       }
       if (behind > 0) {
-        yield* read("fastForward", ["merge", "--ff-only", remoteBase]);
+        yield* fastForwardBase(remoteBase);
       }
     }
     // Rebasing in the worktree first makes the merge a fast-forward, so any
-    // conflict surfaces where the branch's work happened, not in the main checkout.
+    // conflict surfaces where the branch's work happened.
     yield* startPhase("merge", `Rebasing onto ${baseBranch}...`);
     yield* rebaseOnto(worktreePath, branch, baseBranch);
     yield* startPhase("merge", `Merging into ${baseBranch}...`);
-    const fromSha = yield* read("fromSha", ["rev-parse", "HEAD"]);
-    yield* mergeOrFail(branch);
-    const toSha = yield* read("toSha", ["rev-parse", "HEAD"]);
+    const fromSha = yield* read("fromSha", ["rev-parse", `refs/heads/${baseBranch}`]);
+    yield* fastForwardBase(branch);
+    const toSha = yield* read("toSha", ["rev-parse", `refs/heads/${baseBranch}`]);
 
     yield* removeWorktree(`Merged into ${baseBranch}`);
-    if ((yield* git("deleteBranch", ["branch", "-d", branch])).exitCode !== 0) {
-      return yield* fail(
-        `Merged into ${baseBranch}, but git refused to delete ${branch} because it is not merged.`,
-      );
-    }
+    // The base branch now points at the branch tip, so a forced delete loses
+    // nothing. `-d` would also check the main checkout's HEAD.
+    yield* read("deleteBranch", ["branch", "-D", branch]);
 
     return { ...landResult, fromSha, toSha };
   });
@@ -3528,11 +3555,15 @@ export const make = Effect.gen(function* () {
             ? {
                 title: `Landed ${landed.branch} into ${landed.baseBranch}`,
                 description: `Merged ${shortenSha(landed.fromSha)}..${shortenSha(landed.toSha)}`,
-                cta: {
-                  kind: "run_action" as const,
-                  label: `Push ${landed.baseBranch}`,
-                  action: { kind: "push" as const },
-                },
+                // The push action pushes the main checkout's current branch.
+                cta:
+                  landContext?.baseCheckoutPath === landContext?.mainCheckoutPath
+                    ? {
+                        kind: "run_action" as const,
+                        label: `Push ${landed.baseBranch}`,
+                        action: { kind: "push" as const },
+                      }
+                    : { kind: "none" as const },
               }
             : {
                 title: "Cleaned up worktree",
