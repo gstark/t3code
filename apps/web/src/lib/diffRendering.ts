@@ -321,26 +321,26 @@ export const DIFF_SURFACE_THEME_UNSAFE_CSS = `
 
   --diffs-bg-addition-override: light-dark(
     color-mix(in srgb, var(--code-background) 50%, var(--diff-addition)),
-    color-mix(in srgb, var(--code-background) 70%, var(--diff-addition))
+    color-mix(in srgb, var(--code-background) 60%, var(--diff-addition))
   );
   --diffs-bg-addition-number-override: light-dark(
     color-mix(in srgb, var(--code-background) 35%, var(--diff-addition)),
-    color-mix(in srgb, var(--code-background) 60%, var(--diff-addition))
+    color-mix(in srgb, var(--code-background) 50%, var(--diff-addition))
   );
   --diffs-bg-addition-hover-override: color-mix(in srgb, var(--code-background) 85%, var(--diff-addition));
   --diffs-bg-addition-emphasis-override: color-mix(
     in srgb,
-    var(--code-background) 80%,
+    var(--code-background) 45%,
     var(--diff-addition)
   );
 
   --diffs-bg-deletion-override: light-dark(
     color-mix(in srgb, var(--code-background) 50%, var(--diff-deletion)),
-    color-mix(in srgb, var(--code-background) 70%, var(--diff-deletion))
+    color-mix(in srgb, var(--code-background) 60%, var(--diff-deletion))
   );
   --diffs-bg-deletion-number-override: light-dark(
     color-mix(in srgb, var(--code-background) 35%, var(--diff-deletion)),
-    color-mix(in srgb, var(--code-background) 60%, var(--diff-deletion))
+    color-mix(in srgb, var(--code-background) 50%, var(--diff-deletion))
   );
   --diffs-bg-deletion-hover-override: color-mix(
     in srgb,
@@ -349,7 +349,7 @@ export const DIFF_SURFACE_THEME_UNSAFE_CSS = `
   );
   --diffs-bg-deletion-emphasis-override: color-mix(
     in srgb,
-    var(--code-background) 80%,
+    var(--code-background) 45%,
     var(--diff-deletion)
   );
 
