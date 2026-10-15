@@ -20,7 +20,7 @@ const samples = {
 
 const highlighterPromise = getSharedHighlighter({
   langs: Object.keys(samples) as Array<keyof typeof samples>,
-  themes: ["pierre-dark", "pierre-light"],
+  themes: ["dark-plus", "light-plus"],
   preferredHighlighter: "shiki-wasm",
 });
 
@@ -29,7 +29,7 @@ describe("incremental code highlighting", () => {
     "matches full HTML at every streaming prefix in %s",
     async (language, code) => {
       const highlighter = await highlighterPromise;
-      for (const theme of ["pierre-dark", "pierre-light"] as const) {
+      for (const theme of ["dark-plus", "light-plus"] as const) {
         const highlight = createIncrementalHighlightedDocument(highlighter, language, theme);
         for (let end = 0; end <= code.length; end++) {
           const text = code.slice(0, end);
@@ -43,11 +43,7 @@ describe("incremental code highlighting", () => {
 
   it("resets after edits and truncation, including edits to a completed line", async () => {
     const highlighter = await highlighterPromise;
-    const highlight = createIncrementalHighlightedDocument(
-      highlighter,
-      "typescript",
-      "pierre-dark",
-    );
+    const highlight = createIncrementalHighlightedDocument(highlighter, "typescript", "dark-plus");
     const inputs = [
       "/* open\ncomment\n",
       "/* open\ncomment\n*/\nconst x = 1;",
@@ -59,7 +55,7 @@ describe("incremental code highlighting", () => {
     ];
     for (const text of inputs) {
       expect(toHtml(highlight(text))).toBe(
-        highlighter.codeToHtml(text, { lang: "typescript", theme: "pierre-dark" }),
+        highlighter.codeToHtml(text, { lang: "typescript", theme: "dark-plus" }),
       );
     }
   });
@@ -68,10 +64,10 @@ describe("incremental code highlighting", () => {
     "preserves %s without requesting grammar state",
     async (language) => {
       const highlighter = await highlighterPromise;
-      const highlight = createIncrementalHighlightedDocument(highlighter, language, "pierre-dark");
+      const highlight = createIncrementalHighlightedDocument(highlighter, language, "dark-plus");
       for (const text of ["plain\ntext", "\u001b[31mred\ncontinued", "\n"]) {
         expect(toHtml(highlight(text))).toBe(
-          highlighter.codeToHtml(text, { lang: language, theme: "pierre-dark" }),
+          highlighter.codeToHtml(text, { lang: language, theme: "dark-plus" }),
         );
       }
     },
@@ -79,16 +75,12 @@ describe("incremental code highlighting", () => {
 
   it("preserves partial CRLF and CR line endings", async () => {
     const highlighter = await highlighterPromise;
-    const highlight = createIncrementalHighlightedDocument(
-      highlighter,
-      "typescript",
-      "pierre-dark",
-    );
+    const highlight = createIncrementalHighlightedDocument(highlighter, "typescript", "dark-plus");
     const code = "/* multi\r\nline */\r\nconst x = 1;\r\n";
     for (let end = 0; end <= code.length; end++) {
       const text = code.slice(0, end);
       expect(toHtml(highlight(text))).toBe(
-        highlighter.codeToHtml(text, { lang: "typescript", theme: "pierre-dark" }),
+        highlighter.codeToHtml(text, { lang: "typescript", theme: "dark-plus" }),
       );
     }
   });
