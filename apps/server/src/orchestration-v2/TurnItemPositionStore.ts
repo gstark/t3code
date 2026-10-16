@@ -51,15 +51,24 @@ export const layer: Layer.Layer<TurnItemPositionStoreV2, never, SqlClient.SqlCli
         `;
           if (existing[0] !== undefined) return existing[0].ordinal;
 
+          // A runless item, such as a git action or history collapse, records
+          // something that happened now, so it joins the latest run's range and
+          // sorts after everything already in the thread.
           const runRows =
-            runId === null
+            suppliedRunOrdinal !== undefined
               ? []
-              : yield* sql<{ readonly ordinal: number }>`
-                SELECT ordinal
-                FROM orchestration_v2_projection_runs
-                WHERE thread_id = ${threadId} AND run_id = ${runId}
-                LIMIT 1
-              `;
+              : runId === null
+                ? yield* sql<{ readonly ordinal: number | null }>`
+                  SELECT MAX(ordinal) AS ordinal
+                  FROM orchestration_v2_projection_runs
+                  WHERE thread_id = ${threadId}
+                `
+                : yield* sql<{ readonly ordinal: number | null }>`
+                  SELECT ordinal
+                  FROM orchestration_v2_projection_runs
+                  WHERE thread_id = ${threadId} AND run_id = ${runId}
+                  LIMIT 1
+                `;
           const runOrdinal = suppliedRunOrdinal ?? runRows[0]?.ordinal ?? null;
           const lowerBound = runOrdinal === null ? 0 : runOrdinal * 1_000_000;
           const upperBound = runOrdinal === null ? 999_999 : lowerBound + 999_999;
