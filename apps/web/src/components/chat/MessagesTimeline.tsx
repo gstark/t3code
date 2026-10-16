@@ -5730,12 +5730,16 @@ function WorkEntryLogRow(props: WorkEntryRowProps) {
       : null;
   const viewedImagePath = workEntryViewedImagePath(workEntry);
   const payload = workEntry.structuredPayload;
-  const commandRuntime =
-    payload?.type === "command_execution" && payload.startedAt && payload.completedAt
-      ? formatDuration(
-          DateTime.toEpochMillis(payload.completedAt) - DateTime.toEpochMillis(payload.startedAt),
-        )
-      : null;
+  // Time spent on the work itself. Questions and approvals measure the wait
+  // for the user, and instant records start and complete together.
+  const runtimeMs =
+    payload?.startedAt &&
+    payload.completedAt &&
+    payload.type !== "user_input_request" &&
+    payload.type !== "approval_request"
+      ? DateTime.toEpochMillis(payload.completedAt) - DateTime.toEpochMillis(payload.startedAt)
+      : 0;
+  const runtime = runtimeMs > 0 ? formatDuration(runtimeMs) : null;
   const skill =
     payload?.type === "dynamic_tool"
       ? claudeSkillInvocation(payload.toolName, payload.input)
@@ -5999,9 +6003,9 @@ function WorkEntryLogRow(props: WorkEntryRowProps) {
             <XIcon aria-hidden className={cn("size-3 shrink-0", failedToolIconClassName)} />
           ) : null}
           <TimelineRowTimestamp createdAt={workEntry.createdAt} timestampFormat={timestampFormat} />
-          {commandRuntime ? (
-            <span className="shrink-0 whitespace-nowrap text-muted-foreground text-xs tabular-nums">
-              {commandRuntime}
+          {runtime ? (
+            <span className="shrink-0 whitespace-nowrap text-sidebar-muted-foreground/60 text-xs tabular-nums">
+              {runtime}
             </span>
           ) : null}
           <span
