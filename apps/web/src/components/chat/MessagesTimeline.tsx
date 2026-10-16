@@ -32,6 +32,7 @@ import {
   type RunId,
   ThreadId,
   type ToolActivityIcon,
+  type TurnItemId,
 } from "@t3tools/contracts";
 import { parseScopedThreadKey, scopeThreadRef } from "@t3tools/client-runtime/environment";
 import { useAtomValue } from "@effect/atom-react";
@@ -354,6 +355,8 @@ interface TimelineRowSharedState {
   }) => void;
   onToggleTurnFold: (runId: RunId) => void;
   onToggleAttemptFold: (attemptId: RunAttemptId) => void;
+  onToggleHistoryCollapse: (collapseId: string) => void;
+  onUncollapseHistory: ((turnItemId: TurnItemId) => void) | null;
   onFileOpen: (attachment: ChatFileAttachment) => void;
   onFileDownload: (attachment: ChatFileAttachment) => void;
   openPullRequest: (event: MouseEvent<HTMLElement>, url: string) => void;
@@ -469,6 +472,8 @@ interface MessagesTimelineProps {
   onRetryWorkspacePreparation?: (runId: RunId) => void;
   onWorktreeSetupWorkLocally?: () => void;
   onOpenWorktreeSetupTerminal?: (terminalId: string) => void;
+  /** Expands a history collapse for good. Absent on read-only timelines. */
+  onUncollapseHistory?: (turnItemId: TurnItemId) => void;
   isPreparingWorktree?: boolean;
   isCompacting?: boolean;
   /** The agent waits on an approval or an answer from the user. */
@@ -584,6 +589,7 @@ const ConversationTimeline = memo(function ConversationTimeline({
   onRetryWorkspacePreparation,
   onWorktreeSetupWorkLocally,
   onOpenWorktreeSetupTerminal,
+  onUncollapseHistory,
   isPreparingWorktree = false,
   isCompacting = false,
   awaitingUser = false,
@@ -651,6 +657,10 @@ const ConversationTimeline = memo(function ConversationTimeline({
   const [expandedAttemptIds, setExpandedAttemptIds] = useState<ReadonlySet<RunAttemptId>>(
     () => rememberedPosition?.disclosures?.attempts ?? new Set(),
   );
+  // A peek inside a collapse is per visit; the collapse itself is persisted.
+  const [expandedHistoryCollapseIds, setExpandedHistoryCollapseIds] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
   const [positionedThreadKey, setPositionedThreadKey] = useState<string | null>(() =>
     rememberedPosition?.atEnd === false ? null : listIdentityKey,
   );
@@ -664,6 +674,7 @@ const ConversationTimeline = memo(function ConversationTimeline({
   let paintedExpandedRunIds = expandedRunIds;
   let paintedExpandedWorkGroupIds = expandedWorkGroupIds;
   let paintedExpandedAttemptIds = expandedAttemptIds;
+  let paintedExpandedHistoryCollapseIds = expandedHistoryCollapseIds;
   if (listIdentityRef.current !== listIdentityKey) {
     listIdentityRef.current = listIdentityKey;
     setPositionedThreadKey(null);
@@ -675,6 +686,8 @@ const ConversationTimeline = memo(function ConversationTimeline({
     setExpandedRunIds(paintedExpandedRunIds);
     setExpandedWorkGroupIds(paintedExpandedWorkGroupIds);
     setExpandedAttemptIds(paintedExpandedAttemptIds);
+    paintedExpandedHistoryCollapseIds = new Set();
+    setExpandedHistoryCollapseIds(paintedExpandedHistoryCollapseIds);
   }
   const citationThreadRef = useMemo(() => parseScopedThreadKey(routeThreadKey), [routeThreadKey]);
   const openPullRequest = useOpenPrLink(citationThreadRef ?? undefined);
@@ -826,6 +839,21 @@ const ConversationTimeline = memo(function ConversationTimeline({
     },
     [expandedWorkGroupIds, suspendEndScrollMaintenanceForDisclosure],
   );
+  const onToggleHistoryCollapse = useCallback(
+    (collapseId: string) => {
+      suspendEndScrollMaintenanceForDisclosure(collapseId);
+      setExpandedHistoryCollapseIds((existing) => {
+        const next = new Set(existing);
+        if (next.has(collapseId)) {
+          next.delete(collapseId);
+        } else {
+          next.add(collapseId);
+        }
+        return next;
+      });
+    },
+    [suspendEndScrollMaintenanceForDisclosure],
+  );
   const onToggleAttemptFold = useCallback(
     (attemptId: RunAttemptId) => {
       suspendEndScrollMaintenanceForDisclosure(`attempt-fold:${attemptId}`);
@@ -935,6 +963,7 @@ const ConversationTimeline = memo(function ConversationTimeline({
         expandedRunIds: visibleExpandedRunIds,
         expandedAttemptIds: visibleExpandedAttemptIds,
         expandedWorkGroupIds,
+        expandedHistoryCollapseIds: paintedExpandedHistoryCollapseIds,
         isWorking,
         runlessWorkActive,
         activeTurnStartedAt,
@@ -959,6 +988,7 @@ const ConversationTimeline = memo(function ConversationTimeline({
     visibleExpandedRunIds,
     visibleExpandedAttemptIds,
     expandedWorkGroupIds,
+    paintedExpandedHistoryCollapseIds,
     isWorking,
     runlessWorkActive,
     activeTurnStartedAt,
@@ -1397,6 +1427,8 @@ const ConversationTimeline = memo(function ConversationTimeline({
       onRollbackCheckpoint,
       onToggleTurnFold,
       onToggleAttemptFold,
+      onToggleHistoryCollapse,
+      onUncollapseHistory: onUncollapseHistory ?? null,
       onToggleWorkGroup,
       onToggleWorkEntry: suspendEndScrollMaintenanceForDisclosure,
       onCancelWorktreeSetup: onCancelWorktreeSetup ?? null,
@@ -1435,6 +1467,8 @@ const ConversationTimeline = memo(function ConversationTimeline({
       onRollbackCheckpoint,
       onToggleTurnFold,
       onToggleAttemptFold,
+      onToggleHistoryCollapse,
+      onUncollapseHistory,
       onToggleWorkGroup,
       suspendEndScrollMaintenanceForDisclosure,
       onCancelWorktreeSetup,
@@ -2120,7 +2154,8 @@ const TimelineRowContent = memo(function TimelineRowContent({ row }: { row: Time
                 row.kind === "attempt-fold" ||
                 row.kind === "html-render" ||
                 row.kind === "mcp-app" ||
-                row.kind === "git-action"
+                row.kind === "git-action" ||
+                row.kind === "history-collapse"
               ? "pb-2"
               : "pb-4",
         (row.kind === "message" && row.message.role === "assistant") ||
@@ -2163,6 +2198,7 @@ const TimelineRowContent = memo(function TimelineRowContent({ row }: { row: Time
       {row.kind === "attempt-fold" ? <AttemptFoldTimelineRow row={row} /> : null}
       {row.kind === "context-compaction" ? <ContextCompactionTimelineRow row={row} /> : null}
       {row.kind === "git-action" ? <GitActionTimelineRow row={row} /> : null}
+      {row.kind === "history-collapse" ? <HistoryCollapseTimelineRow row={row} /> : null}
       {row.kind === "message" && row.message.role === "user" ? <UserTimelineRow row={row} /> : null}
       {row.kind === "message" && row.message.role === "assistant" ? (
         <AssistantTimelineRow row={row} />
@@ -2830,6 +2866,51 @@ function TurnFoldTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "turn-
         timestampFormat={ctx.timestampFormat}
         className="ms-auto"
       />
+    </div>
+  );
+}
+
+function HistoryCollapseTimelineRow({
+  row,
+}: {
+  row: Extract<TimelineRow, { kind: "history-collapse" }>;
+}) {
+  const ctx = use(TimelineRowCtx);
+  const uncollapse = ctx.onUncollapseHistory;
+  const label = row.summarizing ? "Collapsed (summarizing)" : (row.summary ?? "Collapsed");
+
+  return (
+    <div className="group/timeline-row flex items-center gap-1 rounded-md border border-border/60 bg-muted/20 pe-1 transition-colors hover:bg-muted/35">
+      <button
+        type="button"
+        aria-expanded={row.expanded}
+        data-scroll-anchor-ignore
+        onClick={() => ctx.onToggleHistoryCollapse(row.id)}
+        className="flex min-w-0 flex-1 cursor-pointer select-none items-center gap-2 rounded-md px-2.5 py-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/70"
+      >
+        <MorphIcon
+          className="size-3.5 shrink-0 text-muted-foreground"
+          icon={row.expanded ? ChevronDown : ChevronRight}
+        />
+        <span
+          className={cn(
+            "truncate text-xs",
+            row.summarizing ? "text-muted-foreground" : "font-medium text-foreground/80",
+          )}
+        >
+          {label}
+        </span>
+      </button>
+      {uncollapse ? (
+        <button
+          type="button"
+          aria-label="Uncollapse history"
+          onClick={() => uncollapse(row.turnItemId)}
+          className="shrink-0 cursor-pointer rounded-sm p-1 text-muted-foreground opacity-0 transition-opacity hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/70 group-hover/timeline-row:opacity-100"
+        >
+          <XIcon aria-hidden className="size-3.5" />
+        </button>
+      ) : null}
     </div>
   );
 }

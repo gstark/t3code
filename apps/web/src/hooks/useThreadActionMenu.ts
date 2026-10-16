@@ -27,6 +27,7 @@ import { useOrchestrationCommand } from "../state/use-orchestration-command";
 import { readEnvironmentScope } from "../state/session";
 import {
   readEnvironmentSupportsAutoSettleOptOut,
+  readEnvironmentSupportsHistoryCollapse,
   readEnvironmentSupportsPinning,
   readEnvironmentSupportsSettlement,
   readEnvironmentSupportsSnooze,
@@ -103,6 +104,9 @@ export function useThreadActionMenu(input: {
   const updateThreadMetadata = useOrchestrationCommand(threadEnvironment.updateMetadata, {
     reportFailure: false,
   });
+  const collapseThreadHistory = useOrchestrationCommand(threadEnvironment.collapseHistory, {
+    reportFailure: false,
+  });
   const handleNewThread = useNewThreadHandler();
   const confirmThreadDelete = useClientSettings((s) => s.confirmThreadDelete);
   const confirmThreadArchive = useClientSettings((s) => s.confirmThreadArchive);
@@ -144,6 +148,7 @@ export function useThreadActionMenu(input: {
           snooze: readEnvironmentSupportsSnooze(threadRef.environmentId),
           pinning: readEnvironmentSupportsPinning(threadRef.environmentId),
           titleRegeneration: readEnvironmentSupportsTitleRegeneration(threadRef.environmentId),
+          historyCollapse: readEnvironmentSupportsHistoryCollapse(threadRef.environmentId),
         };
         const isRegeneratingTitle = thread.titleRegeneration != null;
         const snoozePresets = resolveSnoozePresets(now, timestampFormat);
@@ -262,6 +267,14 @@ export function useThreadActionMenu(input: {
               }),
             );
             return;
+          case "collapse-history":
+            await reportFailure("Failed to collapse history", () =>
+              collapseThreadHistory({
+                environmentId: threadRef.environmentId,
+                input: { threadId: threadRef.threadId },
+              }),
+            );
+            return;
           case "mark-unread":
             markThreadUnread(threadRef);
             return;
@@ -342,6 +355,7 @@ export function useThreadActionMenu(input: {
     },
     [
       archiveThread,
+      collapseThreadHistory,
       confirmThreadArchive,
       confirmThreadDelete,
       confirmAndUnpinThread,

@@ -853,6 +853,10 @@ function turnItemText(item: OrchestrationV2TurnItem): string | null {
       return `Asked the user for ${item.label}: ${item.secretStatus}.`;
     case "git_action":
       return `The user ran a git action: ${describeGitAction(item)}.`;
+    case "history_collapse":
+      return item.summary === null
+        ? "The user collapsed the history above."
+        : `The user collapsed the history above: ${item.summary}`;
     case "subagent":
       return item.result ?? item.progress ?? item.prompt;
     case "dynamic_tool":

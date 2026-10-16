@@ -170,6 +170,11 @@ function selectOpenCodeRuntimeTextGeneration(
         v1: v1.generateThreadTitle(input),
         v2: v2.generateThreadTitle(input),
       }),
+    generateHistorySummary: (input) =>
+      byOpenCodeRuntime(probe.get, {
+        v1: v1.generateHistorySummary(input),
+        v2: v2.generateHistorySummary(input),
+      }),
     generateReviewGuide: (input) =>
       byOpenCodeRuntime(probe.get, {
         v1: v1.generateReviewGuide(input),

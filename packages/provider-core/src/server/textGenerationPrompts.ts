@@ -494,6 +494,22 @@ function threadTitlePromptSuffix(input: ThreadTitlePromptInput): string {
   return suffix;
 }
 
+const HISTORY_SUMMARY_PROMPT = `Summarize part of a T3 Code conversation in one line. The user collapsed this part of the thread and reads the line in its place.
+Return JSON with the key summary.
+
+Rules:
+- One sentence, fewer than 120 characters.
+- Say what the user asked for and what came of it, such as a decision, a fix, or an open question.
+- Use plain words. Do not start with "The user" or "This conversation".
+- Do not use quotes, labels, or trailing punctuation.`;
+
+export function buildHistorySummaryPrompt(input: { readonly transcript: string }) {
+  return {
+    prompt: `${HISTORY_SUMMARY_PROMPT}\n\nConversation:\n${preserveMessageEnd(input.transcript)}`,
+    outputSchema: Schema.Struct({ summary: Schema.String }),
+  };
+}
+
 export function buildThreadTitlePrompt(input: ThreadTitlePromptInput) {
   let prompt: string;
   if (input.previousTitle === undefined) {

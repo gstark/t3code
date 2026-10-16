@@ -73,6 +73,7 @@ import {
   type ResolvedKeybindingsConfig,
   type ScopedThreadRef,
   type ThreadId,
+  type TurnItemId,
   type ThreadLinkedPullRequest,
   type RunId,
   type RuntimeRequestId,
@@ -1621,6 +1622,9 @@ export default function ChatView(props: ChatViewProps) {
   const createThread = useOrchestrationCommand(threadEnvironment.create, { reportFailure: false });
   const deleteThread = useOrchestrationCommand(threadEnvironment.delete, { reportFailure: false });
   const updateThreadMetadata = useOrchestrationCommand(threadEnvironment.updateMetadata, {
+    reportFailure: false,
+  });
+  const uncollapseThreadHistory = useOrchestrationCommand(threadEnvironment.uncollapseHistory, {
     reportFailure: false,
   });
   const canWriteSourceControl = useEnvironmentScope(environmentId, AuthSourceControlWriteScope);
@@ -11071,6 +11075,24 @@ export default function ChatView(props: ChatViewProps) {
     },
     [activeThreadRef, isServerThread, onDiffPanelOpen],
   );
+  const onUncollapseHistory = useCallback(
+    async (turnItemId: TurnItemId) => {
+      if (!activeThread) return;
+      const result = await uncollapseThreadHistory({
+        environmentId: activeThread.environmentId,
+        input: { threadId: activeThread.id, turnItemId },
+      });
+      if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
+        const error = squashAtomCommandFailure(result);
+        toastManager.add({
+          type: "error",
+          title: "Failed to uncollapse history",
+          ...(error instanceof Error ? { description: error.message } : {}),
+        });
+      }
+    },
+    [activeThread, uncollapseThreadHistory],
+  );
   const onTimelineRollbackCheckpoint = useCallback(
     (input: { readonly checkpointId: string; readonly scopeId: string }) => {
       if (!paintOnlyDisplayedTimeline) void onRollbackCheckpoint(input);
@@ -11574,6 +11596,7 @@ export default function ChatView(props: ChatViewProps) {
                   : { retryableWorkspacePreparationRunIds, onRetryWorkspacePreparation })}
                 {...(draftId ? { onWorktreeSetupWorkLocally } : {})}
                 {...(onOpenWorktreeSetupTerminal ? { onOpenWorktreeSetupTerminal } : {})}
+                {...(paintOnlyDisplayedTimeline ? {} : { onUncollapseHistory })}
                 isPreparingWorktree={!paintOnlyDisplayedTimeline && isPreparingWorktree}
                 footer={paintOnlyDisplayedTimeline ? null : threadStatusLine}
                 listRef={legendListRef}
