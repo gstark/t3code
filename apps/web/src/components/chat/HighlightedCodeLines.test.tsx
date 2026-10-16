@@ -10,10 +10,10 @@ describe("highlighted code lines", () => {
   it("preserves Shiki HTML, including colors, escaping, whitespace, and blank lines", async () => {
     const highlighter = await getSharedHighlighter({
       langs: ["typescript"],
-      themes: ["pierre-dark", "pierre-light"],
+      themes: ["dark-plus", "light-plus"],
       preferredHighlighter: "shiki-wasm",
     });
-    for (const theme of ["pierre-dark", "pierre-light"] as const) {
+    for (const theme of ["dark-plus", "light-plus"] as const) {
       const highlight = createIncrementalHighlightedDocument(highlighter, "typescript", theme);
       const code =
         'const html = "<img src=x onerror=alert(1)>";\n\n/* multi\nline */\n\tconst x = 1;\n';

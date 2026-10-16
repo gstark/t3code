@@ -31,6 +31,7 @@ export function GuideFileDiff({
   const options = useMemo(
     () => ({
       diffStyle: "unified" as const,
+      diffIndicators: "classic" as const,
       lineDiffType: "none" as const,
       overflow: "scroll" as const,
       disableFileHeader: true,
