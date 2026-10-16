@@ -94,6 +94,12 @@ export function ServerHealthSection(props: { readonly environmentId: Environment
       ? "warn"
       : "ok";
 
+  const summary = health
+    ? metrics.flatMap((metric) => (metric.summary ? [metric.summary] : [])).join(" · ")
+    : query.error
+      ? "Unavailable"
+      : "Checking…";
+
   return (
     <ThreadDetailsSection
       headingId="thread-details-server-health-heading"
@@ -105,17 +111,15 @@ export function ServerHealthSection(props: { readonly environmentId: Environment
         expanded={expanded}
         onClick={() => setExpanded(!expanded)}
         accessory={
+          // Zero width keeps the summary out of the card's fit-content width; it
+          // grows into the free space and truncates instead.
           <span
             className={cn(
-              "shrink-0 tabular-nums",
+              "w-0 grow-100 truncate text-end tabular-nums",
               query.error && !health ? "text-destructive" : LEVEL_CLASS[worst],
             )}
           >
-            {health
-              ? metrics.flatMap((metric) => (metric.summary ? [metric.summary] : [])).join(" · ")
-              : query.error
-                ? "Unavailable"
-                : "Checking…"}
+            {summary}
           </span>
         }
       >
