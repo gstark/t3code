@@ -23,6 +23,8 @@ import {
 } from "@t3tools/client-runtime/work-log/item-detail";
 import { claudeSkillInvocation } from "@t3tools/shared/toolActivity";
 import { memo, use, useState, type KeyboardEvent } from "react";
+import * as DateTime from "effect/DateTime";
+import { formatDuration } from "@t3tools/shared/orchestrationTiming";
 import {
   workEntryDisplayIndicatesToolFailure,
   workEntrySignalsSevereFailure,
@@ -287,6 +289,18 @@ function WorkEntryLogRow(props: WorkEntryRowProps) {
       : null;
   const viewedImagePath = workEntryViewedImagePath(workEntry);
   const payload = workEntry.structuredPayload;
+  // Time spent on the work itself. Questions and approvals measure the wait
+  // for the user, cleanup closes interrupted items long after they stop, and
+  // instant records start and complete together.
+  const runtimeMs =
+    payload?.startedAt &&
+    payload.completedAt &&
+    payload.status !== "interrupted" &&
+    payload.type !== "user_input_request" &&
+    payload.type !== "approval_request"
+      ? DateTime.toEpochMillis(payload.completedAt) - DateTime.toEpochMillis(payload.startedAt)
+      : 0;
+  const runtime = runtimeMs > 0 ? formatDuration(runtimeMs) : null;
   const skill =
     payload?.type === "dynamic_tool"
       ? claudeSkillInvocation(payload.toolName, payload.input)
@@ -482,6 +496,11 @@ function WorkEntryLogRow(props: WorkEntryRowProps) {
             <XIcon aria-hidden className={cn("size-3 shrink-0", failedToolIconClassName)} />
           ) : null}
           <TimelineRowTimestamp createdAt={workEntry.createdAt} timestampFormat={timestampFormat} />
+          {runtime ? (
+            <span className="shrink-0 whitespace-nowrap text-sidebar-muted-foreground/60 text-xs tabular-nums">
+              {runtime}
+            </span>
+          ) : null}
           <span
             className={cn(
               "flex size-4 shrink-0 items-center justify-center",
