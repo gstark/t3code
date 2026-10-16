@@ -5730,6 +5730,12 @@ function WorkEntryLogRow(props: WorkEntryRowProps) {
       : null;
   const viewedImagePath = workEntryViewedImagePath(workEntry);
   const payload = workEntry.structuredPayload;
+  const commandRuntime =
+    payload?.type === "command_execution" && payload.startedAt && payload.completedAt
+      ? formatDuration(
+          DateTime.toEpochMillis(payload.completedAt) - DateTime.toEpochMillis(payload.startedAt),
+        )
+      : null;
   const skill =
     payload?.type === "dynamic_tool"
       ? claudeSkillInvocation(payload.toolName, payload.input)
@@ -5993,6 +5999,11 @@ function WorkEntryLogRow(props: WorkEntryRowProps) {
             <XIcon aria-hidden className={cn("size-3 shrink-0", failedToolIconClassName)} />
           ) : null}
           <TimelineRowTimestamp createdAt={workEntry.createdAt} timestampFormat={timestampFormat} />
+          {commandRuntime ? (
+            <span className="shrink-0 whitespace-nowrap text-muted-foreground text-xs tabular-nums">
+              {commandRuntime}
+            </span>
+          ) : null}
           <span
             className={cn(
               "flex size-4 shrink-0 items-center justify-center",
