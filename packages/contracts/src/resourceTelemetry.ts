@@ -13,6 +13,15 @@ export const HostResourcesSnapshot = Schema.Struct({
   cpuCount: NonNegativeInt,
   availableMemoryBytes: NonNegativeInt,
   totalMemoryBytes: NonNegativeInt,
+  // Optional so clients still decode snapshots from servers that predate them.
+  /** One-minute load average; absent on Windows, which has none. */
+  loadAverage1m: Schema.optionalKey(Schema.Number.check(Schema.isGreaterThanOrEqualTo(0))),
+  /** Share of time the server's event loop was busy since the previous sample. */
+  eventLoopUtilization: Schema.optionalKey(
+    Schema.Number.check(Schema.isBetween({ minimum: 0, maximum: 1 })),
+  ),
+  /** Resident memory of the T3 server process. */
+  serverRssBytes: Schema.optionalKey(NonNegativeInt),
 });
 export type HostResourcesSnapshot = typeof HostResourcesSnapshot.Type;
 

@@ -23,6 +23,7 @@ import { ThreadDetailsCard } from "./ThreadDetailsCard";
 import { OpenInPicker } from "./OpenInPicker";
 import { ThreadDetailsSection } from "./ThreadDetailsSection";
 import { ThreadAutomationsPanel } from "./ThreadAutomationsPanel";
+import { ServerHealthSection } from "./ServerHealthSection";
 import { ThreadRelationshipsPanel } from "./ThreadRelationshipsControl";
 
 const GitActionsControl = memo(BaseGitActionsControl);
@@ -78,6 +79,9 @@ export function ThreadDetailsPanel(props: ThreadDetailsPanelProps) {
     props.activeProjectScripts ? props.gitCwd : null,
   );
   const activeThreadRef = { environmentId: props.environmentId, threadId: props.threadId };
+  const isRemoteEnvironment = props.availableEnvironments.some(
+    (environment) => environment.environmentId === props.environmentId && !environment.isPrimary,
+  );
   const branchToolbarProps = {
     showGitControls: props.isGitRepo,
     environmentId: props.environmentId,
@@ -180,6 +184,10 @@ export function ThreadDetailsPanel(props: ThreadDetailsPanelProps) {
                 ) : null}
               </div>
             </ThreadDetailsSection>
+          ) : null}
+
+          {density !== "essential" && isRemoteEnvironment ? (
+            <ServerHealthSection environmentId={props.environmentId} />
           ) : null}
 
           {density === "full" && !props.draftId ? (

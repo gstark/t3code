@@ -1082,6 +1082,22 @@ export function createServerEnvironmentAtoms<R, E>(
       execute: (input: EnvironmentRpcInput<typeof WS_METHODS.serverGetHostResources>) =>
         request(WS_METHODS.serverGetHostResources, input).pipe(Effect.timeout("5 seconds")),
     }),
+    /** Host resources polled while shown, with the request's round trip as connection latency. */
+    hostHealth: createEnvironmentQueryAtomFamily(runtime, {
+      label: "environment-data:server:host-health",
+      idleTtlMs: 0,
+      staleTimeMs: 0,
+      refreshIntervalMs: 10_000,
+      execute: (input: EnvironmentRpcInput<typeof WS_METHODS.serverGetHostResources>) =>
+        request(WS_METHODS.serverGetHostResources, input).pipe(
+          Effect.timeout("5 seconds"),
+          Effect.timed,
+          Effect.map(([duration, snapshot]) => ({
+            snapshot,
+            latencyMs: Math.round(Duration.toMillis(duration)),
+          })),
+        ),
+    }),
     processResourceHistory: createEnvironmentRpcQueryAtomFamily(runtime, {
       label: "environment-data:server:process-resource-history",
       tag: WS_METHODS.serverGetProcessResourceHistory,
