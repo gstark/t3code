@@ -17,12 +17,14 @@ import type { ProviderTextGeneration } from "./textGeneration.ts";
 import {
   buildBranchNamePrompt,
   buildCommitMessagePrompt,
+  buildHistorySummaryPrompt,
   buildPrContentPrompt,
   buildReviewGuidePrompt,
   buildThreadTitlePrompt,
 } from "./textGenerationPrompts.ts";
 import {
   sanitizeCommitSubject,
+  sanitizeHistorySummary,
   sanitizePrTitle,
   sanitizeThreadTitle,
 } from "./textGenerationUtils.ts";
@@ -179,6 +181,18 @@ export function fromRunner(name: string, run: Runner): ProviderTextGeneration {
     };
   });
 
+  const generateHistorySummary: ProviderTextGeneration["generateHistorySummary"] = Effect.fn(
+    `${name}.generateHistorySummary`,
+  )(function* (input) {
+    const generated = yield* run({
+      operation: "generateHistorySummary",
+      cwd: input.cwd,
+      modelSelection: input.modelSelection,
+      ...buildHistorySummaryPrompt({ transcript: input.transcript }),
+    });
+    return { summary: sanitizeHistorySummary(generated.summary) };
+  });
+
   const generateReviewGuide: ProviderTextGeneration["generateReviewGuide"] = Effect.fn(
     `${name}.generateReviewGuide`,
   )(function* (input) {
@@ -196,6 +210,7 @@ export function fromRunner(name: string, run: Runner): ProviderTextGeneration {
     generatePrContent,
     generateBranchName,
     generateThreadTitle,
+    generateHistorySummary,
     generateReviewGuide,
   } satisfies ProviderTextGeneration;
 }

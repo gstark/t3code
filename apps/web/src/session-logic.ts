@@ -173,6 +173,15 @@ export type TimelineEntry = (
       readonly createdAt: string;
       readonly projectedItem: OrchestrationV2ProjectedTurnItem;
     }
+  | {
+      /** Hides the entries since the previous history collapse. */
+      readonly id: string;
+      readonly kind: "history-collapse";
+      readonly createdAt: string;
+      readonly turnItemId: TurnItemId;
+      readonly summary: string | null;
+      readonly summarizing: boolean;
+    }
 ) & {
   /** V2 identity resolved from the item's execution node, when locally available. */
   readonly attempt?: TimelineAttempt;
@@ -643,6 +652,20 @@ export function deriveTimelineEntriesFromVisibleTurnItems(
     if (item.type === "todo_list" || item.type === "checkpoint") continue;
     if (item.type === "user_message" && foldedAnswerMessageIds.has(item.messageId)) continue;
     const createdAt = projectedItemCreatedAt(row);
+    if (item.type === "history_collapse") {
+      // An uncollapsed marker leaves its history inline.
+      if (item.status !== "cancelled") {
+        entries.push({
+          id: item.id,
+          kind: "history-collapse",
+          createdAt,
+          turnItemId: item.id,
+          summary: item.summary,
+          summarizing: item.status === "running",
+        });
+      }
+      continue;
+    }
     const attempt = resolveAttempt(item);
     const attemptMetadata = attempt === undefined ? {} : { attempt };
     if (item.type === "notification") {

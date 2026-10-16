@@ -25,6 +25,7 @@ import {
   type RuntimeRequestId,
   type ThreadId,
   type ThreadEnvMode,
+  type TurnItemId,
   type UploadChatAttachment,
 } from "@t3tools/contracts";
 import { modelSelectionCommandType } from "@t3tools/shared/model";
@@ -121,6 +122,12 @@ export interface VisitThreadInput extends ThreadCommandInput {
 }
 
 export type MarkThreadUnreadInput = ThreadCommandInput;
+
+export type CollapseThreadHistoryInput = ThreadCommandInput;
+
+export interface UncollapseThreadHistoryInput extends ThreadCommandInput {
+  readonly turnItemId: TurnItemId;
+}
 
 export interface UpdateThreadMetadataInput extends ThreadCommandInput {
   readonly limitRecovery?: import("@t3tools/contracts").OrchestrationV2LimitRecoveryUpdate | null;
@@ -560,6 +567,27 @@ export const markThreadUnread = Effect.fn("EnvironmentCommands.markThreadUnread"
     threadId: input.threadId,
   });
 });
+
+export const collapseThreadHistory = Effect.fn("EnvironmentCommands.collapseThreadHistory")(
+  function* (input: CollapseThreadHistoryInput) {
+    return yield* dispatch({
+      type: "thread.history.collapse",
+      commandId: yield* allocateCommandId(input),
+      threadId: input.threadId,
+    });
+  },
+);
+
+export const uncollapseThreadHistory = Effect.fn("EnvironmentCommands.uncollapseThreadHistory")(
+  function* (input: UncollapseThreadHistoryInput) {
+    return yield* dispatch({
+      type: "thread.history.uncollapse",
+      commandId: yield* allocateCommandId(input),
+      threadId: input.threadId,
+      turnItemId: input.turnItemId,
+    });
+  },
+);
 
 export const updateThreadMetadata = Effect.fn("EnvironmentCommands.updateThreadMetadata")(
   function* (input: UpdateThreadMetadataInput) {

@@ -230,6 +230,13 @@ Consecutive tool calls fold into one row. To show each call as its own row, turn
 off **Group tool calls** in **Settings → General** on web and desktop, or in
 **Settings → Thread behavior** on mobile.
 
+To tidy a long conversation on web and desktop, choose **Collapse history** from
+the menu in the chat header. Everything since the previous collapse folds into
+one row, and the text generation model replaces "Collapsed (summarizing)" with a
+one-line summary. Click the row to look inside it, or use its **×** to uncollapse
+it. Collapses are saved with the thread and do not change what the agent sees.
+The thread must be idle to collapse.
+
 ## Snooze until later
 
 Choose **Snooze → Custom…** from a thread's menu to pick a date and time in your

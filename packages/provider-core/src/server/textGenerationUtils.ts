@@ -57,6 +57,23 @@ export function sanitizePrTitle(raw: string): string {
 const MAX_THREAD_TITLE_CHARS = 120;
 
 /** Normalise a raw thread title to a single line. Clients truncate for display. */
+const MAX_HISTORY_SUMMARY_CHARS = 160;
+
+/** One line, no wrapping quotes, capped so a chatty model cannot grow the row. */
+export function sanitizeHistorySummary(raw: string): string {
+  const line =
+    raw
+      .trim()
+      .split(/\r?\n/g)[0]
+      ?.trim()
+      .replace(/^['"`]+|['"`]+$/g, "")
+      .trim()
+      .replace(/\s+/g, " ") ?? "";
+  return line.length <= MAX_HISTORY_SUMMARY_CHARS
+    ? line
+    : `${line.slice(0, MAX_HISTORY_SUMMARY_CHARS - 3).trimEnd()}...`;
+}
+
 export function sanitizeThreadTitle(raw: string): string {
   // Unwrap a JSON-formatted title before truncation can cut off the closing brace.
   const decoded = decodeJsonThreadTitle(raw);

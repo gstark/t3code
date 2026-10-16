@@ -609,6 +609,15 @@ type MessagesTimelineRowContent =
       gitAction: GitActionActivityPayload;
     }
   | {
+      kind: "history-collapse";
+      id: string;
+      createdAt: string;
+      turnItemId: TurnItemId;
+      summary: string | null;
+      summarizing: boolean;
+      expanded: boolean;
+    }
+  | {
       kind: "message";
       id: string;
       createdAt: string;
@@ -1362,6 +1371,30 @@ function settleSupersededReasoning(entries: ReadonlyArray<TimelineEntry>) {
   });
 }
 
+/**
+ * Each history collapse hides the entries since the previous one. Its row moves
+ * ahead of them, so an expanded collapse reads as a header over its history.
+ */
+export function applyHistoryCollapses(
+  entries: ReadonlyArray<TimelineEntry>,
+  expandedIds: ReadonlySet<string> | undefined,
+): ReadonlyArray<TimelineEntry> {
+  if (!entries.some((entry) => entry.kind === "history-collapse")) return entries;
+  const result: TimelineEntry[] = [];
+  let segmentStart = 0;
+  for (const entry of entries) {
+    if (entry.kind !== "history-collapse") {
+      result.push(entry);
+      continue;
+    }
+    const hidden = result.splice(segmentStart);
+    result.push(entry);
+    if (expandedIds?.has(entry.id)) result.push(...hidden);
+    segmentStart = result.length;
+  }
+  return result;
+}
+
 function timelineRowEntries(entries: ReadonlyArray<TimelineEntry>) {
   return withoutSubagentDelegationRows(settleSupersededReasoning(entries));
 }
@@ -1399,6 +1432,7 @@ export function deriveMessagesTimelineRows(input: {
   expandedRunIds?: ReadonlySet<RunId>;
   expandedAttemptIds?: ReadonlySet<RunAttemptId>;
   expandedWorkGroupIds?: ReadonlySet<string>;
+  expandedHistoryCollapseIds?: ReadonlySet<string>;
   isWorking: boolean;
   /**
    * The live work has no app run (a provider-native subagent thread), so
@@ -1416,7 +1450,9 @@ export function deriveMessagesTimelineRows(input: {
   groupToolCalls?: boolean;
 }): MessagesTimelineRow[] {
   const groupToolCalls = input.groupToolCalls ?? true;
-  const timelineEntries = timelineRowEntries(input.timelineEntries);
+  const timelineEntries = timelineRowEntries(
+    applyHistoryCollapses(input.timelineEntries, input.expandedHistoryCollapseIds),
+  );
   const turnDiffSummaryByAssistantMessageId = new Map<MessageId, TurnDiffSummary>();
   for (const summary of input.turnDiffSummaries) {
     if (summary.assistantMessageId) {
@@ -1608,6 +1644,19 @@ export function deriveMessagesTimelineRows(input: {
       timelineEntry.kind === "event" &&
       timelineEntry.projectedItem.item.type === "run_interrupt_request"
     ) {
+      continue;
+    }
+
+    if (timelineEntry.kind === "history-collapse") {
+      nextRows.push({
+        kind: "history-collapse",
+        id: timelineEntry.id,
+        createdAt: timelineEntry.createdAt,
+        turnItemId: timelineEntry.turnItemId,
+        summary: timelineEntry.summary,
+        summarizing: timelineEntry.summarizing,
+        expanded: input.expandedHistoryCollapseIds?.has(timelineEntry.id) ?? false,
+      });
       continue;
     }
 
@@ -2295,6 +2344,13 @@ function isRowUnchanged(a: MessagesTimelineRow, b: MessagesTimelineRow): boolean
 
     case "git-action":
       return a.gitAction === (b as typeof a).gitAction;
+
+    case "history-collapse": {
+      const bh = b as typeof a;
+      return (
+        a.summary === bh.summary && a.summarizing === bh.summarizing && a.expanded === bh.expanded
+      );
+    }
 
     case "proposed-plan":
       return a.proposedPlan === (b as typeof a).proposedPlan;
