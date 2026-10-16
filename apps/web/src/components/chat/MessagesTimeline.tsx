@@ -14,6 +14,7 @@ import {
   type ServerProviderSkill,
   type RunId,
   ThreadId,
+  type TurnItemId,
 } from "@t3tools/contracts";
 import { parseScopedThreadKey } from "@t3tools/client-runtime/environment";
 import { resolveWorkGroupScrollAnchor } from "@t3tools/client-runtime/work-log/scroll-anchor";
@@ -44,7 +45,7 @@ import {
 import { type TimelineEntry } from "../../session-logic";
 import type { CodexArtifactTemplate } from "@t3tools/shared/codexArtifactTemplates";
 import { type ChatFileAttachment, type TurnDiffSummary } from "../../types";
-import { ArrowRightIcon, BotIcon, CircleAlertIcon, Minimize2Icon } from "lucide-react";
+import { ArrowRightIcon, BotIcon, CircleAlertIcon, Minimize2Icon, XIcon } from "lucide-react";
 import { ChevronDown, ChevronRight } from "lucide";
 import { MorphIcon } from "~/components/MorphIcon";
 import { ExpandedImagePreview } from "./ExpandedImagePreview";
@@ -213,6 +214,8 @@ interface MessagesTimelineProps {
   onRetryWorkspacePreparation?: (runId: RunId) => void;
   onWorktreeSetupWorkLocally?: () => void;
   onOpenWorktreeSetupTerminal?: (terminalId: string) => void;
+  /** Expands a history collapse for good. Absent on read-only timelines. */
+  onUncollapseHistory?: (turnItemId: TurnItemId) => void;
   isPreparingWorktree?: boolean;
   isCompacting?: boolean;
   awaitingUser?: "approval" | "input" | null;
@@ -321,6 +324,7 @@ const ConversationTimeline = memo(function ConversationTimeline({
   onRetryWorkspacePreparation,
   onWorktreeSetupWorkLocally,
   onOpenWorktreeSetupTerminal,
+  onUncollapseHistory,
   isPreparingWorktree = false,
   isCompacting = false,
   awaitingUser = null,
@@ -399,6 +403,10 @@ const ConversationTimeline = memo(function ConversationTimeline({
   const [expandedAttemptIds, setExpandedAttemptIds] = useState<ReadonlySet<RunAttemptId>>(
     () => listState.rememberedPosition?.disclosures?.attempts ?? new Set(),
   );
+  // A peek inside a collapse is per visit; the collapse itself is persisted.
+  const [expandedHistoryCollapseIds, setExpandedHistoryCollapseIds] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
   // A list that opens on a thread with find open takes the opening step below,
   // so the restore runs and releases follow once for find.
   const [positionedThreadKey, setPositionedThreadKey] = useState<string | null>(() =>
@@ -414,6 +422,7 @@ const ConversationTimeline = memo(function ConversationTimeline({
   let paintedExpandedRunIds = expandedRunIds;
   let paintedExpandedWorkGroupIds = expandedWorkGroupIds;
   let paintedExpandedAttemptIds = expandedAttemptIds;
+  let paintedExpandedHistoryCollapseIds = expandedHistoryCollapseIds;
   const identityChanged = listState.identity !== listIdentityKey;
   const { rememberedPosition, workGroupViewState } = identityChanged
     ? timelineListStateFor(listIdentityKey)
@@ -437,6 +446,8 @@ const ConversationTimeline = memo(function ConversationTimeline({
     setExpandedRunIds(paintedExpandedRunIds);
     setExpandedWorkGroupIds(paintedExpandedWorkGroupIds);
     setExpandedAttemptIds(paintedExpandedAttemptIds);
+    paintedExpandedHistoryCollapseIds = new Set();
+    setExpandedHistoryCollapseIds(paintedExpandedHistoryCollapseIds);
   }
   const citationThreadRef = parseScopedThreadKey(routeThreadKey);
   const openPullRequest = useOpenPrLink(citationThreadRef ?? undefined);
@@ -516,6 +527,18 @@ const ConversationTimeline = memo(function ConversationTimeline({
         next.delete(groupId);
       } else {
         next.add(groupId);
+      }
+      return next;
+    });
+  };
+  const onToggleHistoryCollapse = (collapseId: string) => {
+    suspendEndScrollMaintenanceForDisclosure(collapseId);
+    setExpandedHistoryCollapseIds((existing) => {
+      const next = new Set(existing);
+      if (next.has(collapseId)) {
+        next.delete(collapseId);
+      } else {
+        next.add(collapseId);
       }
       return next;
     });
@@ -663,6 +686,7 @@ const ConversationTimeline = memo(function ConversationTimeline({
     expandedRunIds: visibleExpandedRunIds,
     expandedAttemptIds: visibleExpandedAttemptIds,
     expandedWorkGroupIds,
+    expandedHistoryCollapseIds: paintedExpandedHistoryCollapseIds,
     isWorking,
     runlessWorkActive,
     activeTurnStartedAt,
@@ -1038,6 +1062,8 @@ const ConversationTimeline = memo(function ConversationTimeline({
     onRollbackCheckpoint,
     onToggleTurnFold,
     onToggleAttemptFold,
+    onToggleHistoryCollapse,
+    onUncollapseHistory: onUncollapseHistory ?? null,
     onToggleWorkGroup,
     onToggleWorkEntry: suspendEndScrollMaintenanceForDisclosure,
     onCancelWorktreeSetup: onCancelWorktreeSetup ?? null,
@@ -1421,7 +1447,8 @@ const TimelineRowContent = memo(function TimelineRowContent({ row }: { row: Time
                 row.kind === "event" ||
                 row.kind === "attempt-fold" ||
                 row.kind === "html-render" ||
-                row.kind === "mcp-app"
+                row.kind === "mcp-app" ||
+                row.kind === "history-collapse"
               ? "pb-2"
               : "pb-4",
         (row.kind === "message" && row.message.role === "assistant") ||
@@ -1463,6 +1490,7 @@ const TimelineRowContent = memo(function TimelineRowContent({ row }: { row: Time
       {row.kind === "turn-fold" ? <TurnFoldTimelineRow row={row} /> : null}
       {row.kind === "attempt-fold" ? <AttemptFoldTimelineRow row={row} /> : null}
       {row.kind === "context-compaction" ? <ContextCompactionTimelineRow row={row} /> : null}
+      {row.kind === "history-collapse" ? <HistoryCollapseTimelineRow row={row} /> : null}
       {row.kind === "message" && row.message.role === "user" ? <UserMessageRow row={row} /> : null}
       {row.kind === "message" && row.message.role === "assistant" ? (
         <AssistantTimelineRow row={row} />
@@ -1572,6 +1600,51 @@ function TurnFoldTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "turn-
         timestampFormat={ctx.timestampFormat}
         className="ms-auto"
       />
+    </div>
+  );
+}
+
+function HistoryCollapseTimelineRow({
+  row,
+}: {
+  row: Extract<TimelineRow, { kind: "history-collapse" }>;
+}) {
+  const ctx = use(TimelineRowCtx);
+  const uncollapse = ctx.onUncollapseHistory;
+  const label = row.summarizing ? "Collapsed (summarizing)" : (row.summary ?? "Collapsed");
+
+  return (
+    <div className="group/timeline-row flex items-center gap-1 rounded-md border border-border/60 bg-muted/20 pe-1 transition-colors hover:bg-muted/35">
+      <button
+        type="button"
+        aria-expanded={row.expanded}
+        data-scroll-anchor-ignore
+        onClick={() => ctx.onToggleHistoryCollapse(row.id)}
+        className="flex min-w-0 flex-1 cursor-pointer select-none items-center gap-2 rounded-md px-2.5 py-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/70"
+      >
+        <MorphIcon
+          className="size-3.5 shrink-0 text-muted-foreground"
+          icon={row.expanded ? ChevronDown : ChevronRight}
+        />
+        <span
+          className={cn(
+            "truncate text-xs",
+            row.summarizing ? "text-muted-foreground" : "font-medium text-foreground/80",
+          )}
+        >
+          {label}
+        </span>
+      </button>
+      {uncollapse ? (
+        <button
+          type="button"
+          aria-label="Uncollapse history"
+          onClick={() => uncollapse(row.turnItemId)}
+          className="shrink-0 cursor-pointer rounded-sm p-1 text-muted-foreground opacity-0 transition-opacity hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/70 group-hover/timeline-row:opacity-100"
+        >
+          <XIcon aria-hidden className="size-3.5" />
+        </button>
+      ) : null}
     </div>
   );
 }

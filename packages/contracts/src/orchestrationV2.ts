@@ -1442,6 +1442,17 @@ const OrchestrationV2SecretRequestFields = {
   secretStatus: OrchestrationV2SecretRequestStatus,
 } as const;
 
+/**
+ * The user collapsed the visible history since the previous collapse into one
+ * row. Recorded without a run. `summary` is null while the model writes it
+ * (status `running`) and when it failed; status `cancelled` means the user
+ * expanded the history again.
+ */
+const OrchestrationV2HistoryCollapseFields = {
+  type: Schema.Literal("history_collapse"),
+  summary: Schema.NullOr(TrimmedNonEmptyString),
+} as const;
+
 export const OrchestrationV2TurnItem = Schema.Union([
   Schema.Struct({
     ...OrchestrationV2TurnItemBaseFields,
@@ -1630,6 +1641,9 @@ export const OrchestrationV2TurnItem = Schema.Union([
   Schema.Struct({
     ...OrchestrationV2TurnItemBaseFields,
     ...OrchestrationV2SecretRequestFields,
+  }),
+  Schema.Struct({
+    ...OrchestrationV2HistoryCollapseFields,
   }),
   Schema.Struct({
     ...OrchestrationV2TurnItemBaseFields,
@@ -2464,6 +2478,9 @@ export const OrchestrationV2TurnItemJson = Schema.Union([
     ...OrchestrationV2SecretRequestFields,
   }),
   Schema.Struct({
+    ...OrchestrationV2HistoryCollapseFields,
+  }),
+  Schema.Struct({
     ...OrchestrationV2TurnItemJsonBaseFields,
     type: Schema.Literal("subagent"),
     subagentId: NodeId,
@@ -2963,6 +2980,19 @@ export const OrchestrationV2Command = Schema.Union([
     requestId: CommandId,
     title: Schema.optional(TrimmedNonEmptyString),
   }),
+  /** Collapses the visible history since the previous collapse and summarizes it. */
+  Schema.Struct({
+    type: Schema.Literal("thread.history.collapse"),
+    commandId: CommandId,
+    threadId: ThreadId,
+  }),
+  /** Expands a collapse again. Its history shows inline as before. */
+  Schema.Struct({
+    type: Schema.Literal("thread.history.uncollapse"),
+    commandId: CommandId,
+    threadId: ThreadId,
+    turnItemId: TurnItemId,
+  }),
   Schema.Struct({
     type: Schema.Literal("thread.runtime-mode.set"),
     commandId: CommandId,
@@ -3308,6 +3338,14 @@ const OrchestrationV2InternalCommand = Schema.Union([
     placeholder: Schema.optional(Schema.String),
     delivery: Schema.optional(OrchestrationV2SecretRequestDelivery),
     secretStatus: OrchestrationV2SecretRequestStatus,
+  }),
+  /** Records the summary of a history collapse. Null records that summarizing failed. */
+  Schema.Struct({
+    type: Schema.Literal("thread.history-collapse.complete"),
+    commandId: CommandId,
+    threadId: ThreadId,
+    turnItemId: TurnItemId,
+    summary: Schema.NullOr(TrimmedNonEmptyString),
   }),
 ]);
 export type OrchestrationV2InternalCommand = typeof OrchestrationV2InternalCommand.Type;
