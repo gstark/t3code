@@ -24,6 +24,7 @@ import { OpenInPicker } from "./OpenInPicker";
 import { ThreadDetailsSection } from "./ThreadDetailsSection";
 import { ThreadAutomationsPanel } from "./ThreadAutomationsPanel";
 import { ServerHealthSection } from "./ServerHealthSection";
+import { WorkspaceServersSection } from "./WorkspaceServersSection";
 import { ThreadRelationshipsPanel } from "./ThreadRelationshipsControl";
 
 const GitActionsControl = memo(BaseGitActionsControl);
@@ -184,6 +185,14 @@ export function ThreadDetailsPanel(props: ThreadDetailsPanelProps) {
                 ) : null}
               </div>
             </ThreadDetailsSection>
+          ) : null}
+
+          {density !== "essential" && props.gitCwd ? (
+            <WorkspaceServersSection
+              environmentId={props.environmentId}
+              threadId={props.threadId}
+              cwd={props.gitCwd}
+            />
           ) : null}
 
           {density !== "essential" && isRemoteEnvironment ? (

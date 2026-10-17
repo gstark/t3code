@@ -2,11 +2,17 @@ import type {
   BrowserNavigationTarget,
   EnvironmentId,
   PreviewUrlResolution,
+  WorkspaceServerAddressScope,
 } from "@t3tools/contracts";
 import { isLoopbackHost, normalizePreviewUrl } from "@t3tools/shared/preview";
-import { isLocalLoopbackHost, isPrivateNetworkHost } from "@t3tools/shared/hostClassification";
+import {
+  isLocalLoopbackHost,
+  isPrivateNetworkHost,
+  isSharedAddressSpaceHost,
+  isTailnetHost,
+} from "@t3tools/shared/hostClassification";
 
-import type { ConnectionTarget } from "@t3tools/client-runtime/connection";
+import type { ConnectionTarget, PreparedConnection } from "@t3tools/client-runtime/connection";
 
 import { isDesktopLocalConnectionTarget } from "~/connection/desktopLocal";
 import { isElectron } from "~/env";
@@ -89,6 +95,41 @@ export function resolveBrowserNavigationTarget(
 const reachesEnvironmentLoopback = (target: ConnectionTarget): boolean =>
   isElectron &&
   (target._tag === "PrimaryConnectionTarget" || isDesktopLocalConnectionTarget(target));
+
+const ALL_SCOPES: ReadonlySet<WorkspaceServerAddressScope> = new Set([
+  "loopback",
+  "lan",
+  "tailnet",
+]);
+const NO_SCOPES: ReadonlySet<WorkspaceServerAddressScope> = new Set();
+
+/**
+ * The networks this client can use to reach other servers on the
+ * environment's host, judged by the route the client uses to reach the
+ * environment itself. T3 Connect and SSH tunnel only to T3, so they reach
+ * nothing else.
+ */
+export function reachableServerScopes(
+  connection: Pick<PreparedConnection, "httpBaseUrl" | "target"> | null,
+): ReadonlySet<WorkspaceServerAddressScope> {
+  if (connection === null) return NO_SCOPES;
+  if (reachesEnvironmentLoopback(connection.target)) return ALL_SCOPES;
+  if (
+    connection.target._tag === "RelayConnectionTarget" ||
+    connection.target._tag === "SshConnectionTarget"
+  ) {
+    return NO_SCOPES;
+  }
+  let hostname: string;
+  try {
+    hostname = new URL(connection.httpBaseUrl).hostname;
+  } catch {
+    return NO_SCOPES;
+  }
+  if (isLocalLoopbackHost(hostname)) return ALL_SCOPES;
+  if (isTailnetHost(hostname) || isSharedAddressSpaceHost(hostname)) return new Set(["tailnet"]);
+  return isPrivateNetworkHost(hostname) ? new Set(["lan"]) : NO_SCOPES;
+}
 
 export function resolveDiscoveredServerUrl(environmentId: EnvironmentId, rawUrl: string): string {
   try {

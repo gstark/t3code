@@ -67,6 +67,8 @@ export class PortDiscovery extends Context.Service<
       readonly threadId: string;
       readonly terminalId: string;
     }) => Effect.Effect<void>;
+    /** Processes that run in the thread's T3 terminals, from the last registration. */
+    readonly threadTerminalProcessIds: (threadId: string) => Effect.Effect<ReadonlySet<number>>;
   }
 >()("t3/preview/PortScanner/PortDiscovery") {}
 
@@ -797,12 +799,27 @@ export const make = Effect.gen(function* PortDiscoveryMake() {
     });
   });
 
+  const threadTerminalProcessIds: PortDiscovery["Service"]["threadTerminalProcessIds"] = (
+    threadId,
+  ) =>
+    Ref.get(stateRef).pipe(
+      Effect.map(
+        (state) =>
+          new Set(
+            [...state.terminalProcesses.values()].flatMap((registration) =>
+              registration.owner.threadId === threadId ? [...registration.processIds] : [],
+            ),
+          ),
+      ),
+    );
+
   return PortDiscovery.of({
     scan: scanOnce,
     subscribe,
     retain,
     registerTerminalProcesses,
     unregisterTerminal,
+    threadTerminalProcessIds,
   });
 }).pipe(Effect.withSpan("PortDiscovery.make"));
 

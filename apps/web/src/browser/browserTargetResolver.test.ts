@@ -376,4 +376,20 @@ describe("browser target resolver", () => {
     expect(nonPublic.filter(isPublicFaviconHost)).toEqual([]);
     expect(publicHosts.filter((host) => !isPublicFaviconHost(host))).toEqual([]);
   });
+
+  it("allows only the server networks this client reaches the environment on", async () => {
+    const { reachableServerScopes } = await import("./browserTargetResolver");
+    type Connection = Parameters<typeof reachableServerScopes>[0];
+    const connection = (httpBaseUrl: string, _tag: string) =>
+      ({ httpBaseUrl, target: { _tag, connectionId: "remote" } }) as Connection;
+    const bearer = (httpBaseUrl: string) => connection(httpBaseUrl, "BearerConnectionTarget");
+    const scopes = (input: Connection) => [...reachableServerScopes(input)];
+    expect(scopes(bearer("http://localhost:3773"))).toEqual(["loopback", "lan", "tailnet"]);
+    expect(scopes(bearer("http://192.168.1.25:3773"))).toEqual(["lan"]);
+    expect(scopes(bearer("http://100.65.180.100:3773"))).toEqual(["tailnet"]);
+    expect(scopes(bearer("https://box.tail1234.ts.net"))).toEqual(["tailnet"]);
+    expect(scopes(bearer("https://t3.example.com"))).toEqual([]);
+    expect(scopes(connection("https://relay.t3.codes", "RelayConnectionTarget"))).toEqual([]);
+    expect(scopes(null)).toEqual([]);
+  });
 });

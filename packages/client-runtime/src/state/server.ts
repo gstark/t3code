@@ -1082,6 +1082,15 @@ export function createServerEnvironmentAtoms<R, E>(
       execute: (input: EnvironmentRpcInput<typeof WS_METHODS.serverGetHostResources>) =>
         request(WS_METHODS.serverGetHostResources, input).pipe(Effect.timeout("5 seconds")),
     }),
+    /** Servers running in a thread's workspace, polled while shown. */
+    workspaceServers: createEnvironmentQueryAtomFamily(runtime, {
+      label: "environment-data:server:workspace-servers",
+      idleTtlMs: 0,
+      staleTimeMs: 0,
+      refreshIntervalMs: 5_000,
+      execute: (input: EnvironmentRpcInput<typeof WS_METHODS.serverGetWorkspaceServers>) =>
+        request(WS_METHODS.serverGetWorkspaceServers, input).pipe(Effect.timeout("10 seconds")),
+    }),
     /** Host resources polled while shown, with the request's round trip as connection latency. */
     hostHealth: createEnvironmentQueryAtomFamily(runtime, {
       label: "environment-data:server:host-health",
