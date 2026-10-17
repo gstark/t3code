@@ -4,6 +4,7 @@ import type {
   WorkspaceServerAddress,
   WorkspaceServerKind,
 } from "@t3tools/contracts";
+import { connectionRoutes } from "@t3tools/client-runtime/connection";
 import { CheckIcon, CopyIcon } from "lucide-react";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
@@ -11,6 +12,7 @@ import * as Schema from "effect/Schema";
 import { reachableServerScopes } from "../../browser/browserTargetResolver";
 import { useCopyToClipboard } from "../../hooks/useCopyToClipboard";
 import { useLocalStorage } from "../../hooks/useLocalStorage";
+import { useEnvironment } from "../../state/environments";
 import { useEnvironmentQuery } from "../../state/query";
 import { serverEnvironment } from "../../state/server";
 import { usePreparedConnection } from "../../state/session";
@@ -83,11 +85,29 @@ export function WorkspaceServersSection(props: {
       input: { threadId: props.threadId, cwd: props.cwd },
     }),
   );
-  const scopes = reachableServerScopes(
-    Option.getOrNull(usePreparedConnection(props.environmentId)),
-  );
+  const connection = Option.getOrNull(usePreparedConnection(props.environmentId));
+  const environment = useEnvironment(props.environmentId);
   const servers = query.data?.servers ?? [];
   if (servers.length === 0) return null;
+
+  const target = connection?.target;
+  // SSH connections reach T3 through a tunnel; the SSH host is how this
+  // device reaches the machine itself.
+  const sshHostname =
+    target?._tag === "SshConnectionTarget" && environment
+      ? (connectionRoutes(environment.entry).flatMap((route) => {
+          const profile = Option.getOrNull(route.profile);
+          return profile?._tag === "SshConnectionProfile" &&
+            profile.connectionId === target.connectionId
+            ? [profile.target.hostname]
+            : [];
+        })[0] ?? null)
+      : null;
+  const scopes = reachableServerScopes(
+    connection,
+    sshHostname,
+    servers.flatMap((server) => server.addresses),
+  );
 
   return (
     <ThreadDetailsSection
