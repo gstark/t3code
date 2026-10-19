@@ -4,11 +4,13 @@ import { PositiveInt, ThreadId, TrimmedNonEmptyString } from "./baseSchemas.ts";
 
 /**
  * What a listening process probably serves. The server guesses from the
- * process name and port and never probes, because a probe can crash a binary
- * protocol listener. `tcp` means the guess found nothing.
+ * process name and port, because a probe can crash a binary protocol
+ * listener. Only a guessed HTTP server gets a request, which can make it
+ * `https`. `tcp` means the guess found nothing.
  */
 export const WorkspaceServerKind = Schema.Literals([
   "http",
+  "https",
   "postgres",
   "mysql",
   "redis",
@@ -24,7 +26,7 @@ export type WorkspaceServerAddressScope = typeof WorkspaceServerAddressScope.Typ
 
 export const WorkspaceServerAddress = Schema.Struct({
   scope: WorkspaceServerAddressScope,
-  /** A URL for `http`, `s3`, and database kinds; `host:port` for `tcp`. */
+  /** A URL for `http`, `https`, `s3`, and database kinds; `host:port` for `tcp`. */
   url: TrimmedNonEmptyString,
 });
 export type WorkspaceServerAddress = typeof WorkspaceServerAddress.Type;
@@ -34,6 +36,8 @@ export const WorkspaceServer = Schema.Struct({
   port: PositiveInt.check(Schema.isLessThan(65536)),
   pid: PositiveInt,
   processName: Schema.NullOr(TrimmedNonEmptyString),
+  /** The `<title>` of an HTTP server's root page, when it has one. */
+  title: Schema.NullOr(TrimmedNonEmptyString),
   kind: WorkspaceServerKind,
   addresses: Schema.Array(WorkspaceServerAddress),
 });

@@ -1,13 +1,22 @@
+// @effect-diagnostics nodeBuiltinImport:off -- the probe test needs a real HTTP server.
+import * as NodeHttp from "node:http";
+import type * as NodeNet from "node:net";
+import { it as effectIt } from "@effect/vitest";
+import * as Effect from "effect/Effect";
 import { describe, expect, it } from "vite-plus/test";
 
 import {
   buildAddresses,
   classifyServer,
+  groupListeners,
   isInsideDirectory,
   parseLsofCwds,
   parseLsofListeners,
+  parseHtmlTitle,
   parseSsListeners,
-  toWorkspaceServers,
+  probeHost,
+  probeHttpPage,
+  toWorkspaceServer,
   type HostNetwork,
 } from "./WorkspaceServers.ts";
 
@@ -101,23 +110,82 @@ describe("buildAddresses", () => {
   });
 });
 
-describe("toWorkspaceServers", () => {
+describe("groupListeners", () => {
   it("merges the bind addresses of one process and port", () => {
-    const servers = toWorkspaceServers(
-      [
+    expect(
+      groupListeners([
         { pid: 100, processName: "node", host: "127.0.0.1", port: 5173 },
+        { pid: 200, processName: "ruby", host: "*", port: 3000 },
         { pid: 100, processName: "node", host: "::1", port: 5173 },
-      ],
-      NETWORK,
-    );
-    expect(servers).toEqual([
-      {
-        port: 5173,
-        pid: 100,
-        processName: "node",
-        kind: "http",
-        addresses: [{ scope: "loopback", url: "http://localhost:5173" }],
-      },
+      ]),
+    ).toEqual([
+      { pid: 200, port: 3000, processName: "ruby", hosts: ["*"] },
+      { pid: 100, port: 5173, processName: "node", hosts: ["127.0.0.1", "::1"] },
     ]);
   });
+});
+
+describe("toWorkspaceServer", () => {
+  const group = { pid: 100, port: 5173, processName: "node", hosts: ["127.0.0.1"] };
+
+  it("uses the page title and switches to https when the page answered over TLS", () => {
+    expect(toWorkspaceServer(group, NETWORK, { secure: true, title: "Admin" })).toEqual({
+      port: 5173,
+      pid: 100,
+      processName: "node",
+      title: "Admin",
+      kind: "https",
+      addresses: [{ scope: "loopback", url: "https://localhost:5173" }],
+    });
+  });
+
+  it("keeps the guess when no page answered", () => {
+    expect(toWorkspaceServer(group, NETWORK, null)).toMatchObject({ kind: "http", title: null });
+  });
+});
+
+describe("probeHost", () => {
+  it("prefers loopback, then a specific bind address", () => {
+    expect(probeHost(["*"])).toBe("127.0.0.1");
+    expect(probeHost(["::"])).toBe("::1");
+    expect(probeHost(["::1", "100.64.0.5"])).toBe("::1");
+    expect(probeHost(["100.64.0.5"])).toBe("100.64.0.5");
+  });
+});
+
+describe("parseHtmlTitle", () => {
+  it("decodes entities and collapses whitespace", () => {
+    expect(
+      parseHtmlTitle(
+        "<html><head><TITLE lang=en>\n  Tom &amp; Jerry&#39;s &#x2014; Admin\n</TITLE>",
+      ),
+    ).toBe("Tom & Jerry's \u2014 Admin");
+  });
+
+  it("returns null without a non-empty title", () => {
+    expect(parseHtmlTitle("<html><body>hi</body></html>")).toBeNull();
+    expect(parseHtmlTitle("<title>  </title>")).toBeNull();
+  });
+});
+
+describe("probeHttpPage", () => {
+  effectIt.effect("follows a same-server redirect to the page title", () =>
+    Effect.gen(function* () {
+      const server = yield* Effect.acquireRelease(
+        Effect.callback<NodeHttp.Server>((resume) => {
+          const created = NodeHttp.createServer((request, response) => {
+            if (request.url === "/") {
+              response
+                .writeHead(302, { location: `http://localhost:${request.socket.localPort}/login` })
+                .end();
+            } else response.end("<html><head><title>Sign in</title></head></html>");
+          });
+          created.listen(0, "127.0.0.1", () => resume(Effect.succeed(created)));
+        }),
+        (created) => Effect.sync(() => created.close()),
+      );
+      const { port } = server.address() as NodeNet.AddressInfo;
+      expect(yield* probeHttpPage("127.0.0.1", port)).toEqual({ secure: false, title: "Sign in" });
+    }).pipe(Effect.scoped),
+  );
 });

@@ -4,13 +4,18 @@
  *
  * A process belongs to a thread when its working directory is inside the
  * thread's directory, or when it runs in one of the thread's T3 terminals.
- * Listeners come from `lsof` on macOS and `ss` on Linux. The service never
- * connects to a listener: the kind is a guess from the process name and port,
- * because a probe can crash a binary protocol server.
+ * Listeners come from `lsof` on macOS and `ss` on Linux. The kind is a guess
+ * from the process name and port, because a probe can crash a binary protocol
+ * server. Only servers guessed as HTTP get one `GET /`, which reads the page
+ * title and tells HTTP from HTTPS.
  *
  * Clients poll this while the thread details panel shows it. One short cache
  * shares each scan between all clients and threads.
  */
+// @effect-diagnostics-next-line nodeBuiltinImport:off -- the probe must accept self-signed dev certificates and stop reading after the title.
+import * as NodeHttp from "node:http";
+// @effect-diagnostics-next-line nodeBuiltinImport:off -- see node:http above.
+import * as NodeHttps from "node:https";
 import * as NodeOS from "node:os";
 import type {
   WorkspaceServer,
@@ -23,6 +28,7 @@ import * as HostProcess from "@t3tools/shared/HostProcess";
 import { readTailscaleStatus } from "@t3tools/tailscale";
 import * as Cache from "effect/Cache";
 import * as Context from "effect/Context";
+import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -166,6 +172,7 @@ const isWildcard = (host: string) => host === "*" || host === "0.0.0.0" || host 
 
 const URL_SCHEME: Record<WorkspaceServerKind, string | null> = {
   http: "http",
+  https: "https",
   s3: "http",
   postgres: "postgres",
   mysql: "mysql",
@@ -201,11 +208,18 @@ export const buildAddresses = (input: {
   return [...addresses.values()];
 };
 
-/** Groups listeners into one server per process and port. */
-export const toWorkspaceServers = (
+/** The bind addresses of one process and port. */
+export interface ListenerGroup {
+  readonly pid: number;
+  readonly port: number;
+  readonly processName: string | null;
+  readonly hosts: ReadonlyArray<string>;
+}
+
+/** Groups listeners into one entry per process and port, sorted by port. */
+export const groupListeners = (
   listeners: ReadonlyArray<Listener>,
-  network: HostNetwork,
-): ReadonlyArray<WorkspaceServer> => {
+): ReadonlyArray<ListenerGroup> => {
   const groups = new Map<string, { listener: Listener; hosts: string[] }>();
   for (const listener of listeners) {
     const key = `${listener.pid}:${listener.port}`;
@@ -214,17 +228,134 @@ export const toWorkspaceServers = (
     else groups.set(key, { listener, hosts: [listener.host] });
   }
   return [...groups.values()]
-    .map(({ listener, hosts }) => {
-      const kind = classifyServer(listener.processName, listener.port);
-      return {
-        port: listener.port,
-        pid: listener.pid,
-        processName: listener.processName,
-        kind,
-        addresses: buildAddresses({ kind, port: listener.port, hosts, network }),
-      };
-    })
+    .map(({ listener, hosts }) => ({
+      pid: listener.pid,
+      port: listener.port,
+      processName: listener.processName,
+      hosts,
+    }))
     .toSorted((left, right) => left.port - right.port || left.pid - right.pid);
+};
+
+/** What `GET /` on an HTTP server returned. */
+export interface HttpPage {
+  readonly secure: boolean;
+  readonly title: string | null;
+}
+
+export const toWorkspaceServer = (
+  group: ListenerGroup,
+  network: HostNetwork,
+  page: HttpPage | null,
+): WorkspaceServer => {
+  const guess = classifyServer(group.processName, group.port);
+  const kind = guess === "http" && page?.secure ? "https" : guess;
+  return {
+    port: group.port,
+    pid: group.pid,
+    processName: group.processName,
+    title: page?.title ?? null,
+    kind,
+    addresses: buildAddresses({ kind, port: group.port, hosts: group.hosts, network }),
+  };
+};
+
+/** The address the T3 server uses to reach a listener on this machine. */
+export const probeHost = (hosts: ReadonlyArray<string>): string => {
+  const loopback = hosts.find(isLoopback);
+  if (loopback) return loopback === "localhost" ? "127.0.0.1" : loopback;
+  if (hosts.includes("::") && !hosts.some((host) => host === "*" || host === "0.0.0.0")) {
+    return "::1";
+  }
+  return hosts.find((host) => !isWildcard(host)) ?? "127.0.0.1";
+};
+
+const ENTITIES: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'" };
+
+/** The text of the first `<title>`, with entities decoded and spaces collapsed. */
+export const parseHtmlTitle = (html: string): string | null => {
+  const raw = /<title[^>]*>([\s\S]*?)<\/title>/i.exec(html)?.[1];
+  if (raw === undefined) return null;
+  const title = raw
+    .replace(
+      /&(?:#x([\da-f]+)|#(\d+)|([a-z]+));/gi,
+      (entity, hex?: string, dec?: string, name?: string) => {
+        if (name !== undefined) return ENTITIES[name.toLowerCase()] ?? entity;
+        const point = hex !== undefined ? Number.parseInt(hex, 16) : Number(dec);
+        return point > 0 && point <= 0x10ffff ? String.fromCodePoint(point) : entity;
+      },
+    )
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 120);
+  return title.length > 0 ? title : null;
+};
+
+const PROBE_TIMEOUT_MS = 2_000;
+const MAX_PAGE_BYTES = 64 * 1024;
+const MAX_REDIRECTS = 3;
+
+interface PageResponse {
+  readonly location: string | null;
+  readonly body: string;
+}
+
+class PageProbeError extends Data.TaggedError("PageProbeError")<{ readonly cause: unknown }> {}
+
+/** One `GET` that accepts self-signed certificates and reads at most the page head. */
+const getPage = (url: URL) =>
+  Effect.callback<PageResponse, PageProbeError>((resume) => {
+    const options = { timeout: PROBE_TIMEOUT_MS, headers: { accept: "text/html" } };
+    const onResponse = (response: NodeHttp.IncomingMessage) => {
+      const status = response.statusCode ?? 0;
+      if (status >= 300 && status < 400) {
+        response.resume();
+        resume(Effect.succeed({ location: response.headers.location ?? null, body: "" }));
+        return;
+      }
+      let body = "";
+      response.setEncoding("utf8");
+      response.on("data", (chunk: string) => {
+        body += chunk;
+        if (body.length >= MAX_PAGE_BYTES || /<\/title>/i.test(body)) response.destroy();
+      });
+      response.on("close", () => resume(Effect.succeed({ location: null, body })));
+    };
+    const request =
+      url.protocol === "https:"
+        ? NodeHttps.get(url, { ...options, rejectUnauthorized: false }, onResponse)
+        : NodeHttp.get(url, options, onResponse);
+    request.on("timeout", () => request.destroy(new Error("timed out")));
+    request.on("error", (cause) => resume(Effect.fail(new PageProbeError({ cause }))));
+    return Effect.sync(() => request.destroy());
+  });
+
+/**
+ * Reads the page at `/`, following same-server redirects. A server that drops
+ * plain HTTP gets a second try over HTTPS. Null when neither answers.
+ */
+export const probeHttpPage = (host: string, port: number): Effect.Effect<HttpPage | null> => {
+  const authority = `${host.includes(":") ? `[${host}]` : host}:${port}`;
+  const follow = (url: URL, redirects: number): Effect.Effect<HttpPage, PageProbeError> =>
+    getPage(url).pipe(
+      Effect.flatMap((response) => {
+        const next = response.location === null ? null : new URL(response.location, url);
+        // Only redirects that stay on this port, which may name another host
+        // for the same machine, such as `localhost`.
+        if (next !== null && next.port === url.port && redirects < MAX_REDIRECTS) {
+          next.hostname = url.hostname;
+          return follow(next, redirects + 1);
+        }
+        return Effect.succeed({
+          secure: url.protocol === "https:",
+          title: parseHtmlTitle(response.body),
+        });
+      }),
+    );
+  return follow(new URL(`http://${authority}/`), 0).pipe(
+    Effect.catch(() => follow(new URL(`https://${authority}/`), 0)),
+    Effect.orElseSucceed(() => null),
+  );
 };
 
 interface ProcessInfo {
@@ -338,6 +469,22 @@ export const make = Effect.gen(function* () {
       }),
   });
 
+  // Pages rarely change while a process runs, and every probe can show up in
+  // the server's request log. A server still booting is retried sooner.
+  const pageCache = yield* Cache.makeWith(
+    (key: string) => {
+      const [port, host] = key.split("|", 2) as [string, string];
+      return probeHttpPage(host, Number(port));
+    },
+    {
+      capacity: 256,
+      timeToLive: (exit) =>
+        exit._tag === "Success" && exit.value !== null
+          ? Duration.minutes(10)
+          : Duration.seconds(15),
+    },
+  );
+
   const list: WorkspaceServers["Service"]["list"] = Effect.fn("WorkspaceServers.list")(
     function* (input) {
       if (platform === "win32") return { servers: [], supported: false };
@@ -350,7 +497,16 @@ export const make = Effect.gen(function* () {
       });
       if (owned.length === 0) return { servers: [], supported: true };
       const network = yield* Cache.get(networkCache, "host");
-      return { servers: toWorkspaceServers(owned, network), supported: true };
+      const servers = yield* Effect.forEach(
+        groupListeners(owned),
+        (group) =>
+          (classifyServer(group.processName, group.port) === "http"
+            ? Cache.get(pageCache, `${group.port}|${probeHost(group.hosts)}|${group.pid}`)
+            : Effect.succeed(null)
+          ).pipe(Effect.map((page) => toWorkspaceServer(group, network, page))),
+        { concurrency: "unbounded" },
+      );
+      return { servers, supported: true };
     },
   );
 

@@ -5,7 +5,7 @@ import type {
   WorkspaceServerKind,
 } from "@t3tools/contracts";
 import { connectionRoutes } from "@t3tools/client-runtime/connection";
-import { CheckIcon, CopyIcon } from "lucide-react";
+import { CheckIcon, CopyIcon, GlobeIcon, GlobeLockIcon } from "lucide-react";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 
@@ -24,6 +24,7 @@ const EXPANDED_KEY = "t3code:thread-details:workspace-servers-expanded";
 
 const KIND_LABEL: Record<WorkspaceServerKind, string> = {
   http: "HTTP",
+  https: "HTTPS",
   postgres: "Postgres",
   mysql: "MySQL",
   redis: "Redis",
@@ -33,7 +34,24 @@ const KIND_LABEL: Record<WorkspaceServerKind, string> = {
 };
 
 /** Kinds a browser can open; the rest copy their URL for a client app. */
-const OPENABLE_KINDS: ReadonlySet<WorkspaceServerKind> = new Set(["http", "s3"]);
+const OPENABLE_KINDS: ReadonlySet<WorkspaceServerKind> = new Set(["http", "https", "s3"]);
+
+function ServerKind(props: { readonly kind: WorkspaceServerKind }) {
+  const label = KIND_LABEL[props.kind];
+  if (props.kind === "http" || props.kind === "https") {
+    const Icon = props.kind === "https" ? GlobeLockIcon : GlobeIcon;
+    return (
+      <Icon role="img" aria-label={label} className="size-3.5 shrink-0 text-muted-foreground">
+        <title>{label}</title>
+      </Icon>
+    );
+  }
+  return (
+    <Badge variant="secondary" size="sm">
+      {label}
+    </Badge>
+  );
+}
 
 function ServerAddress(props: {
   readonly kind: WorkspaceServerKind;
@@ -134,12 +152,13 @@ export function WorkspaceServersSection(props: {
             return (
               <li key={`${server.pid}:${server.port}`} className="flex min-w-0 flex-col gap-0.5">
                 <div className="flex min-w-0 items-center gap-1.5">
-                  <Badge variant="secondary" size="sm">
-                    {KIND_LABEL[server.kind]}
-                  </Badge>
+                  <ServerKind kind={server.kind} />
                   <span className="truncate text-foreground/80">
-                    {server.processName ?? `PID ${server.pid}`}
+                    {server.title ?? server.processName ?? `PID ${server.pid}`}
                   </span>
+                  {server.title && server.processName ? (
+                    <span className="shrink-0 text-muted-foreground">{server.processName}</span>
+                  ) : null}
                   <span className="ms-auto text-muted-foreground tabular-nums">:{server.port}</span>
                 </div>
                 {addresses.length > 0 ? (
