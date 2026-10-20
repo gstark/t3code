@@ -157,7 +157,7 @@ export function WorkspaceServersSection(props: {
                     {server.title ?? server.processName ?? `PID ${server.pid}`}
                   </span>
                   {server.title && server.processName ? (
-                    <span className="shrink-0 text-muted-foreground">{server.processName}</span>
+                    <span className="shrink-0 text-foreground/64">({server.processName})</span>
                   ) : null}
                   <span className="ms-auto text-muted-foreground tabular-nums">:{server.port}</span>
                 </div>
