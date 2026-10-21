@@ -393,7 +393,7 @@ function findTaskListMarkerOffset(markdown: string, listItemStart: number): numb
 }
 
 /**
- * The default `1.25rem` marker gutter (`.chat-markdown ol`) fits one-character
+ * The default `3ch` marker gutter (`.chat-markdown ol`) fits one-digit
  * markers. Wider markers can extend past it and get clipped by a collapsed
  * message's overflow. Widen the gutter to fit the widest marker, including a
  * negative marker's minus sign, the period, and the trailing space.
