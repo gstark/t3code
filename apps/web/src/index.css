@@ -627,6 +627,9 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(t3-mobil
 @utility live-activity-focus-aligned {
   width: calc(100% - var(--live-activity-focus-width) - var(--live-activity-focus-width));
   margin-left: var(--live-activity-focus-width);
+  /* The halo keeps the sweep visible in themes where the base label is
+     already close to foreground. The content is static, so it paints once. */
+  filter: drop-shadow(0 0 4px color-mix(in oklab, var(--contrast-foreground) 70%, transparent));
 }
 
 @property --assistant-citation-highlight-opacity {
