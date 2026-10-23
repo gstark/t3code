@@ -45,3 +45,7 @@ node_modules/
 
 # pnpm content-addressable store; never belongs in the repo.
 .pnpm-store/
+
+# Recorded walkthroughs
+walkthroughs/videos/
+walkthroughs/.results/
