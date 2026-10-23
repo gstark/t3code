@@ -2,7 +2,9 @@ import type {
   OrchestrationV2ProviderTurn,
   OrchestrationV2ProviderTurnTokenUsage,
   OrchestrationV2ProviderThread,
+  OrchestrationV2RunAttempt,
   OrchestrationV2TurnItem,
+  RunId,
   ThreadTokenUsageSnapshot,
 } from "@t3tools/contracts";
 import * as DateTime from "effect/DateTime";
@@ -38,6 +40,28 @@ export function latestProviderTurnTokenUsage(
     }
   }
   return latest;
+}
+
+/** Context usage each run ended with: the newest report across its attempts' provider turns. */
+export function tokenUsageByRunId(
+  attempts: ReadonlyArray<Pick<OrchestrationV2RunAttempt, "id" | "runId">>,
+  providerTurns: ReadonlyArray<Pick<OrchestrationV2ProviderTurn, "runAttemptId" | "tokenUsage">>,
+): ReadonlyMap<RunId, OrchestrationV2ProviderTurnTokenUsage> {
+  const runIdByAttemptId = new Map(attempts.map((attempt) => [attempt.id, attempt.runId]));
+  const turnsByRunId = new Map<RunId, Array<Pick<OrchestrationV2ProviderTurn, "tokenUsage">>>();
+  for (const turn of providerTurns) {
+    const runId = turn.runAttemptId === null ? undefined : runIdByAttemptId.get(turn.runAttemptId);
+    if (runId === undefined || turn.tokenUsage === undefined) continue;
+    const turns = turnsByRunId.get(runId) ?? [];
+    turns.push(turn);
+    turnsByRunId.set(runId, turns);
+  }
+  const usageByRunId = new Map<RunId, OrchestrationV2ProviderTurnTokenUsage>();
+  for (const [runId, turns] of turnsByRunId) {
+    const usage = latestProviderTurnTokenUsage(turns);
+    if (usage !== null) usageByRunId.set(runId, usage);
+  }
+  return usageByRunId;
 }
 
 /** Prefers the provider's live usage report (#8144); falls back to the last compaction item. */

@@ -4,6 +4,7 @@ import {
   deriveLatestContextWindowSnapshot,
   formatContextWindowTokens,
   latestProviderTurnTokenUsage,
+  tokenUsageByRunId,
 } from "./contextWindow";
 
 describe("V2 context window presentation", () => {
@@ -108,5 +109,31 @@ describe("latestProviderTurnTokenUsage", () => {
       usage(90_000, "2026-06-20T09:00:00.000Z"),
     ]);
     expect(latest?.usedTokens).toBe(300_000);
+  });
+});
+
+describe("tokenUsageByRunId", () => {
+  const usage = (usedTokens: number, updatedAt: string) => ({
+    usedTokens,
+    maxTokens: 1_000_000,
+    updatedAt,
+  });
+
+  it("keeps the newest report across each run's attempts", () => {
+    const attempts = [
+      { id: "attempt-1" as never, runId: "run-1" as never },
+      { id: "attempt-2" as never, runId: "run-1" as never },
+      { id: "attempt-3" as never, runId: "run-2" as never },
+    ];
+    const byRun = tokenUsageByRunId(attempts, [
+      { runAttemptId: "attempt-2" as never, tokenUsage: usage(120_000, "2026-10-23T10:05:00Z") },
+      { runAttemptId: "attempt-1" as never, tokenUsage: usage(90_000, "2026-10-23T10:00:00Z") },
+      { runAttemptId: "attempt-3" as never, tokenUsage: undefined },
+      { runAttemptId: null, tokenUsage: usage(5, "2026-10-23T11:00:00Z") },
+    ]);
+
+    expect(byRun.get("run-1" as never)?.usedTokens).toBe(120_000);
+    expect(byRun.has("run-2" as never)).toBe(false);
+    expect(byRun.size).toBe(1);
   });
 });

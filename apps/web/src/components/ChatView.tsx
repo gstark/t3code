@@ -506,6 +506,7 @@ import {
 import {
   deriveLatestContextWindowSnapshot,
   latestProviderTurnTokenUsage,
+  tokenUsageByRunId,
 } from "../lib/contextWindow";
 import {
   DRAFT_HERO_TRANSITION_ANIMATION_ID,
@@ -1733,6 +1734,11 @@ export default function ChatView(props: ChatViewProps) {
   const activeThreadLiveTokenUsage = useMemo(
     () => latestProviderTurnTokenUsage(serverProjection?.providerTurns ?? []),
     [serverProjection?.providerTurns],
+  );
+  const contextUsageByRunId = useMemo(
+    () =>
+      tokenUsageByRunId(serverProjection?.attempts ?? [], serverProjection?.providerTurns ?? []),
+    [serverProjection?.attempts, serverProjection?.providerTurns],
   );
   const serverVisibleTurnItems = useThreadVisibleTurnItems(routeThreadDetailRef);
   const serverThreadHistory = useThreadHistory(routeThreadDetailRef);
@@ -11607,6 +11613,7 @@ export default function ChatView(props: ChatViewProps) {
                   )?.serverConfig?.providers ?? EMPTY_PROVIDERS
                 }
                 runs={paintOnlyDisplayedTimeline ? [] : (serverProjection?.runs ?? [])}
+                {...(paintOnlyDisplayedTimeline ? {} : { contextUsageByRunId })}
                 latestRun={paintOnlyDisplayedTimeline ? null : activeActivityRun}
                 runningRunId={paintOnlyDisplayedTimeline ? null : activeRunningTurnId}
                 turnDiffSummaries={

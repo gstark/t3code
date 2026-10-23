@@ -260,6 +260,30 @@ export function getRelativeTimeState(isoDate: string | null): RelativeTimeState 
   return { status: "relative", ...relative };
 }
 
+const approximateAgeFormatter = new Intl.RelativeTimeFormat("en", { numeric: "always" });
+
+const APPROXIMATE_AGE_UNITS: ReadonlyArray<readonly [Intl.RelativeTimeFormatUnit, number]> = [
+  ["year", 365 * 86_400],
+  ["month", 30 * 86_400],
+  ["week", 7 * 86_400],
+  ["day", 86_400],
+  ["hour", 3_600],
+  ["minute", 60],
+];
+
+/** Spelled-out age in the largest whole unit, e.g. `3 minutes ago`, `4 weeks ago`. */
+export function formatApproximateAge(isoDate: string, nowMs: number = Date.now()): string {
+  const date = parseTimestampDate(isoDate);
+  if (!date) return "";
+  const seconds = Math.floor((nowMs - date.getTime()) / 1000);
+  for (const [unit, unitSeconds] of APPROXIMATE_AGE_UNITS) {
+    if (seconds >= unitSeconds) {
+      return approximateAgeFormatter.format(-Math.floor(seconds / unitSeconds), unit);
+    }
+  }
+  return "just now";
+}
+
 /**
  * Relative elapsed duration since an ISO instant, without an "ago" suffix.
  * Useful for labels like "Connected for 3m".

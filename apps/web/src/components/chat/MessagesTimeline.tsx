@@ -4,7 +4,11 @@ import { MarkdownFindContext, useFindRevealRef } from "./markdownFindContext";
 import { useChatCanvas } from "./ChatCanvasContext";
 import { WorkLogBlock, WorkLogButton, WorkLogDetails, WorkLogList, WorkLogRow } from "./WorkLog";
 import { PullRequestGlyph } from "../pullRequest/pullRequestIcons";
-import type { WorktreeSetupSnapshot } from "@t3tools/contracts";
+import type {
+  OrchestrationV2ProviderTurnTokenUsage,
+  WorktreeSetupSnapshot,
+} from "@t3tools/contracts";
+import { formatContextWindowTokens } from "~/lib/contextWindow";
 import { ReadOnlySourcePreview } from "../files/AttachmentFilePreview";
 import { useRightPanelStore } from "~/rightPanelStore";
 import {
@@ -279,6 +283,7 @@ import { cn } from "~/lib/utils";
 import { useUiStateStore } from "~/uiStateStore";
 import { type TimestampFormat } from "@t3tools/contracts/settings";
 import {
+  formatApproximateAge,
   formatChatTimestampTooltip,
   formatDayAwareTimestamp,
   formatUpcomingTimestamp,
@@ -434,6 +439,8 @@ const TIMELINE_MAINTAIN_SCROLL_AT_END = {
 } as const satisfies MaintainScrollAtEndOptions;
 const EMPTY_TIMELINE_RUNS: ReadonlyArray<HandoffTimelineRun> = [];
 const EMPTY_RUN_IDS: ReadonlySet<RunId> = new Set();
+const EMPTY_CONTEXT_USAGE_BY_RUN_ID: ReadonlyMap<RunId, OrchestrationV2ProviderTurnTokenUsage> =
+  new Map();
 // Streamed text lands a paragraph at a time. A smooth scroll to the end
 // turns each landing into a short glide instead of a jump. Thread switches
 // and layout settles keep the instant variant so nothing visibly travels.
@@ -521,6 +528,8 @@ interface MessagesTimelineProps {
   skills?: ReadonlyArray<Pick<ServerProviderSkill, "name" | "displayName">>;
   providerStatuses: ReadonlyArray<ServerProvider>;
   runs: ReadonlyArray<HandoffTimelineRun>;
+  /** Context usage each run ended with, shown in the minimap preview. */
+  contextUsageByRunId?: ReadonlyMap<RunId, OrchestrationV2ProviderTurnTokenUsage>;
   anchorMessageId: MessageId | null;
   onAnchorReady: (messageId: MessageId, anchorIndex: number) => void;
   onAnchorSizeChanged: (messageId: MessageId, size: number) => void;
@@ -628,6 +637,7 @@ const ConversationTimeline = memo(function ConversationTimeline({
   skills = EMPTY_TIMELINE_SKILLS,
   providerStatuses,
   runs: runsProp,
+  contextUsageByRunId = EMPTY_CONTEXT_USAGE_BY_RUN_ID,
   anchorMessageId,
   onAnchorReady,
   onAnchorSizeChanged,
@@ -1743,6 +1753,8 @@ const ConversationTimeline = memo(function ConversationTimeline({
               hasPersistentGutter={minimapHasPersistentGutter}
               hitStripWidth={minimapHitStripWidth}
               currentIndex={minimapCurrentIndex}
+              contextUsageByRunId={contextUsageByRunId}
+              timestampFormat={timestampFormat}
               stripMap={minimapStripMap}
               onWheel={forwardMinimapWheel}
               onSelect={(item) => {
@@ -1823,6 +1835,8 @@ function TimelineMinimap({
   hasPersistentGutter,
   hitStripWidth,
   currentIndex,
+  contextUsageByRunId,
+  timestampFormat,
   items,
   stripMap,
   onWheel,
@@ -1831,6 +1845,8 @@ function TimelineMinimap({
   hasPersistentGutter: boolean;
   hitStripWidth: number;
   currentIndex: number | null;
+  contextUsageByRunId: ReadonlyMap<RunId, OrchestrationV2ProviderTurnTokenUsage>;
+  timestampFormat: TimestampFormat;
   items: ReadonlyArray<TimelineMinimapItem>;
   stripMap: Map<string, HTMLSpanElement>;
   onWheel: (event: WheelEvent) => void;
@@ -2056,6 +2072,15 @@ function TimelineMinimap({
                       {activeItem.assistantText}
                     </span>
                   ) : null}
+                  <TimelineMinimapPreviewMeta
+                    createdAt={activeItem.createdAt}
+                    contextUsage={
+                      activeItem.runId === null
+                        ? null
+                        : (contextUsageByRunId.get(activeItem.runId) ?? null)
+                    }
+                    timestampFormat={timestampFormat}
+                  />
                 </span>
               </span>
             ) : null}
@@ -2071,6 +2096,33 @@ function TimelineMinimap({
         </div>
       </div>
     </div>
+  );
+}
+
+function TimelineMinimapPreviewMeta({
+  createdAt,
+  contextUsage,
+  timestampFormat,
+}: {
+  createdAt: string;
+  contextUsage: OrchestrationV2ProviderTurnTokenUsage | null;
+  timestampFormat: TimestampFormat;
+}) {
+  const maxTokens = contextUsage?.maxTokens ?? null;
+  return (
+    <span className="mt-2 block border-t border-border/40 pt-2 text-muted-foreground text-xs leading-4">
+      <span className="block">
+        {formatChatTimestampTooltip(createdAt, timestampFormat)} · {formatApproximateAge(createdAt)}
+      </span>
+      {contextUsage ? (
+        <span className="mt-0.5 block tabular-nums">
+          Context{" "}
+          {maxTokens !== null && maxTokens > 0
+            ? `${Math.round((contextUsage.usedTokens / maxTokens) * 100)}% · ${formatContextWindowTokens(contextUsage.usedTokens)}/${formatContextWindowTokens(maxTokens)}`
+            : formatContextWindowTokens(contextUsage.usedTokens)}
+        </span>
+      ) : null}
+    </span>
   );
 }
 

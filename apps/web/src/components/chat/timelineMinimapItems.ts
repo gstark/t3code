@@ -1,8 +1,11 @@
+import type { RunId } from "@t3tools/contracts";
 import type { MessagesTimelineRow } from "./MessagesTimeline.logic";
 
 export interface TimelineMinimapItem {
   readonly id: string;
   readonly rowIndex: number;
+  readonly createdAt: string;
+  readonly runId: RunId | null;
   readonly userText: string | null;
   readonly assistantText: string | null;
 }
@@ -21,6 +24,8 @@ export function deriveTimelineMinimapItems(
     items.push({
       id: row.id,
       rowIndex: index,
+      createdAt: row.message.createdAt,
+      runId: row.message.runId,
       userText: row.message.text,
       assistantText: resolveFinalAssistantTextForTurn(rows, index),
     });
