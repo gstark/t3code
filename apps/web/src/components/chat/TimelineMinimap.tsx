@@ -12,6 +12,10 @@ import {
 } from "./MessagesTimeline.logic";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { cn } from "~/lib/utils";
+import type { OrchestrationV2ProviderTurnTokenUsage, RunId } from "@t3tools/contracts";
+import type { TimestampFormat } from "@t3tools/contracts/settings";
+import { formatContextWindowTokens } from "~/lib/contextWindow";
+import { formatApproximateAge, formatChatTimestampTooltip } from "../../timestampFormat";
 
 function timelineMinimapEventTargetsPreview(target: EventTarget): boolean {
   return target instanceof Element && target.closest("[data-minimap-preview]") !== null;
@@ -38,6 +42,8 @@ export function TimelineMinimap({
   hasPersistentGutter,
   hitStripWidth,
   currentIndex,
+  contextUsageByRunId,
+  timestampFormat,
   items,
   stripMap,
   onWheel,
@@ -46,6 +52,8 @@ export function TimelineMinimap({
   hasPersistentGutter: boolean;
   hitStripWidth: number;
   currentIndex: number | null;
+  contextUsageByRunId: ReadonlyMap<RunId, OrchestrationV2ProviderTurnTokenUsage>;
+  timestampFormat: TimestampFormat;
   items: ReadonlyArray<TimelineMinimapItem>;
   stripMap: Map<string, HTMLSpanElement>;
   onWheel: (event: WheelEvent) => void;
@@ -269,6 +277,15 @@ export function TimelineMinimap({
                       {activeItem.assistantText}
                     </span>
                   ) : null}
+                  <TimelineMinimapPreviewMeta
+                    createdAt={activeItem.createdAt}
+                    contextUsage={
+                      activeItem.runId === null
+                        ? null
+                        : (contextUsageByRunId.get(activeItem.runId) ?? null)
+                    }
+                    timestampFormat={timestampFormat}
+                  />
                 </span>
               </span>
             ) : null}
@@ -284,6 +301,33 @@ export function TimelineMinimap({
         </div>
       </div>
     </div>
+  );
+}
+
+function TimelineMinimapPreviewMeta({
+  createdAt,
+  contextUsage,
+  timestampFormat,
+}: {
+  createdAt: string;
+  contextUsage: OrchestrationV2ProviderTurnTokenUsage | null;
+  timestampFormat: TimestampFormat;
+}) {
+  const maxTokens = contextUsage?.maxTokens ?? null;
+  return (
+    <span className="mt-2 block border-t border-border/40 pt-2 text-muted-foreground text-xs leading-4">
+      <span className="block">
+        {formatChatTimestampTooltip(createdAt, timestampFormat)} · {formatApproximateAge(createdAt)}
+      </span>
+      {contextUsage ? (
+        <span className="mt-0.5 block tabular-nums">
+          Context{" "}
+          {maxTokens !== null && maxTokens > 0
+            ? `${Math.round((contextUsage.usedTokens / maxTokens) * 100)}% · ${formatContextWindowTokens(contextUsage.usedTokens)}/${formatContextWindowTokens(maxTokens)}`
+            : formatContextWindowTokens(contextUsage.usedTokens)}
+        </span>
+      ) : null}
+    </span>
   );
 }
 
