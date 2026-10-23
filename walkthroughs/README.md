@@ -73,6 +73,10 @@ A scenario's `acpAgent` adds a second agent, "ACP Agent", that speaks ACP
 (`support/fake-acp.mjs`). It plays the same kind of script. Its `run` steps
 can give a `reason`, which T3 Code shows as the work log label.
 
+A scenario's `remote` starts a second server with its own clone of the
+project, and pairs it as a remote environment before the recording starts.
+`app.remote.stop()` takes it offline.
+
 To find the steps for a new walkthrough, run
 `node walkthroughs/support/explore.ts [scenario.json]` and use the pairing
 URL that it prints.

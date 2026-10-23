@@ -91,6 +91,7 @@ export const walkthrough = test.extend<
     }, appearance);
     await showCursor(page, pace());
     await pair(page, app.pairingUrl);
+    if (app.remote) await pairRemote(page, app.pairingUrl, app.remote.pairingUrl);
     narration.start();
     try {
       await use(page);
@@ -141,6 +142,28 @@ async function pair(page: Page, pairingUrl: string) {
   // Let fonts, icons, and the sidebar settle before the first frame.
   await NodeTimersPromises.setTimeout(1_500);
 }
+
+// Adds the second server in Settings > Connections. Its pairing link names
+// a web port that is not running, so the host is the server port itself.
+async function pairRemote(page: Page, pairingUrl: string, remotePairingUrl: string) {
+  const remote = new URL(remotePairingUrl);
+  const code = new URLSearchParams(remote.hash.slice(1)).get("token") ?? "";
+  const serverPort = Number(remote.port) - BASE_WEB_PORT + BASE_SERVER_PORT;
+  await page.goto(new URL("/settings/connections", pairingUrl).toString());
+  await page.getByRole("button", { name: "Add environment" }).first().click();
+  const dialog = page.getByRole("dialog", { name: "Add Environment" });
+  await dialog.getByRole("textbox", { name: "Host" }).fill(`http://localhost:${serverPort}`);
+  await dialog.getByRole("textbox", { name: "Pairing code" }).fill(code);
+  await dialog.getByRole("button", { name: "Add environment" }).click();
+  await dialog.waitFor({ state: "hidden", timeout: 30_000 });
+  await page.goto(new URL("/", pairingUrl).toString());
+  await page.locator("[data-thread-item], textarea, [contenteditable=true]").first().waitFor();
+  await NodeTimersPromises.setTimeout(1_500);
+}
+
+// As in scripts/dev-runner.ts; T3CODE_PORT_OFFSET moves both.
+const BASE_SERVER_PORT = 13773;
+const BASE_WEB_PORT = 5733;
 
 export type FinishedCue = Required<Cue>;
 

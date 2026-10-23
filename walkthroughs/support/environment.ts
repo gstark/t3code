@@ -20,6 +20,9 @@ export type Scenario = {
   agent: AgentScript;
   // A second agent that speaks ACP, added as the "ACP Agent" provider.
   acpAgent?: AgentScript;
+  // A second server, paired as a remote environment with this label. It has
+  // its own clone of the project.
+  remote?: { label: string };
 };
 
 export type Commit = { message: string; files: Record<string, string> };
@@ -32,6 +35,9 @@ export type Environment = {
   git: (...args: string[]) => string;
   // Pushes a commit to origin's `main` from another clone, as a teammate would.
   pushAsTeammate: (commit: Commit) => void;
+  // The second server, when the scenario asks for one. `stop` takes it
+  // offline.
+  remote?: { label: string; pairingUrl: string; stop: () => Promise<void> };
   stop: () => Promise<void>;
 };
 
@@ -122,85 +128,122 @@ export async function startEnvironment(scenario: Scenario): Promise<Environment>
     NodeFS.chmodSync(acp, 0o755);
   }
 
-  NodeFS.mkdirSync(NodePath.join(home, "userdata"), { recursive: true });
-  NodeFS.writeFileSync(
-    NodePath.join(home, "userdata", "settings.json"),
-    JSON.stringify(
-      {
-        providerInstances: {
-          codex: { driver: "codex", enabled: true, config: { binaryPath: codex } },
-          claudeAgent: { driver: "claudeAgent", enabled: false },
-          ...(scenario.acpAgent && {
-            acpAgent: {
-              driver: "acpRegistry",
-              displayName: "ACP Agent",
-              enabled: true,
-              config: { source: "local", commandPath: acp },
-            },
-          }),
+  const settings = {
+    providerInstances: {
+      codex: { driver: "codex", enabled: true, config: { binaryPath: codex } },
+      claudeAgent: { driver: "claudeAgent", enabled: false },
+      ...(scenario.acpAgent && {
+        acpAgent: {
+          driver: "acpRegistry",
+          displayName: "ACP Agent",
+          enabled: true,
+          config: { source: "local", commandPath: acp },
         },
-      },
-      null,
-      2,
-    ),
-  );
-
+      }),
+    },
+  };
   // Offline: with no server running, the CLI writes the project itself.
-  NodeChildProcess.execFileSync(
-    process.execPath,
-    [
-      "apps/server/src/bin.ts",
-      "project",
-      "add",
-      "--base-dir",
-      home,
-      "--title",
-      scenario.project.title,
-      workspace,
-    ],
-    { cwd: repoRoot, env, stdio: "pipe" },
-  );
+  const prepareHome = (serverHome: string, checkout: string) => {
+    NodeFS.mkdirSync(NodePath.join(serverHome, "userdata"), { recursive: true });
+    NodeFS.writeFileSync(
+      NodePath.join(serverHome, "userdata", "settings.json"),
+      JSON.stringify(settings, null, 2),
+    );
+    NodeChildProcess.execFileSync(
+      process.execPath,
+      [
+        "apps/server/src/bin.ts",
+        "project",
+        "add",
+        "--base-dir",
+        serverHome,
+        "--title",
+        scenario.project.title,
+        checkout,
+      ],
+      { cwd: repoRoot, env, stdio: "pipe" },
+    );
+  };
 
   // As scripts/mobile-showcase.ts does: the machine label comes from a fake
   // scutil, and the login shell adds nothing from your profile.
-  const bin = NodePath.join(root, "bin");
   const shell = NodePath.join(root, "shell");
-  NodeFS.mkdirSync(bin);
-  NodeFS.writeFileSync(
-    NodePath.join(bin, "scutil"),
-    `#!/bin/sh\nif [ "$1" = "--get" ] && [ "$2" = "ComputerName" ]; then echo "Demo Mac"; exit 0; fi\nexit 1\n`,
-  );
-  NodeFS.chmodSync(NodePath.join(bin, "scutil"), 0o755);
   NodeFS.writeFileSync(
     shell,
     `#!/bin/sh\nif [ "$1" = "-ilc" ] || [ "$1" = "-lic" ]; then exec /bin/sh -c "$2"; fi\nexec /bin/sh "$@"\n`,
   );
   NodeFS.chmodSync(shell, 0o755);
-
-  const server = NodeChildProcess.spawn(
-    process.execPath,
-    ["scripts/dev-runner.ts", "dev", "--home-dir", home],
-    {
-      cwd: repoRoot,
-      env: {
-        ...env,
-        PATH: `${bin}:${process.env.PATH ?? ""}`,
-        SHELL: shell,
-        T3CODE_PORT_OFFSET: process.env.WALKTHROUGH_PORT_OFFSET ?? "47",
-        T3CODE_AUTO_BOOTSTRAP_PROJECT_FROM_CWD: "0",
+  const offset = Number(process.env.WALKTHROUGH_PORT_OFFSET ?? "47");
+  const launch = (input: {
+    name: string;
+    label: string;
+    mode: string;
+    offset: number;
+    env?: Record<string, string>;
+  }) => {
+    const bin = NodePath.join(root, input.name, "bin");
+    NodeFS.mkdirSync(bin, { recursive: true });
+    NodeFS.writeFileSync(
+      NodePath.join(bin, "scutil"),
+      `#!/bin/sh\nif [ "$1" = "--get" ] && [ "$2" = "ComputerName" ]; then echo "${input.label}"; exit 0; fi\nexit 1\n`,
+    );
+    NodeFS.chmodSync(NodePath.join(bin, "scutil"), 0o755);
+    return NodeChildProcess.spawn(
+      process.execPath,
+      ["scripts/dev-runner.ts", input.mode, "--home-dir", NodePath.join(root, input.name)],
+      {
+        cwd: repoRoot,
+        env: {
+          ...env,
+          PATH: `${bin}:${process.env.PATH ?? ""}`,
+          SHELL: shell,
+          T3CODE_PORT_OFFSET: String(input.offset),
+          T3CODE_AUTO_BOOTSTRAP_PROJECT_FROM_CWD: "0",
+          ...input.env,
+        },
+        detached: true,
+        stdio: ["ignore", "pipe", "pipe"],
       },
-      detached: true,
-      stdio: ["ignore", "pipe", "pipe"],
-    },
-  );
-  const stop = async () => {
-    await stopServer(server);
-    if (!process.env.WALKTHROUGH_KEEP) NodeFS.rmSync(root, { recursive: true, force: true });
+    );
   };
 
+  prepareHome(home, workspace);
+  const server = launch({ name: "home", label: "Demo Mac", mode: "dev", offset });
+
+  // A second server with its own clone, which the browser pairs as a remote
+  // environment. It runs the server only, on the next port offset, and takes
+  // requests from the main server's web origin.
+  let remoteServer: NodeChildProcess.ChildProcess | undefined;
+  const startRemote = async (label: string) => {
+    const remoteHome = NodePath.join(root, "remote");
+    const checkout = NodePath.join(root, "remote-checkout", scenario.project.folder);
+    NodeChildProcess.execFileSync("git", ["clone", "--quiet", origin, checkout], { env });
+    prepareHome(remoteHome, checkout);
+    remoteServer = launch({
+      name: "remote",
+      label,
+      mode: "dev:server",
+      offset: offset + 1,
+      env: { T3CODE_DEV_ALLOWED_ORIGINS: new URL(await mainPairingUrl).origin },
+    });
+    const pairingUrl = await waitForPairingUrl(remoteServer);
+    return { label, pairingUrl, stop: () => stopServer(remoteServer!) };
+  };
+
+  const stop = async () => {
+    if (remoteServer) await stopServer(remoteServer);
+    await stopServer(server);
+    // The server can still be writing logs as it exits.
+    if (!process.env.WALKTHROUGH_KEEP) {
+      NodeFS.rmSync(root, { recursive: true, force: true, maxRetries: 5 });
+    }
+  };
+
+  const mainPairingUrl = waitForPairingUrl(server);
   try {
-    const pairingUrl = await waitForPairingUrl(server);
-    return { pairingUrl, home, workspace, origin, git, pushAsTeammate, stop };
+    const pairingUrl = await mainPairingUrl;
+    const remote = scenario.remote ? await startRemote(scenario.remote.label) : undefined;
+    return { pairingUrl, home, workspace, origin, git, pushAsTeammate, remote, stop };
   } catch (error) {
     await stop();
     throw error;
