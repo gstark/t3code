@@ -124,9 +124,9 @@ homebrew: _require-mine
       desc "Personal fork build of T3 Code, rebranded G$ Code"
       homepage "https://github.com/{{ fork_repo }}/tree/mine"
 
+      conflicts_with cask: "t3-code"
       depends_on arch: :arm64
       depends_on macos: :ventura
-      conflicts_with cask: "t3-code"
 
       app "G$ Code (Alpha).app"
 

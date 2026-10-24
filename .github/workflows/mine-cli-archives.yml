@@ -1,6 +1,6 @@
 name: Mine CLI archives
 
-# Fork-only. `just release` publishes a `v<version>-mine.<stamp>` release with
+# Fork-only. `just homebrew` publishes a `v<version>-mine.<stamp>` release with
 # just the macOS DMG. This attaches the Linux CLI archives and SHA256SUMS to
 # that release, so the desktop app's SSH environments can install the exact
 # fork runtime on a Linux host (see resolveDesktopSshCliRunner).
