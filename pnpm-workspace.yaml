@@ -262,6 +262,8 @@ overrides:
   "@opencode/protocol>effect": "catalog:"
   "@opencode/schema>effect": "catalog:"
   node-abi: 4.33.0
+  # Release installs run without a lockfile. Keep node-pty on its patched version.
+  node-pty: 1.2.0-beta.15
   # The desktop app installs these without a lockfile when it packages them, so
   # pin the native passkey code that runs in its main process.
   "electron-webauthn>@electron-webauthn/macos": "catalog:"
