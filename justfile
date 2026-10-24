@@ -77,7 +77,7 @@ merge-release: sync _require-mine
     echo "Merged $latest into mine. Typecheck passed."
 
 # Build the macOS app from mine, publish a GitHub release, and update the Homebrew cask
-release: _require-mine
+homebrew: _require-mine
     #!/usr/bin/env bash
     set -euo pipefail
     if [[ -n "$(git status --porcelain)" ]]; then
@@ -131,9 +131,8 @@ release: _require-mine
       app "G$ Code (Alpha).app"
 
       # The build is signed but not notarized, so remove the quarantine flag to let it open.
-      postflight do
-        system_command "/usr/bin/xattr",
-                       args: ["-dr", "com.apple.quarantine", "#{appdir}/G$ Code (Alpha).app"]
+      postflight_steps do
+        run "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "{{{{appdir}}/G$ Code (Alpha).app"]
       end
     end
     EOF
@@ -195,7 +194,7 @@ update mode="": _require-mine
     fi
     pnpm install --frozen-lockfile
     pnpm typecheck
-    just release
+    just homebrew
     just install
     just remotes
 
