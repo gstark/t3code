@@ -7,8 +7,10 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, expect, it } from "@effect/vitest";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import { ChildProcessSpawner } from "effect/process";
 
+import * as ServerConfig from "../config.ts";
 import * as ProcessRunner from "../processRunner.ts";
 import { agentSliceMemoryLimits, classifyScope, make, type ScopeState } from "./agentScope.ts";
 
@@ -60,7 +62,8 @@ const withFakeSystemd = <A, E>(
   body: (input: {
     readonly scope: Effect.Success<typeof make>;
     readonly units: Map<string, { activeState: string; result: string }>;
-  }) => Effect.Effect<A, E>,
+    readonly stateDir: string;
+  }) => Effect.Effect<A, E, ServerConfig.ServerConfig>,
 ) =>
   Effect.gen(function* () {
     const bin = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "t3-agent-scope-"));
@@ -97,10 +100,18 @@ const withFakeSystemd = <A, E>(
       Effect.provideService(HostProcess.Platform, "linux"),
       Effect.provideService(HostProcess.Environment, { PATH: bin, XDG_RUNTIME_DIR: "/run/user/1" }),
     );
-    return yield* body({ scope, units }).pipe(
+    const { stateDir } = yield* ServerConfig.ServerConfig;
+    return yield* body({ scope, units, stateDir }).pipe(
       Effect.ensuring(Effect.sync(() => NodeFS.rmSync(bin, { recursive: true, force: true }))),
     );
-  }).pipe(Effect.scoped, Effect.provide(NodeServices.layer));
+  }).pipe(
+    Effect.scoped,
+    Effect.provide(
+      ServerConfig.layerTest(process.cwd(), { prefix: "t3-agent-scope-home-" }).pipe(
+        Layer.provideMerge(NodeServices.layer),
+      ),
+    ),
+  );
 
 const unitOf = (launch: { readonly args: ReadonlyArray<string> }) =>
   launch.args.find((arg) => arg.startsWith("--unit="))?.slice("--unit=".length) ?? "";
@@ -139,6 +150,44 @@ describe("AgentScope service", () => {
         }
         units.set(unitOf(live), { activeState: "failed", result: "oom-kill" });
         expect(yield* scope.oomKilled("live")).toBe(true);
+      }),
+    ),
+  );
+
+  it.effect("gives each thread its own temp directory under the state dir", () =>
+    withFakeSystemd(({ scope, stateDir }) =>
+      Effect.gen(function* () {
+        const launch = yield* scope.wrap({
+          command: "agent",
+          args: [],
+          name: "t",
+          threadId: "thread/1",
+        });
+        const tempDir = NodePath.join(stateDir, "tmp", "thread%2F1");
+        // `/bin/sh -c <script> t3-agent <tempDir> ...`
+        expect(launch.args[3]).toBe(tempDir);
+        expect(NodeFS.statSync(tempDir).isDirectory()).toBe(true);
+
+        const shared = yield* scope.wrap({ command: "agent", args: [], name: "server" });
+        expect(shared.args[3]).toBe("");
+      }),
+    ),
+  );
+
+  it.effect("keeps the agent's scope when a terminal launches on the same thread", () =>
+    withFakeSystemd(({ scope, units }) =>
+      Effect.gen(function* () {
+        const agent = yield* scope.wrap({ command: "agent", args: [], name: "t", threadId: "a" });
+        const terminal = yield* scope.wrap({
+          command: "agent",
+          args: [],
+          name: "terminal",
+          threadId: "a",
+          trackScope: false,
+        });
+        expect(terminal.args[3]).toBe(agent.args[3]);
+        units.set(unitOf(agent), { activeState: "failed", result: "oom-kill" });
+        expect(yield* scope.oomKilled("a")).toBe(true);
       }),
     ),
   );

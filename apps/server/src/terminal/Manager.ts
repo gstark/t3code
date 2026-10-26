@@ -2195,6 +2195,10 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
       command: candidate.shell,
       args: candidate.args ?? [],
       name: "terminal",
+      // The terminal shares the thread's temp directory, but the agent's
+      // scope keeps answering whether the thread was OOM-killed.
+      threadId: session.threadId,
+      trackScope: false,
       env: spawnEnv,
     });
     const attempt = yield* Effect.result(
