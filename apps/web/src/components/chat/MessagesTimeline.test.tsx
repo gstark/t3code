@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 
+import * as DateTime from "effect/DateTime";
+
 import {
   ApprovalRequestId,
   CheckpointRef,
@@ -2380,7 +2382,7 @@ describe("MessagesTimeline", () => {
       ordinal: 99,
       status: "running",
       title: "Provider retry",
-      startedAt: {},
+      startedAt: DateTime.makeUnsafe("2026-06-20T00:00:00.000Z"),
       completedAt: null,
       updatedAt: {},
       type: "error",

@@ -3731,6 +3731,20 @@ const WorkGroupSection = memo(function WorkGroupSection({
   );
 });
 
+/**
+ * Start time of a tool that is still running, so its row can tick and a busy
+ * thread shows what it waits on. Questions and approvals wait on the user.
+ */
+function runningWorkEntryStartedAt(entry: TimelineWorkEntry): string | null {
+  const payload = entry.structuredPayload;
+  return entry.toolLifecycleStatus === "inProgress" &&
+    payload?.startedAt &&
+    payload.type !== "user_input_request" &&
+    payload.type !== "approval_request"
+    ? DateTime.formatIso(payload.startedAt)
+    : null;
+}
+
 function formatWorkingTimer(startIso: string, endIso: string): string | null {
   const startedAtMs = Date.parse(startIso);
   const endedAtMs = Date.parse(endIso);
@@ -4066,6 +4080,7 @@ function LiveActivityRow({
   failed = false,
   active = false,
   shimmer = false,
+  startedAt = null,
 }: {
   label: ReactNode;
   iconName?: WorkEntryIconName;
@@ -4073,6 +4088,7 @@ function LiveActivityRow({
   failed?: boolean;
   active?: boolean;
   shimmer?: boolean;
+  startedAt?: string | null;
 }) {
   const animated = active && !failed;
   const showShimmer = animated && shimmer;
@@ -4088,6 +4104,7 @@ function LiveActivityRow({
         failed={failed}
         announceFailure={failed}
         active={animated && !shimmer}
+        startedAt={startedAt}
       />
       {showShimmer ? (
         <ActivityShimmerOverlay>
@@ -4106,6 +4123,7 @@ function LiveActivityContent({
   announceFailure = false,
   active = false,
   highlighted = false,
+  startedAt = null,
 }: {
   label: ReactNode;
   iconName: WorkEntryIconName | undefined;
@@ -4114,6 +4132,7 @@ function LiveActivityContent({
   announceFailure?: boolean;
   active?: boolean;
   highlighted?: boolean;
+  startedAt?: string | null;
 }) {
   const showTrailingFailureMark =
     failed && iconName !== undefined && !toolIconAcceptsTint(toolIcon);
@@ -4157,6 +4176,10 @@ function LiveActivityContent({
       trailing={
         showTrailingFailureMark ? (
           <XIcon aria-hidden className={cn("size-3 shrink-0", failedToolIconClassName)} />
+        ) : startedAt ? (
+          <span className="shrink-0 whitespace-nowrap text-sidebar-muted-foreground/60 text-xs">
+            <WorkingTimer createdAt={startedAt} />
+          </span>
         ) : null
       }
     />
@@ -4294,6 +4317,7 @@ function LiveWorkEntryTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "
         toolIcon={row.entry.toolIcon ?? row.entry.toolSource?.icon}
         failed={failed}
         active={row.active}
+        startedAt={row.active ? runningWorkEntryStartedAt(row.entry) : null}
       />
     </button>
   );
@@ -5653,6 +5677,7 @@ function WorkEntryLogRow(props: WorkEntryRowProps) {
   const { workEntry, workspaceRoot, displayLabel, detailsOnly } = props;
   const ctx = use(TimelineRowCtx);
   const { threadRef, onImageExpand, timestampFormat } = ctx;
+  const { isWorking, latestRunId } = use(TimelineRowActivityCtx);
   const { retryableWorkspacePreparationRunIds, onRetryWorkspacePreparation } = ctx;
   const threadTarget = useThreadReadTarget(workEntry, ctx.activeThreadEnvironmentId);
   const createdThread =
@@ -5792,6 +5817,11 @@ function WorkEntryLogRow(props: WorkEntryRowProps) {
       ? DateTime.toEpochMillis(payload.completedAt) - DateTime.toEpochMillis(payload.startedAt)
       : 0;
   const runtime = runtimeMs > 0 ? formatDuration(runtimeMs) : null;
+  // A stale in-progress entry from an ended run must not tick.
+  const liveStartedAt =
+    !runtime && isWorking && workEntry.runId === latestRunId
+      ? runningWorkEntryStartedAt(workEntry)
+      : null;
   const skill =
     payload?.type === "dynamic_tool"
       ? claudeSkillInvocation(payload.toolName, payload.input)
@@ -6058,6 +6088,10 @@ function WorkEntryLogRow(props: WorkEntryRowProps) {
           {runtime ? (
             <span className="shrink-0 whitespace-nowrap text-sidebar-muted-foreground/60 text-xs tabular-nums">
               {runtime}
+            </span>
+          ) : liveStartedAt ? (
+            <span className="shrink-0 whitespace-nowrap text-sidebar-muted-foreground/60 text-xs">
+              <WorkingTimer createdAt={liveStartedAt} />
             </span>
           ) : null}
           <span

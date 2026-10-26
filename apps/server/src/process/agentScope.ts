@@ -15,6 +15,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 
+import * as ServerConfig from "../config.ts";
 import * as ProcessRunner from "../processRunner.ts";
 
 /**
@@ -70,6 +71,16 @@ export function classifyScope(state: ScopeState): "oom-killed" | "gone" | "runni
   return "running";
 }
 
+/** Holds one temp directory per thread, on disk under the state dir. */
+export const threadTempDirsRoot = (path: Path.Path, stateDir: string) => path.join(stateDir, "tmp");
+
+/**
+ * Directory name for a thread's temp directory. The encoding reverses with
+ * `decodeURIComponent` and never yields "." or "..".
+ */
+export const threadTempDirName = (threadId: string) =>
+  encodeURIComponent(threadId).replaceAll(".", "%2E");
+
 function parseKeyValues(text: string): Map<string, string> {
   const values = new Map<string, string>();
   for (const line of text.split("\n")) {
@@ -99,7 +110,24 @@ export const make = Effect.gen(function* () {
   const fileSystem = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const hostEnvironment = yield* HostProcess.Environment;
+  const config = yield* ServerConfig.ServerConfig;
   const layerScope = yield* Effect.scope;
+  const tempDirsRoot = threadTempDirsRoot(path, config.stateDir);
+
+  // A failure keeps the inherited temp directory, so the agent still starts.
+  const makeTempDir = (threadId: string | undefined) => {
+    if (threadId === undefined) return Effect.succeed(undefined);
+    const tempDir = path.join(tempDirsRoot, threadTempDirName(threadId));
+    return fileSystem.makeDirectory(tempDir, { recursive: true, mode: 0o700 }).pipe(
+      Effect.as(tempDir),
+      Effect.catch((error) =>
+        Effect.logWarning("Could not create the thread temp directory", {
+          threadId,
+          error: error.message,
+        }).pipe(Effect.as(undefined)),
+      ),
+    );
+  };
 
   const resolve = (command: string, env: NodeJS.ProcessEnv) =>
     resolveCommandPath(command, { env }).pipe(
@@ -290,24 +318,33 @@ export const make = Effect.gen(function* () {
     });
 
   return {
-    wrap: Effect.fn("AgentScope.wrap")(function* ({ command, args, name, threadId, env }) {
+    wrap: Effect.fn("AgentScope.wrap")(function* ({
+      command,
+      args,
+      name,
+      threadId,
+      trackScope = true,
+      env,
+    }) {
       const resolved = yield* resolve(command, env ?? hostEnvironment);
       // Leave unresolved commands alone so the spawn reports the missing binary.
       if (resolved === null) return { command, args };
+      const tempDir = yield* makeTempDir(threadId);
       const scope = yield* systemd;
-      if (scope === undefined) return agentScopeCommand({ command: resolved, args });
+      if (scope === undefined) return agentScopeCommand({ command: resolved, args, tempDir });
       const unit = `t3code-${name}-${NodeCrypto.randomUUID().slice(0, 8)}.scope`;
-      if (threadId !== undefined) yield* track(scope.systemctl, threadId, unit);
+      const tracked = threadId !== undefined && trackScope;
+      if (tracked) yield* track(scope.systemctl, threadId, unit);
       const systemdScope: AgentSystemdScope = {
         systemdRun: scope.systemdRun,
         runtimeDir: scope.runtimeDir,
         slice: AGENT_SLICE,
         unit,
-        // Without a thread nothing reads the result, so let systemd unload
-        // the unit even when it fails.
-        options: threadId === undefined ? [...scope.scopeOptions, "--collect"] : scope.scopeOptions,
+        // Nothing reads the result of an untracked scope, so let systemd
+        // unload the unit even when it fails.
+        options: tracked ? scope.scopeOptions : [...scope.scopeOptions, "--collect"],
       };
-      return agentScopeCommand({ command: resolved, args, scope: systemdScope });
+      return agentScopeCommand({ command: resolved, args, tempDir, scope: systemdScope });
     }),
     oomKilled,
     clear,

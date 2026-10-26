@@ -18,12 +18,16 @@ export interface AgentScopeShape {
    * scope unit, for example "claude" or "terminal". `env` is the environment
    * the command will run with, used to resolve it on PATH. A command that does
    * not resolve stays unwrapped, so a missing binary still fails at spawn.
+   * With a `threadId`, the command gets the thread's own temp directory. The
+   * scope also answers `oomKilled` for the thread unless `trackScope` is false,
+   * for example for a terminal next to the agent.
    */
   readonly wrap: (input: {
     readonly command: string;
     readonly args: ReadonlyArray<string>;
     readonly name: string;
     readonly threadId?: string | undefined;
+    readonly trackScope?: boolean | undefined;
     readonly env?: NodeJS.ProcessEnv | undefined;
   }) => Effect.Effect<AgentScopeCommand>;
   /**
@@ -71,12 +75,18 @@ export const AGENT_OOM_SCORE_ADJ = 800;
 /** Shell line that raises the score of the current process, ignoring failure. */
 export const RAISE_OOM_SCORE_LINE = `{ echo ${AGENT_OOM_SCORE_ADJ} >/proc/self/oom_score_adj; } 2>/dev/null`;
 
-const LAUNCH_SCRIPT = [RAISE_OOM_SCORE_LINE, 'exec "$@"'].join("\n");
+// A tmpfs /tmp is charged to the agents slice as shared memory, so agents
+// write temp files to a per-thread directory on disk. An empty $1 keeps the
+// inherited temp directory.
+const TEMP_DIR_LINES = ['if [ -n "$1" ]; then export TMPDIR="$1" TMP="$1" TEMP="$1"; fi', "shift"];
+
+const LAUNCH_SCRIPT = [RAISE_OOM_SCORE_LINE, ...TEMP_DIR_LINES, 'exec "$@"'].join("\n");
 
 // systemd-run needs XDG_RUNTIME_DIR to reach the user manager. Fill it in when
 // the agent environment does not carry it; it is the same user either way.
 const SCOPED_LAUNCH_SCRIPT = [
   RAISE_OOM_SCORE_LINE,
+  ...TEMP_DIR_LINES,
   ': "${XDG_RUNTIME_DIR:=$1}"',
   "export XDG_RUNTIME_DIR",
   "shift",
@@ -101,11 +111,17 @@ export interface AgentSystemdScope {
 export function agentScopeCommand(input: {
   readonly command: string;
   readonly args: ReadonlyArray<string>;
+  /** Exported as TMPDIR, TMP, and TEMP. The directory must exist. */
+  readonly tempDir?: string | undefined;
   readonly scope?: AgentSystemdScope | undefined;
 }): AgentScopeCommand {
   const { command, args, scope } = input;
+  const tempDir = input.tempDir ?? "";
   if (scope === undefined) {
-    return { command: "/bin/sh", args: ["-c", LAUNCH_SCRIPT, "t3-agent", command, ...args] };
+    return {
+      command: "/bin/sh",
+      args: ["-c", LAUNCH_SCRIPT, "t3-agent", tempDir, command, ...args],
+    };
   }
   return {
     command: "/bin/sh",
@@ -113,6 +129,7 @@ export function agentScopeCommand(input: {
       "-c",
       SCOPED_LAUNCH_SCRIPT,
       "t3-agent",
+      tempDir,
       scope.runtimeDir,
       scope.systemdRun,
       "--user",
