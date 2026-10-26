@@ -325,6 +325,44 @@ describe("AgentScope service", () => {
     );
   });
 
+  it.effect("gives each thread its own temp directory under the state dir", () =>
+    withFakeSystemd(({ scope, stateDir }) =>
+      Effect.gen(function* () {
+        const launch = yield* scope.wrap({
+          command: "agent",
+          args: [],
+          name: "t",
+          threadId: "thread/1",
+        });
+        const tempDir = NodePath.join(stateDir, "tmp", "thread%2F1");
+        // `/bin/sh -c <script> t3-agent <tempDir> ...`
+        expect(launch.args[3]).toBe(tempDir);
+        expect(NodeFS.statSync(tempDir).isDirectory()).toBe(true);
+
+        const shared = yield* scope.wrap({ command: "agent", args: [], name: "server" });
+        expect(shared.args[3]).toBe("");
+      }),
+    ),
+  );
+
+  it.effect("keeps the agent's scope when a terminal launches on the same thread", () =>
+    withFakeSystemd(({ scope, units }) =>
+      Effect.gen(function* () {
+        const agent = yield* scope.wrap({ command: "agent", args: [], name: "t", threadId: "a" });
+        const terminal = yield* scope.wrap({
+          command: "agent",
+          args: [],
+          name: "terminal",
+          threadId: "a",
+          trackScope: false,
+        });
+        expect(terminal.args[3]).toBe(agent.args[3]);
+        units.set(unitOf(agent), { activeState: "failed", result: "oom-kill" });
+        expect(yield* scope.oomKilled("a")).toBe(true);
+      }),
+    ),
+  );
+
   it.effect("leaves a quiet slice alone", () =>
     withFakeSystemd(({ scope, calls }) =>
       Effect.gen(function* () {

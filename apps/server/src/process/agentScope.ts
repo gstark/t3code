@@ -68,6 +68,16 @@ export function classifyScope(state: ScopeState): "oom-killed" | "gone" | "runni
   return "running";
 }
 
+/** Holds one temp directory per thread, on disk under the state dir. */
+export const threadTempDirsRoot = (path: Path.Path, stateDir: string) => path.join(stateDir, "tmp");
+
+/**
+ * Directory name for a thread's temp directory. The encoding reverses with
+ * `decodeURIComponent` and never yields "." or "..".
+ */
+export const threadTempDirName = (threadId: string) =>
+  encodeURIComponent(threadId).replaceAll(".", "%2E");
+
 function parseKeyValues(text: string): Map<string, string> {
   const values = new Map<string, string>();
   for (const line of text.split("\n")) {
@@ -101,6 +111,22 @@ export const make = Effect.gen(function* () {
   const { stateDir } = yield* ServerConfig.ServerConfig;
   const ownedSlice = ownedAgentSlice(stateDir);
   const layerScope = yield* Effect.scope;
+  const tempDirsRoot = threadTempDirsRoot(path, stateDir);
+
+  // A failure keeps the inherited temp directory, so the agent still starts.
+  const makeTempDir = (threadId: string | undefined) => {
+    if (threadId === undefined) return Effect.undefined;
+    const tempDir = path.join(tempDirsRoot, threadTempDirName(threadId));
+    return fileSystem.makeDirectory(tempDir, { recursive: true, mode: 0o700 }).pipe(
+      Effect.as(tempDir),
+      Effect.catch((error) =>
+        Effect.logWarning("Could not create the thread temp directory", {
+          threadId,
+          error: error.message,
+        }).pipe(Effect.as(undefined)),
+      ),
+    );
+  };
 
   const resolve = (command: string, env: NodeJS.ProcessEnv) =>
     resolveCommandPath(command, { env }).pipe(
@@ -337,20 +363,25 @@ export const make = Effect.gen(function* () {
       args,
       name,
       threadId,
+      trackScope = true,
       env,
       survivesRestart,
       shared,
     }) {
       const resolved = yield* resolve(command, env ?? hostEnvironment);
       if (resolved === null) return { command, args };
+      const tempDir = yield* makeTempDir(threadId);
       const scope = yield* systemd;
-      if (scope === undefined) return agentScopeCommand({ command: resolved, args });
+      if (scope === undefined) return agentScopeCommand({ command: resolved, args, tempDir });
       const unit = `t3code-${name}-${NodeCrypto.randomUUID().slice(0, 8)}.scope`;
       // A continuing shared scope cannot attribute a tool's OOM to one thread.
-      // Clear the launch thread's previous scope instead.
+      // Clear the launch thread's previous scope instead. An untracked scope,
+      // such as a terminal next to the agent, leaves the thread's scope alone.
       const continuing = shared === true && scope.supportsOomPolicy;
-      const owned = threadId !== undefined && !continuing;
-      if (threadId !== undefined) yield* track(scope.systemctl, threadId, owned ? unit : undefined);
+      const owned = threadId !== undefined && trackScope && !continuing;
+      if (threadId !== undefined && trackScope) {
+        yield* track(scope.systemctl, threadId, owned ? unit : undefined);
+      }
       const systemdScope: AgentSystemdScope = {
         systemdRun: scope.systemdRun,
         runtimeDir: scope.runtimeDir,
@@ -366,7 +397,10 @@ export const make = Effect.gen(function* () {
           ...(owned ? [] : ["--collect"]),
         ],
       };
-      return { ...agentScopeCommand({ command: resolved, args, scope: systemdScope }), unit };
+      return {
+        ...agentScopeCommand({ command: resolved, args, tempDir, scope: systemdScope }),
+        unit,
+      };
     }),
     oomKilled,
     stop,
