@@ -88,9 +88,6 @@ jobs:
         run: vp run --filter t3 build
 
       - name: Build CLI single-executable
-        env:
-          # Keep in step with SEA_NODE_VERSION in apps/server/vite.config.ts.
-          VP_NODE_VERSION: "26.8.2"
         run: node apps/server/scripts/cli.ts build-exe --verbose
 
       - name: Build resource monitor
