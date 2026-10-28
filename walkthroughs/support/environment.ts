@@ -50,8 +50,18 @@ const fakeAcp = NodeURL.fileURLToPath(new URL("./fake-acp.mjs", import.meta.url)
 export async function startEnvironment(scenario: Scenario): Promise<Environment> {
   // A short fixed path, because the app shows worktree paths on screen.
   const root = process.env.WALKTHROUGH_ROOT ?? "/tmp/demo";
+  // Only a folder an earlier run made, or an empty one, is safe to delete.
+  const marker = NodePath.join(root, ".walkthrough-root");
+  if (
+    NodeFS.existsSync(root) &&
+    NodeFS.readdirSync(root).length > 0 &&
+    !NodeFS.existsSync(marker)
+  ) {
+    throw new Error(`${root} is not a walkthrough folder. Remove it or set WALKTHROUGH_ROOT.`);
+  }
   NodeFS.rmSync(root, { recursive: true, force: true });
   NodeFS.mkdirSync(root, { recursive: true });
+  NodeFS.writeFileSync(marker, "");
   const home = NodePath.join(root, "home");
   const workspace = NodePath.join(root, scenario.project.folder);
   const origin = NodePath.join(root, "origin.git");
