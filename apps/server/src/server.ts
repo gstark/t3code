@@ -441,7 +441,12 @@ const layerTerminal = TerminalManager.layer.pipe(
 
 const layerPreview = Layer.empty.pipe(
   Layer.provideMerge(PreviewManager.layer),
-  Layer.provideMerge(WorkspaceServers.layer.pipe(Layer.provide(ProcessRunner.layer))),
+  Layer.provideMerge(
+    WorkspaceServers.layer.pipe(
+      Layer.provide(ProcessRunner.layer),
+      Layer.provide(Layer.merge(ProjectionStoreV2.layer, ProjectStore.layer)),
+    ),
+  ),
   Layer.provideMerge(layerPortScanner),
 );
 

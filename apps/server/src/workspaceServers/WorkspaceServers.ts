@@ -18,6 +18,7 @@ import * as NodeHttp from "node:http";
 import * as NodeHttps from "node:https";
 import * as NodeOS from "node:os";
 import type {
+  ThreadId,
   WorkspaceServer,
   WorkspaceServerAddress,
   WorkspaceServerKind,
@@ -37,6 +38,8 @@ import * as Option from "effect/Option";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 
 import { resolveBoundEndpoints } from "../environment/DirectEndpoints.ts";
+import * as ProjectionStore from "../orchestration-v2/ProjectionStore.ts";
+import * as ProjectStore from "../orchestration-v2/ProjectStore.ts";
 import * as PortScanner from "../preview/PortScanner.ts";
 import * as ProcessRunner from "../processRunner.ts";
 
@@ -339,7 +342,8 @@ export const probeHttpPage = (host: string, port: number): Effect.Effect<HttpPag
   const follow = (url: URL, redirects: number): Effect.Effect<HttpPage, PageProbeError> =>
     getPage(url).pipe(
       Effect.flatMap((response) => {
-        const next = response.location === null ? null : new URL(response.location, url);
+        // A malformed Location ends the probe here instead of throwing.
+        const next = response.location === null ? null : URL.parse(response.location, url.href);
         // Only redirects that stay on this port, which may name another host
         // for the same machine, such as `localhost`.
         if (next !== null && next.port === url.port && redirects < MAX_REDIRECTS) {
@@ -370,6 +374,21 @@ export const make = Effect.gen(function* () {
   const platform = yield* HostProcess.Platform;
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const portDiscovery = yield* PortScanner.PortDiscovery;
+  const projections = yield* ProjectionStore.ProjectionStoreV2;
+  const projects = yield* ProjectStore.ProjectStoreV2;
+
+  // The thread's own directory. The server never trusts a client path here,
+  // because any directory would list every server on the host.
+  const threadWorkspace = Effect.fn("WorkspaceServers.threadWorkspace")(
+    function* (threadId: ThreadId) {
+      const thread = yield* projections.getThreadShell(threadId);
+      if (thread === null) return null;
+      if (thread.worktreePath !== null) return thread.worktreePath;
+      const project = yield* projects.getShell(thread.projectId);
+      return Option.isSome(project) ? project.value.workspaceRoot : null;
+    },
+    Effect.orElseSucceed(() => null),
+  );
 
   const run = (command: string, args: ReadonlyArray<string>) =>
     processRunner
@@ -488,12 +507,14 @@ export const make = Effect.gen(function* () {
   const list: WorkspaceServers["Service"]["list"] = Effect.fn("WorkspaceServers.list")(
     function* (input) {
       if (platform === "win32") return { servers: [], supported: false };
+      const workspace = yield* threadWorkspace(input.threadId);
+      if (workspace === null) return { servers: [], supported: true };
       const { listeners, processes } = yield* Cache.get(snapshotCache, "host");
       const terminalPids = yield* portDiscovery.threadTerminalProcessIds(input.threadId);
       const owned = listeners.filter((listener) => {
         if (terminalPids.has(listener.pid)) return true;
         const cwd = processes.get(listener.pid)?.cwd;
-        return cwd != null && isInsideDirectory(cwd, input.cwd);
+        return cwd != null && isInsideDirectory(cwd, workspace);
       });
       if (owned.length === 0) return { servers: [], supported: true };
       const network = yield* Cache.get(networkCache, "host");
