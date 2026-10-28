@@ -4089,6 +4089,12 @@ it.layer(layerGitManagerTest)("GitManager", (it) => {
         "origin",
         "git@github.com:pingdotgg/codething-mvp.git",
       ]);
+      // The sync before a push fetches origin; keep that fetch local.
+      yield* runGit(repoDir, [
+        "config",
+        `url.${yield* createBareRemote()}.insteadOf`,
+        "git@github.com:pingdotgg/codething-mvp.git",
+      ]);
       yield* runGit(repoDir, ["checkout", "-b", "statemachine"]);
       NodeFS.writeFileSync(NodePath.join(repoDir, "changes.txt"), "change\n");
       yield* runGit(repoDir, ["add", "changes.txt"]);
