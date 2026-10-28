@@ -202,7 +202,7 @@ export function buildMenuItems(
   };
 
   if (hasOpenPr) {
-    return [commitItem, pushItem];
+    return [commitItem, ...commitPushItems, pushItem];
   }
 
   return [
