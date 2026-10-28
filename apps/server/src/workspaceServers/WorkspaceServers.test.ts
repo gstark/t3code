@@ -168,24 +168,35 @@ describe("parseHtmlTitle", () => {
   });
 });
 
+const serve = (handler: NodeHttp.RequestListener) =>
+  Effect.acquireRelease(
+    Effect.callback<NodeHttp.Server>((resume) => {
+      const created = NodeHttp.createServer(handler);
+      created.listen(0, "127.0.0.1", () => resume(Effect.succeed(created)));
+    }),
+    (created) => Effect.sync(() => created.close()),
+  ).pipe(Effect.map((server) => (server.address() as NodeNet.AddressInfo).port));
+
 describe("probeHttpPage", () => {
   effectIt.effect("follows a same-server redirect to the page title", () =>
     Effect.gen(function* () {
-      const server = yield* Effect.acquireRelease(
-        Effect.callback<NodeHttp.Server>((resume) => {
-          const created = NodeHttp.createServer((request, response) => {
-            if (request.url === "/") {
-              response
-                .writeHead(302, { location: `http://localhost:${request.socket.localPort}/login` })
-                .end();
-            } else response.end("<html><head><title>Sign in</title></head></html>");
-          });
-          created.listen(0, "127.0.0.1", () => resume(Effect.succeed(created)));
-        }),
-        (created) => Effect.sync(() => created.close()),
-      );
-      const { port } = server.address() as NodeNet.AddressInfo;
+      const port = yield* serve((request, response) => {
+        if (request.url === "/") {
+          response
+            .writeHead(302, { location: `http://localhost:${request.socket.localPort}/login` })
+            .end();
+        } else response.end("<html><head><title>Sign in</title></head></html>");
+      });
       expect(yield* probeHttpPage("127.0.0.1", port)).toEqual({ secure: false, title: "Sign in" });
+    }).pipe(Effect.scoped),
+  );
+
+  effectIt.effect("stops at a redirect whose location is malformed", () =>
+    Effect.gen(function* () {
+      const port = yield* serve((_request, response) => {
+        response.writeHead(302, { location: "http://[oops" }).end();
+      });
+      expect(yield* probeHttpPage("127.0.0.1", port)).toEqual({ secure: false, title: null });
     }).pipe(Effect.scoped),
   );
 });

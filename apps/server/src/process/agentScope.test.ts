@@ -50,6 +50,8 @@ const withFakeSystemd = <A, E>(
     readonly calls: ReadonlyArray<ReadonlyArray<string>>;
     readonly stateDir: string;
     readonly cgroupRoot: string;
+    /** Holds the fake commands, and is the host PATH. */
+    readonly bin: string;
   }) => Effect.Effect<A, E>,
   // A user manager older than systemd 253 rejects OOMPolicy on scopes.
   {
@@ -113,7 +115,7 @@ const withFakeSystemd = <A, E>(
       }),
     );
     const { stateDir } = yield* ServerConfig.ServerConfig;
-    return yield* body({ scope, units, calls, stateDir, cgroupRoot }).pipe(
+    return yield* body({ scope, units, calls, stateDir, cgroupRoot, bin }).pipe(
       Effect.ensuring(Effect.sync(() => NodeFS.rmSync(bin, { recursive: true, force: true }))),
     );
   }).pipe(
@@ -341,6 +343,21 @@ describe("AgentScope service", () => {
 
         const shared = yield* scope.wrap({ command: "agent", args: [], name: "server" });
         expect(shared.args[3]).toBe("");
+      }),
+    ),
+  );
+
+  it.effect("keeps a temp directory the provider set for itself", () =>
+    withFakeSystemd(({ scope, bin }) =>
+      Effect.gen(function* () {
+        const launch = yield* scope.wrap({
+          command: "agent",
+          args: [],
+          name: "acp",
+          threadId: "thread-1",
+          env: { PATH: bin, TMPDIR: "/srv/agent-run" },
+        });
+        expect(launch.args[3]).toBe("");
       }),
     ),
   );

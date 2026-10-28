@@ -328,10 +328,12 @@ function WorkEntryLogRow(props: WorkEntryRowProps) {
   const viewedImagePath = workEntryViewedImagePath(workEntry);
   const payload = workEntry.structuredPayload;
   // Time spent on the work itself. Questions and approvals measure the wait
-  // for the user, and instant records start and complete together.
+  // for the user, cleanup closes interrupted items long after they stop, and
+  // instant records start and complete together.
   const runtimeMs =
     payload?.startedAt &&
     payload.completedAt &&
+    payload.status !== "interrupted" &&
     payload.type !== "user_input_request" &&
     payload.type !== "approval_request"
       ? DateTime.toEpochMillis(payload.completedAt) - DateTime.toEpochMillis(payload.startedAt)
