@@ -152,7 +152,7 @@ const make = Effect.gen(function* () {
   const crypto = yield* Crypto.Crypto;
   const startLock = yield* Semaphore.make(1);
 
-  const uuid = crypto.randomUUIDv4.pipe(Effect.orDie);
+  const uuid = crypto.randomUUIDv4().pipe(Effect.orDie);
   const commandId = (tag: string) =>
     uuid.pipe(Effect.map((id) => CommandId.make(`server:work-report-${tag}:${id}`)));
   const nowIso = DateTime.now.pipe(Effect.map(DateTime.formatIso));
@@ -187,24 +187,27 @@ const make = Effect.gen(function* () {
     return project.id;
   });
 
-  const writeDefaultInstructions = (workspaceRoot: string) =>
-    Effect.gen(function* () {
+  const writeDefaultInstructions = Effect.fn("WorkReport.writeDefaultInstructions")(
+    function* (workspaceRoot: string) {
       const file = path.join(workspaceRoot, "AGENTS.md");
       if (yield* fileSystem.exists(file)) return;
       yield* fileSystem.writeFileString(file, DEFAULT_REPORT_INSTRUCTIONS);
-    }).pipe(Effect.mapError(failure("Could not write AGENTS.md in the reports folder.")));
+    },
+    Effect.mapError(failure("Could not write AGENTS.md in the reports folder.")),
+  );
 
   /** The running report thread, if it still exists and is not archived. */
-  const runningThreadId = (run: WorkReportRun | null) =>
-    Effect.gen(function* () {
-      if (run === null) return null;
-      const thread = yield* threads
-        .getThreadShell(run.threadId)
-        .pipe(Effect.mapError(failure("Could not read the running report thread.")));
-      return thread !== null && thread.archivedAt === null && thread.deletedAt === null
-        ? run.threadId
-        : null;
-    });
+  const runningThreadId = Effect.fn("WorkReport.runningThreadId")(function* (
+    run: WorkReportRun | null,
+  ) {
+    if (run === null) return null;
+    const thread = yield* threads
+      .getThreadShell(run.threadId)
+      .pipe(Effect.mapError(failure("Could not read the running report thread.")));
+    return thread !== null && thread.archivedAt === null && thread.deletedAt === null
+      ? run.threadId
+      : null;
+  });
 
   const start: WorkReport["Service"]["start"] = (input) =>
     startLock.withPermits(1)(
@@ -293,188 +296,191 @@ const make = Effect.gen(function* () {
     return { projectId, run: activeRun, windowStart };
   });
 
-  const listSettledThreads: WorkReport["Service"]["listSettledThreads"] = (reportThreadId) =>
-    Effect.gen(function* () {
-      const { projectId, run, windowStart } = yield* requireRun(reportThreadId);
-      // No service lists threads by settle time, and the shell snapshot reads
-      // every thread's runs and items, so filter the thread rows here. A turn
-      // is a run, or a user message imported from v1 without one.
-      const rows = yield* sql<{
-        threadId: string;
-        title: string;
-        projectId: string;
-        projectTitle: string;
-        workspaceRoot: string;
-        branch: string | null;
-        settledAt: string;
-        turnCount: number;
-        pullRequests: string | null;
-      }>`
-        SELECT t.thread_id AS "threadId", t.title, t.project_id AS "projectId",
-          p.title AS "projectTitle", p.workspace_root AS "workspaceRoot",
-          json_extract(t.payload_json, '$.branch') AS branch,
-          json_extract(t.payload_json, '$.settledAt') AS "settledAt",
-          (SELECT COUNT(*) FROM orchestration_v2_projection_runs AS run
-            WHERE run.thread_id = t.thread_id AND run.status != 'rolled_back')
-          + (SELECT COUNT(*) FROM orchestration_v2_projection_messages AS message
-            WHERE message.thread_id = t.thread_id AND message.role = 'user'
-              AND message.run_id IS NULL) AS "turnCount",
-          (SELECT GROUP_CONCAT(json_extract(link.value, '$.url'), char(10))
-            FROM json_each(t.payload_json, '$.pullRequests') AS link
-            WHERE json_extract(link.value, '$.source') != 'stack-dismissed') AS "pullRequests"
-        FROM orchestration_v2_projection_threads AS t
-        JOIN projection_projects AS p ON p.project_id = t.project_id
-        WHERE t.deleted_at IS NULL
-          AND json_extract(t.payload_json, '$.settledAt') > ${windowStart}
-          AND json_extract(t.payload_json, '$.settledAt') <= ${run.windowEnd}
-          AND json_extract(t.payload_json, '$.lineage.relationshipToParent') IS NOT 'subagent'
-          AND t.project_id != ${projectId}
-        ORDER BY "settledAt" ASC
-      `.pipe(Effect.mapError(failure("Could not list settled threads.")));
-      const projectIds = [...new Set(rows.map((row) => ProjectId.make(row.projectId)))];
-      const shells = yield* projects
-        .listShells({ projectIds })
-        .pipe(Effect.mapError(failure("Could not read projects.")));
-      const repositoryByProject = new Map(
-        shells.map((project) => [project.id, project.repositoryIdentity?.canonicalKey ?? null]),
-      );
-      return {
-        windowStart,
-        windowEnd: run.windowEnd,
-        threads: rows.map((row) => ({
-          threadId: row.threadId,
-          title: row.title,
-          projectTitle: row.projectTitle,
-          workspaceRoot: row.workspaceRoot,
-          repository: repositoryByProject.get(ProjectId.make(row.projectId)) ?? null,
-          branch: row.branch,
-          settledAt: row.settledAt,
-          turnCount: row.turnCount,
-          pullRequests: row.pullRequests === null ? [] : row.pullRequests.split("\n"),
-        })),
-      };
-    });
+  const listSettledThreads: WorkReport["Service"]["listSettledThreads"] = Effect.fn(
+    "WorkReport.listSettledThreads",
+  )(function* (reportThreadId) {
+    const { projectId, run, windowStart } = yield* requireRun(reportThreadId);
+    // No service lists threads by settle time, and the shell snapshot reads
+    // every thread's runs and items, so filter the thread rows here. A turn
+    // is a run, or a user message imported from v1 without one.
+    const rows = yield* sql<{
+      threadId: string;
+      title: string;
+      projectId: string;
+      projectTitle: string;
+      workspaceRoot: string;
+      branch: string | null;
+      settledAt: string;
+      turnCount: number;
+      pullRequests: string | null;
+    }>`
+      SELECT t.thread_id AS "threadId", t.title, t.project_id AS "projectId",
+        p.title AS "projectTitle", p.workspace_root AS "workspaceRoot",
+        json_extract(t.payload_json, '$.branch') AS branch,
+        json_extract(t.payload_json, '$.settledAt') AS "settledAt",
+        (SELECT COUNT(*) FROM orchestration_v2_projection_runs AS run
+          WHERE run.thread_id = t.thread_id AND run.status != 'rolled_back')
+        + (SELECT COUNT(*) FROM orchestration_v2_projection_messages AS message
+          WHERE message.thread_id = t.thread_id AND message.role = 'user'
+            AND message.run_id IS NULL) AS "turnCount",
+        (SELECT GROUP_CONCAT(json_extract(link.value, '$.url'), char(10))
+          FROM json_each(t.payload_json, '$.pullRequests') AS link
+          WHERE json_extract(link.value, '$.source') != 'stack-dismissed') AS "pullRequests"
+      FROM orchestration_v2_projection_threads AS t
+      JOIN projection_projects AS p ON p.project_id = t.project_id
+      WHERE t.deleted_at IS NULL
+        AND json_extract(t.payload_json, '$.settledAt') > ${windowStart}
+        AND json_extract(t.payload_json, '$.settledAt') <= ${run.windowEnd}
+        AND json_extract(t.payload_json, '$.lineage.relationshipToParent') IS NOT 'subagent'
+        AND t.project_id != ${projectId}
+      ORDER BY "settledAt" ASC
+    `.pipe(Effect.mapError(failure("Could not list settled threads.")));
+    const projectIds = [...new Set(rows.map((row) => ProjectId.make(row.projectId)))];
+    const shells = yield* projects
+      .listShells({ projectIds })
+      .pipe(Effect.mapError(failure("Could not read projects.")));
+    const repositoryByProject = new Map(
+      shells.map((project) => [project.id, project.repositoryIdentity?.canonicalKey ?? null]),
+    );
+    return {
+      windowStart,
+      windowEnd: run.windowEnd,
+      threads: rows.map((row) => ({
+        threadId: row.threadId,
+        title: row.title,
+        projectTitle: row.projectTitle,
+        workspaceRoot: row.workspaceRoot,
+        repository: repositoryByProject.get(ProjectId.make(row.projectId)) ?? null,
+        branch: row.branch,
+        settledAt: row.settledAt,
+        turnCount: row.turnCount,
+        pullRequests: row.pullRequests === null ? [] : row.pullRequests.split("\n"),
+      })),
+    };
+  });
 
-  const getThreadDigest: WorkReport["Service"]["getThreadDigest"] = (input) =>
-    Effect.gen(function* () {
-      yield* requireRun(input.reportThreadId);
-      const thread = yield* threads
-        .getThreadShell(input.threadId)
-        .pipe(Effect.mapError(failure("Could not read the thread.")));
-      if (thread === null) {
-        return yield* new WorkReportError({ message: `Thread ${input.threadId} was not found.` });
-      }
-      // Imports a v1 thread's transcript on first read, so it comes before the SQL below.
-      const records = yield* threads
-        .getThreadRecords(input.threadId, ["runs", "messages", "checkpoints"], {
-          messageRoles: ["user", "assistant"],
-        })
-        .pipe(Effect.mapError(failure("Could not read the thread history.")));
-      // Extract in SQLite: command items carry their full output.
-      const problems = yield* sql<{
-        runId: string;
-        type: string;
-        input: string | null;
-        exitCode: number | null;
-        failureMessage: string | null;
-      }>`
-        SELECT run_id AS "runId", type,
-          substr(json_extract(payload_json, '$.input'), 1, ${PROBLEM_DETAIL_LIMIT}) AS input,
-          json_extract(payload_json, '$.exitCode') AS "exitCode",
-          json_extract(payload_json, '$.failure.message') AS "failureMessage"
-        FROM orchestration_v2_projection_turn_items
-        WHERE thread_id = ${input.threadId} AND run_id IS NOT NULL
-          AND ((type = 'command_execution' AND (status = 'failed'
-                OR json_extract(payload_json, '$.exitCode') != 0
-                OR json_extract(payload_json, '$.outputIndicatesFailure') = 1))
-            OR (type = 'error' AND json_extract(payload_json, '$.retry') IS NULL))
-        ORDER BY ordinal ASC, turn_item_id ASC
-      `.pipe(Effect.mapError(failure("Could not read the thread history.")));
-      const problemsByRun = new Map<string, Array<string>>();
-      for (const problem of problems) {
-        const list = problemsByRun.get(problem.runId) ?? [];
-        if (list.length < PROBLEMS_PER_TURN) list.push(describeProblem(problem));
-        problemsByRun.set(problem.runId, list);
-      }
+  const getThreadDigest: WorkReport["Service"]["getThreadDigest"] = Effect.fn(
+    "WorkReport.getThreadDigest",
+  )(function* (input) {
+    yield* requireRun(input.reportThreadId);
+    const thread = yield* threads
+      .getThreadShell(input.threadId)
+      .pipe(Effect.mapError(failure("Could not read the thread.")));
+    if (thread === null) {
+      return yield* new WorkReportError({ message: `Thread ${input.threadId} was not found.` });
+    }
+    // Imports a v1 thread's transcript on first read, so it comes before the SQL below.
+    const records = yield* threads
+      .getThreadRecords(input.threadId, ["runs", "messages", "checkpoints"], {
+        messageRoles: ["user", "assistant"],
+      })
+      .pipe(Effect.mapError(failure("Could not read the thread history.")));
+    // Extract in SQLite: command items carry their full output.
+    const problems = yield* sql<{
+      runId: string;
+      type: string;
+      input: string | null;
+      exitCode: number | null;
+      failureMessage: string | null;
+    }>`
+      SELECT run_id AS "runId", type,
+        substr(json_extract(payload_json, '$.input'), 1, ${PROBLEM_DETAIL_LIMIT}) AS input,
+        json_extract(payload_json, '$.exitCode') AS "exitCode",
+        json_extract(payload_json, '$.failure.message') AS "failureMessage"
+      FROM orchestration_v2_projection_turn_items
+      WHERE thread_id = ${input.threadId} AND run_id IS NOT NULL
+        AND ((type = 'command_execution' AND (status = 'failed'
+              OR json_extract(payload_json, '$.exitCode') != 0
+              OR json_extract(payload_json, '$.outputIndicatesFailure') = 1))
+          OR (type = 'error' AND json_extract(payload_json, '$.retry') IS NULL))
+      ORDER BY ordinal ASC, turn_item_id ASC
+    `.pipe(Effect.mapError(failure("Could not read the thread history.")));
+    const problemsByRun = new Map<string, Array<string>>();
+    for (const problem of problems) {
+      const list = problemsByRun.get(problem.runId) ?? [];
+      if (list.length < PROBLEMS_PER_TURN) list.push(describeProblem(problem));
+      problemsByRun.set(problem.runId, list);
+    }
 
-      // A turn is a run. Threads imported from v1 have messages without runs,
-      // so there each user message starts a turn.
-      const runsById = new Map(records.runs.map((run) => [run.id as string, run]));
-      const filesByCheckpoint = new Map(
-        records.checkpoints.map((checkpoint) => [checkpoint.id as string, checkpoint.files]),
-      );
-      const turns: Array<TurnDraft> = [];
-      const turnByKey = new Map<string, TurnDraft>();
-      let currentKey: string | undefined;
-      for (const message of records.messages) {
-        const run = message.runId === null ? undefined : runsById.get(message.runId);
-        if (run?.status === "rolled_back") continue;
-        const key = message.runId ?? (message.role === "user" ? message.id : currentKey);
-        if (key === undefined) continue;
-        let turn = turnByKey.get(key);
-        if (turn === undefined) {
-          turn = {
-            runId: message.runId,
-            requestedAt: DateTime.formatIso(run?.requestedAt ?? message.createdAt),
-            user: null,
-            assistant: null,
-          };
-          turnByKey.set(key, turn);
-          turns.push(turn);
-        }
-        if (message.role === "user") {
-          // Steering messages join their run; the first message started it.
-          turn.user ??= message.text;
-          currentKey = key;
-        } else {
-          // Messages arrive in creation order. The last is the answer; earlier ones narrate.
-          turn.assistant = message.text;
-        }
-      }
-
-      const cursor = Math.max(0, input.cursor);
-      const page: Array<DigestTurn> = [];
-      let used = 0;
-      let index = cursor;
-      for (; index < turns.length; index++) {
-        const turn = turns[index]!;
-        const checkpointId =
-          turn.runId === null ? null : (runsById.get(turn.runId)?.checkpointId ?? null);
-        const entry: DigestTurn = {
-          index,
-          requestedAt: turn.requestedAt,
-          user: turn.user === null ? null : truncate(turn.user, MESSAGE_LIMIT),
-          assistant: turn.assistant === null ? null : truncate(turn.assistant, MESSAGE_LIMIT),
-          filesChanged: describeFiles(
-            checkpointId === null ? [] : (filesByCheckpoint.get(checkpointId) ?? []),
-          ),
-          problems: turn.runId === null ? [] : (problemsByRun.get(turn.runId) ?? []),
+    // A turn is a run. Threads imported from v1 have messages without runs,
+    // so there each user message starts a turn.
+    const runsById = new Map(records.runs.map((run) => [run.id as string, run]));
+    const filesByCheckpoint = new Map(
+      records.checkpoints.map((checkpoint) => [checkpoint.id as string, checkpoint.files]),
+    );
+    const turns: Array<TurnDraft> = [];
+    const turnByKey = new Map<string, TurnDraft>();
+    let currentKey: string | undefined;
+    for (const message of records.messages) {
+      const run = message.runId === null ? undefined : runsById.get(message.runId);
+      if (run?.status === "rolled_back") continue;
+      const key = message.runId ?? (message.role === "user" ? message.id : currentKey);
+      if (key === undefined) continue;
+      let turn = turnByKey.get(key);
+      if (turn === undefined) {
+        turn = {
+          runId: message.runId,
+          requestedAt: DateTime.formatIso(run?.requestedAt ?? message.createdAt),
+          user: null,
+          assistant: null,
         };
-        const size = [
-          entry.user ?? "",
-          entry.assistant ?? "",
-          ...entry.filesChanged,
-          ...entry.problems,
-        ].reduce((total, text) => total + text.length, 0);
-        if (page.length > 0 && used + size > DIGEST_PAGE_BUDGET) break;
-        page.push(entry);
-        used += size;
+        turnByKey.set(key, turn);
+        turns.push(turn);
       }
-      return {
-        threadId: input.threadId,
-        title: thread.title,
-        totalTurns: turns.length,
-        turns: page,
-        nextCursor: index < turns.length ? index : null,
-      };
-    });
+      if (message.role === "user") {
+        // Steering messages join their run; the first message started it.
+        turn.user ??= message.text;
+        currentKey = key;
+      } else {
+        // Messages arrive in creation order. The last is the answer; earlier ones narrate.
+        turn.assistant = message.text;
+      }
+    }
 
-  const complete: WorkReport["Service"]["complete"] = (reportThreadId) =>
-    Effect.gen(function* () {
+    const cursor = Math.max(0, input.cursor);
+    const page: Array<DigestTurn> = [];
+    let used = 0;
+    let index = cursor;
+    for (; index < turns.length; index++) {
+      const turn = turns[index]!;
+      const checkpointId =
+        turn.runId === null ? null : (runsById.get(turn.runId)?.checkpointId ?? null);
+      const entry: DigestTurn = {
+        index,
+        requestedAt: turn.requestedAt,
+        user: turn.user === null ? null : truncate(turn.user, MESSAGE_LIMIT),
+        assistant: turn.assistant === null ? null : truncate(turn.assistant, MESSAGE_LIMIT),
+        filesChanged: describeFiles(
+          checkpointId === null ? [] : (filesByCheckpoint.get(checkpointId) ?? []),
+        ),
+        problems: turn.runId === null ? [] : (problemsByRun.get(turn.runId) ?? []),
+      };
+      const size = [
+        entry.user ?? "",
+        entry.assistant ?? "",
+        ...entry.filesChanged,
+        ...entry.problems,
+      ].reduce((total, text) => total + text.length, 0);
+      if (page.length > 0 && used + size > DIGEST_PAGE_BUDGET) break;
+      page.push(entry);
+      used += size;
+    }
+    return {
+      threadId: input.threadId,
+      title: thread.title,
+      totalTurns: turns.length,
+      turns: page,
+      nextCursor: index < turns.length ? index : null,
+    };
+  });
+
+  const complete: WorkReport["Service"]["complete"] = Effect.fn("WorkReport.complete")(
+    function* (reportThreadId) {
       const { run } = yield* requireRun(reportThreadId);
       yield* updateWorkReport({ coveredUntil: run.windowEnd, activeRun: null });
       return { coveredUntil: run.windowEnd };
-    });
+    },
+  );
 
   return WorkReport.of({ start, listSettledThreads, getThreadDigest, complete });
 });

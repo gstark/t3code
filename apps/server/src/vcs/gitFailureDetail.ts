@@ -4,7 +4,8 @@
  * Git errors never carry stderr itself, because it can contain credentials, remote
  * URLs, and arbitrary server output. Matching known failures to fixed strings tells
  * the user what went wrong without copying any of that text. Returns undefined when
- * the failure is not recognized, so callers keep their generic detail.
+ * the failure is not recognized, so callers keep their generic detail. Push
+ * rejections other than stale info are classified in GitVcsDriverCore instead.
  */
 const GIT_FAILURE_DETAILS: ReadonlyArray<{
   readonly patterns: ReadonlyArray<string>;
@@ -13,15 +14,6 @@ const GIT_FAILURE_DETAILS: ReadonlyArray<{
   {
     patterns: ["stale info"],
     detail: "Push rejected: the remote branch changed since the last fetch. Fetch, then try again.",
-  },
-  {
-    patterns: ["non-fast-forward", "[rejected]", "fetch first", "updates were rejected"],
-    detail:
-      "Push rejected: the remote branch has commits that this branch does not have. Pull, then push again.",
-  },
-  {
-    patterns: ["[remote rejected]", "pre-receive hook declined", "protected branch"],
-    detail: "The remote rejected the push. A server hook or branch protection rule declined it.",
   },
   {
     patterns: [
