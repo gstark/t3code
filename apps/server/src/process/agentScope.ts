@@ -370,7 +370,10 @@ export const make = Effect.gen(function* () {
     }) {
       const resolved = yield* resolve(command, env ?? hostEnvironment);
       if (resolved === null) return { command, args };
-      const tempDir = yield* makeTempDir(threadId);
+      // A provider that sets its own temp directory, such as Antigravity,
+      // cleans it up itself, so it keeps that directory.
+      const ownsTempDir = env?.TMPDIR !== undefined && env.TMPDIR !== hostEnvironment.TMPDIR;
+      const tempDir = ownsTempDir ? undefined : yield* makeTempDir(threadId);
       const scope = yield* systemd;
       if (scope === undefined) return agentScopeCommand({ command: resolved, args, tempDir });
       const unit = `t3code-${name}-${NodeCrypto.randomUUID().slice(0, 8)}.scope`;
