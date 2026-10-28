@@ -29,7 +29,7 @@ export const askAgentToResolveRebase = (input: {
 }): Effect.Effect<boolean, never, Orchestrator.OrchestratorV2 | Crypto.Crypto> =>
   Effect.gen(function* () {
     const engine = yield* Orchestrator.OrchestratorV2;
-    const id = yield* (yield* Crypto.Crypto).randomUUIDv4;
+    const id = yield* (yield* Crypto.Crypto).randomUUIDv4();
     const text = rebaseConflictPrompt(input.conflict);
     yield* engine.dispatch({
       type: "message.dispatch",

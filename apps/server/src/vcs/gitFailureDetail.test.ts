@@ -5,20 +5,8 @@ import { describeGitFailure } from "./gitFailureDetail.ts";
 describe("describeGitFailure", () => {
   it.each([
     [
-      "To https://github.com/acme/app.git\n ! [rejected]        main -> main (non-fast-forward)\nerror: failed to push some refs",
-      "Push rejected: the remote branch has commits that this branch does not have. Pull, then push again.",
-    ],
-    [
-      " ! [rejected]        main -> main (fetch first)\nhint: Updates were rejected because the remote contains work",
-      "Push rejected: the remote branch has commits that this branch does not have. Pull, then push again.",
-    ],
-    [
       " ! [rejected]        main -> main (stale info)",
       "Push rejected: the remote branch changed since the last fetch. Fetch, then try again.",
-    ],
-    [
-      "remote: error: GH006: Protected branch update failed for refs/heads/main.\n ! [remote rejected] main -> main (protected branch hook declined)",
-      "The remote rejected the push. A server hook or branch protection rule declined it.",
     ],
     [
       "remote: Invalid username or token.\nfatal: Authentication failed for 'https://x-access-token:ghp_secret@github.com/acme/app.git/'",

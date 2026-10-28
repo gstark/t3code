@@ -42,7 +42,7 @@ export const recordGitAction = (input: {
     const record = gitActionRecord(input.result);
     if (record === null) return;
     const engine = yield* Orchestrator.OrchestratorV2;
-    const id = yield* (yield* Crypto.Crypto).randomUUIDv4;
+    const id = yield* (yield* Crypto.Crypto).randomUUIDv4();
     yield* engine.dispatch({
       type: "thread.git-action.record",
       commandId: CommandId.make(`server:git-action-record:${id}`),
