@@ -94,13 +94,12 @@ function ServerAddress(props: {
 export function WorkspaceServersSection(props: {
   readonly environmentId: EnvironmentId;
   readonly threadId: ThreadId;
-  readonly cwd: string;
 }) {
   const [expanded, setExpanded] = useLocalStorage(EXPANDED_KEY, true, Schema.Boolean);
   const query = useEnvironmentQuery(
     serverEnvironment.workspaceServers({
       environmentId: props.environmentId,
-      input: { threadId: props.threadId, cwd: props.cwd },
+      input: { threadId: props.threadId },
     }),
   );
   const connection = Option.getOrNull(usePreparedConnection(props.environmentId));

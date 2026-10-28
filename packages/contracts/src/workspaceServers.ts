@@ -45,7 +45,6 @@ export type WorkspaceServer = typeof WorkspaceServer.Type;
 
 export const WorkspaceServersInput = Schema.Struct({
   threadId: ThreadId,
-  cwd: TrimmedNonEmptyString,
 });
 export type WorkspaceServersInput = typeof WorkspaceServersInput.Type;
 
