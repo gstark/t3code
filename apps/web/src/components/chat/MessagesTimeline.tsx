@@ -7,7 +7,7 @@ import type {
   OrchestrationV2ProviderTurnTokenUsage,
   WorktreeSetupSnapshot,
 } from "@t3tools/contracts";
-import { deriveTimelineMinimapItems } from "./timelineMinimapItems";
+import { deriveTimelineMinimapItems, type TimelineMinimapItem } from "./timelineMinimapItems";
 import {
   type AssistantCitation,
   type EnvironmentId,
@@ -71,6 +71,7 @@ import {
   isTimelineMinimapRowVisible,
   resolveTimelineMinimapVisibleRange,
   resolveTimelineMinimapHitStripWidth,
+  resolveTimelinePinnedPrompt,
   timelineTurnFoldRunIdsByEntryId,
   worktreeSetupAgentStarted,
   type MessagesTimelineRow,
@@ -91,6 +92,8 @@ import { TimelineSystemDivider } from "./TimelineSystemDivider";
 
 import { forwardWheelToTimeline } from "./timelineMinimapWheel";
 import { TimelineMinimap } from "./TimelineMinimap";
+import { TimelinePinnedPrompt } from "./TimelinePinnedPrompt";
+import { usePinnedPromptEnabled } from "~/pinnedPromptStore";
 import {
   type TimelineRowSharedState,
   type TimelineRowActivityState,
@@ -143,6 +146,7 @@ function timelineListStateFor(identity: string): {
   };
 }
 
+const PINNED_PROMPT_GAP = 8;
 const TIMELINE_LIST_HEADER = <div className="h-3 sm:h-4" />;
 const TIMELINE_LIST_FADE_HEADER = (
   <div className="h-[var(--workspace-titlebar-scroll-fade-height)]" />
@@ -837,6 +841,11 @@ const ConversationTimeline = memo(function ConversationTimeline({
         };
   const [minimapHitStripWidth, setMinimapHitStripWidth] = useState(0);
   const [minimapCurrentIndex, setMinimapCurrentIndex] = useState<number | null>(null);
+  const pinnedPromptEnabled = usePinnedPromptEnabled(listIdentityKey);
+  const [pinnedPromptId, setPinnedPromptId] = useState<string | null>(null);
+  const pinnedPromptRef = useRef<HTMLDivElement | null>(null);
+  const pinnedPromptItem =
+    pinnedPromptId === null ? null : minimapItems.find((item) => item.id === pinnedPromptId);
   const handleAnchorReady = (info: { anchorIndex: number | undefined }) => {
     if (anchorMessageId !== null && info.anchorIndex !== undefined) {
       onAnchorReady(anchorMessageId, info.anchorIndex);
@@ -937,6 +946,23 @@ const ConversationTimeline = memo(function ConversationTimeline({
     setMinimapCurrentIndex((current) =>
       current === nextCurrentIndex ? current : nextCurrentIndex,
     );
+
+    const pinned = resolveTimelinePinnedPrompt({
+      scroll,
+      rowIndices: minimapRowIndices,
+      positionAtIndex: state.positionAtIndex,
+      sizeAtIndex: state.sizeAtIndex,
+    });
+    const nextPinnedPromptId = pinned === null ? null : (minimapItems[pinned.index]?.id ?? null);
+    setPinnedPromptId((current) => (current === nextPinnedPromptId ? current : nextPinnedPromptId));
+    // The next prompt pushes the pinned one up as it reaches the top. Written to the
+    // DOM directly so scrolling does not re-render the timeline each frame.
+    const pinElement = pinnedPromptRef.current;
+    if (pinElement) {
+      const reserved = pinElement.offsetTop + pinElement.offsetHeight + PINNED_PROMPT_GAP;
+      const push = pinned?.nextTopOffset == null ? 0 : Math.min(0, pinned.nextTopOffset - reserved);
+      pinElement.style.transform = push === 0 ? "" : `translateY(${push}px)`;
+    }
   });
 
   const minimapRefreshFrameRef = useRef<number | null>(null);
@@ -1290,6 +1316,15 @@ const ConversationTimeline = memo(function ConversationTimeline({
   );
   const listExtraData = { identity: listIdentityKey, rowCount: rows.length, sharedState };
 
+  const scrollToMinimapItem = (item: TimelineMinimapItem) => {
+    navigateTimeline();
+    void listRef.current?.scrollToIndex({
+      index: item.rowIndex,
+      animated: !window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+      viewOffset: 24,
+    });
+  };
+
   const forwardMinimapWheel = (event: WheelEvent) => {
     const scrollNode = listRef.current?.getScrollableNode();
     if (scrollNode) forwardWheelToTimeline(event, scrollNode);
@@ -1391,15 +1426,15 @@ const ConversationTimeline = memo(function ConversationTimeline({
               timestampFormat={timestampFormat}
               stripMap={minimapStripMap}
               onWheel={forwardMinimapWheel}
-              onSelect={(item) => {
-                navigateTimeline();
-                void listRef.current?.scrollToIndex({
-                  index: item.rowIndex,
-                  animated: !window.matchMedia("(prefers-reduced-motion: reduce)").matches,
-                  viewOffset: 24,
-                });
-              }}
+              onSelect={scrollToMinimapItem}
             />
+            {pinnedPromptEnabled && !findOpen && pinnedPromptItem?.userText ? (
+              <TimelinePinnedPrompt
+                ref={pinnedPromptRef}
+                text={pinnedPromptItem.userText}
+                onSelect={() => scrollToMinimapItem(pinnedPromptItem)}
+              />
+            ) : null}
           </TooltipScrollDismissArea>
         </TimelineRowActivityCtx>
       </MarkdownFindContext>

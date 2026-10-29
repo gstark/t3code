@@ -27,6 +27,7 @@ import { ThreadAutomationsPanel } from "./ThreadAutomationsPanel";
 import { ServerHealthSection } from "./ServerHealthSection";
 import { WorkspaceServersSection } from "./WorkspaceServersSection";
 import { ThreadRelationshipsPanel } from "./ThreadRelationshipsControl";
+import { PinnedPromptToggle } from "./PinnedPromptToggle";
 
 const GitActionsControl = memo(BaseGitActionsControl);
 
@@ -167,6 +168,10 @@ export function ThreadDetailsPanel(props: ThreadDetailsPanelProps) {
                   onUpdateScript={props.onUpdateProjectScript}
                   onDeleteScript={props.onDeleteProjectScript}
                 />
+              ) : null}
+
+              {density !== "essential" && !props.draftId ? (
+                <PinnedPromptToggle threadRef={activeThreadRef} />
               ) : null}
             </div>
           </ThreadDetailsSection>

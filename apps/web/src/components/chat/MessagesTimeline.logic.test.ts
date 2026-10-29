@@ -31,6 +31,7 @@ import {
   deriveMessagesTimelineRowsWithState,
   shouldCollapseUserMessage,
   resolveAssistantMessageCopyState,
+  resolveTimelinePinnedPrompt,
   type MessagesTimelineRow,
   workEntryDisplayLabel,
   liveWorkEntryLabel,
@@ -4343,5 +4344,50 @@ describe("history collapses", () => {
   it("shows an expanded collapse's history below its row", () => {
     expect(rowIds(new Set(["first"]))).toEqual(["first", "one", "two", "second", "four"]);
     expect(rowIds(new Set(["second"]))).toEqual(["first", "second", "three", "four"]);
+  });
+});
+
+describe("resolveTimelinePinnedPrompt", () => {
+  // Prompts at rows 0, 5 and 10; every row is 100px tall.
+  const layout = {
+    rowIndices: [0, 5, 10],
+    positionAtIndex: (index: number) => index * 100,
+    sizeAtIndex: () => 100,
+  };
+
+  it("pins nothing while the first prompt is still on screen", () => {
+    expect(resolveTimelinePinnedPrompt({ ...layout, scroll: 50 })).toBeNull();
+  });
+
+  it("pins the last prompt above the viewport and reports how far the next one is", () => {
+    expect(resolveTimelinePinnedPrompt({ ...layout, scroll: 320 })).toEqual({
+      index: 0,
+      nextTopOffset: 180,
+    });
+    expect(resolveTimelinePinnedPrompt({ ...layout, scroll: 600 })).toEqual({
+      index: 1,
+      nextTopOffset: 400,
+    });
+  });
+
+  it("keeps the earlier prompt pinned until the next prompt fully leaves the top", () => {
+    expect(resolveTimelinePinnedPrompt({ ...layout, scroll: 550 })?.index).toBe(0);
+  });
+
+  it("has no successor for the last turn", () => {
+    expect(resolveTimelinePinnedPrompt({ ...layout, scroll: 1200 })).toEqual({
+      index: 2,
+      nextTopOffset: null,
+    });
+  });
+
+  it("stops at prompts the list has not positioned yet", () => {
+    expect(
+      resolveTimelinePinnedPrompt({
+        ...layout,
+        scroll: 1200,
+        positionAtIndex: (index) => (index < 10 ? index * 100 : undefined),
+      }),
+    ).toEqual({ index: 1, nextTopOffset: null });
   });
 });
