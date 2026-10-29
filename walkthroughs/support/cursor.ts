@@ -282,10 +282,8 @@ class Cursor {
   }
 }
 
-// Headless Chromium records no mouse pointer, so a viewer can't see what was
-// clicked. Each walkthrough page draws a large pointer that glides to whatever
-// the next action touches, and a ring that grows and shrinks on every click.
-// The glide is only drawn: the real mouse still moves when Playwright acts,
-// so nothing on the way is hovered and the actions behave as before.
+// Headless Chromium records no mouse pointer, so each page draws one that glides
+// to the next target and rings on each click. The glide is only drawn: the real
+// mouse still jumps when Playwright acts, so nothing on the way is hovered.
 
 type Point = { x: number; y: number };

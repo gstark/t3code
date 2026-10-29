@@ -1,10 +1,6 @@
-// Starts a walkthrough environment and keeps it running, to find the steps
-// for a new walkthrough by hand or with Playwright probes.
-//
+// Keeps a walkthrough environment running to explore new steps:
 //   node walkthroughs/support/explore.ts [scenario.json]
-//
-// It prints the home folder and a pairing URL. Make more pairing URLs with
-// `node apps/server/src/bin.ts auth pairing create --base-dir <home>`.
+// More pairing URLs: `node apps/server/src/bin.ts auth pairing create --base-dir <home>`.
 // Ctrl+C stops the server and removes the root folder.
 import * as NodeFS from "node:fs";
 
