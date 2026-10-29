@@ -14,11 +14,9 @@ import { threadTempDirName, threadTempDirsRoot } from "./process/agentScope.ts";
 import { forkParked } from "./serverActivation.ts";
 
 /**
- * Removes the per-thread temp directories that agents and terminals write to
- * (see `AgentScope.wrap`). A directory goes when its thread is archived or
- * deleted. At start, a sweep removes the directories of threads that went
- * while the server was down. An unarchived thread gets a new directory at its
- * next launch.
+ * Removes a thread's temp directory (see `AgentScope.wrap`) when the thread is
+ * archived or deleted. A start sweep catches threads that went while the server
+ * was down. An unarchived thread gets a new directory at its next launch.
  */
 export class ThreadTempDirs extends Context.Service<
   ThreadTempDirs,
