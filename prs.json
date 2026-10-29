@@ -49,7 +49,7 @@
       "slug": "git-timeline-cards",
       "number": 3,
       "title": "feat(git): sync branches before push and show git actions in the timeline",
-      "body": "Commits, pushes, and pull requests that you start from a thread left no record in the thread.\n\n- After a stacked Git action completes, the server writes a `git.action.completed` thread activity with the action result. The contract is in `packages/contracts/src/git.ts`.\n- The timeline shows the activity as a card that you can expand to see the details.\n\nThis PR is stacked on #2 for a linear history. It has no code dependency on it.\n\n---\nMade with Claude Opus 5.5 (claude-opus-5-5) in Claude Code.",
+      "body": "Commits, pushes, pull requests, and lands started from a thread left no record in the thread, and the agent never learned about them. A push or pull request on a branch that was behind its upstream was blocked until you rebased by hand.\n\n- After a stacked Git action completes, the server dispatches an internal `thread.git-action.record` command. The command adds a runless `git_action` turn item that holds the action result. The payload contract is `GitActionActivityPayload` in `packages/contracts/src/git.ts`.\n- The timeline shows the item as a card. You can expand the card to see each step.\n- The next turn that carries a user prompt starts with a note that lists the Git actions since the last completed turn. MCP thread reads also describe the item.\n- Generated commit messages now get the thread conversation for intent, as pull request text already did.\n- Before a push or pull request, the server fetches the remote. It then rebases the branch onto its upstream and onto the remote default branch when either has new commits. A rebase that rewrites history pushes with `--force-with-lease`.\n- **Land worktree** rebases the branch onto the base branch in the worktree before it merges, so conflicts stay in the worktree.\n- A rebase that stops on conflicts stays in progress. The server asks the thread's agent to resolve it, and the action fails with a message that says so. A new action fails while a rebase is in progress.\n- The git controls no longer block push or pull request when the branch is behind. A diverged branch gets a **Rebase & push** quick action.\n\nThis PR is stacked on pr/git-land-worktree because the land rebase, the land card, and the land note use its land step and its `land` result.\n\n---\nKept in sync from mine by fork-prs.",
       "commits": [
         "82911d751a405e7e7690afae5bdbdcd59a21449e",
         "29b721553bc8d2d617bed7bcef50c8b9851ff053",
@@ -59,17 +59,22 @@
       "parent": "git-land-worktree",
       "parentReason": "git-sync-before-push uses the \"land\" result that git-land-worktree adds (ab72ac756e: GitManager.ts, ws.ts, packages/contracts/src/git.ts). It also uses GitActionActivityPayload from the \"show git actions in the thread timeline\" commit (82911d751a). No candidate PR has that commit on its own. git-land-worktree changes apps/web/src/components/chat/GitActionCard.tsx, and the timeline commit creates that file. So the git-land-worktree PR must already include the timeline commit or stack on it. Stacking on git-land-worktree therefore supplies both dependencies.",
       "status": "open",
-      "baseTag": null,
-      "builtOn": null,
-      "head": null,
-      "applied": [],
-      "stale": "Its parent git-land-worktree failed to build."
+      "baseTag": "v0.1.3",
+      "builtOn": "e23f391a089a61c719ccd9b968c025accd8ae502",
+      "head": "3d98864c0ca26c65156dc584a439ead2e42398e8",
+      "applied": [
+        "82911d751a405e7e7690afae5bdbdcd59a21449e",
+        "29b721553bc8d2d617bed7bcef50c8b9851ff053",
+        "f5772a556fcaaf518bc52250bc276145a88b5c95",
+        "d94ff2ba942b0d1670db53e60af4f1c31cbac7c1"
+      ],
+      "stale": null
     },
     {
       "slug": "git-land-worktree",
       "number": 4,
       "title": "feat(git): land worktree changes into the base branch",
-      "body": "You had to finish a worktree thread by hand: merge, remove the worktree, then delete the branch.\n\n- \"Land\" commits any changes, merges the worktree branch into its base branch in the main checkout, then removes the worktree and deletes its branch.\n- Land is the default Git action for worktree threads. If you pick another commit path from the menu, the project remembers it, and that includes \"Commit, push & PR\".\n- Land does not push. The completion toast shows the merged commit range and has a Push button.\n- A worktree with nothing to land is cleaned up without a merge.\n- Before it commits, land checks that the main checkout is clean and on the base branch. It fast-forwards the base branch from the remote first. It stops on conflicts or a diverged base and does not undo anything.\n- After a land, the thread moves to the main checkout on the base branch.\n- Progress shows the new merge and cleanup steps.\n\nStacked on pr/git-commit-preferences because land extends its per-project commit preference logic.\n\n---\nKept in sync from mine by fork-prs.",
+      "body": "You had to finish a worktree thread by hand: merge, remove the worktree, then delete the branch.\n\n- \"Land\" commits any changes, merges the worktree branch into its base branch in the main checkout, then removes the worktree and deletes its branch.\n- Land is the default Git action for worktree threads. If you pick another commit path from the menu, the project remembers it, and that includes \"Commit, push & PR\".\n- Land does not push. The completion toast shows the merged commit range and has a Push button. That button does not ask the default-branch question again.\n- A worktree with nothing to land is cleaned up without a merge. This works even when the main checkout has uncommitted changes.\n- Before it commits, land checks that the main checkout is clean and on the base branch. It fast-forwards the base branch from the remote first. It stops on conflicts or a diverged base and does not undo anything.\n- After a land, the thread moves to the main checkout on the base branch.\n- Progress shows the new merge and cleanup steps.\n\nStacked on pr/git-commit-preferences because land extends its per-project commit preference logic.\n\n---\nKept in sync from mine by fork-prs.",
       "commits": [
         "ab72ac756eafac279a11e25c073e0c69c19bc0df",
         "f7aed855e428c19b724c8378346be02ecfa0e3de",
@@ -80,15 +85,15 @@
       "parentReason": "The conflicts in GitActionsControl.logic.ts and GitActionsControl.tsx come from git-commit-preferences, which the build skipped (it used v0.1.3). The conflicts in packages/contracts/src/git.ts and apps/server/src/ws.ts do not come from any candidate. They come from the GitActionActivityPayload split and the appendGitActionActivity context. Both belong to git-timeline-cards, and git-timeline-cards stacks on git-land-worktree. A parent cannot fix that cycle, so Gavin must change mine.",
       "status": "open",
       "baseTag": "v0.1.3",
-      "builtOn": "6e5a6e7901a2bb8e0a03a24210b9427353d04aef",
-      "head": "62b7399a141aee607e403db3d023ba906e334595",
+      "builtOn": "5c9f1a3c779b0fabea0d7b1c01fbbe68f6cd4db2",
+      "head": "e23f391a089a61c719ccd9b968c025accd8ae502",
       "applied": [
         "ab72ac756eafac279a11e25c073e0c69c19bc0df",
         "f7aed855e428c19b724c8378346be02ecfa0e3de",
         "3202eab666f8bafaa26f6c8e8a48fe35ec6dafd5",
         "6a03917c3c0e6336d90c3dd9f7206986cbaa8d41"
       ],
-      "stale": "drift: apps/server/src/git/GitManager.test.ts: on mine, the merge commit \"Merge upstream v0.1.3 into mine\" (653616b15d) changed this PR's two land tests (the \"Landed feature/land into main\" test and the \"Cleaned up worktree\" test) from runGit(remoteDir, [\"rev-parse\", \"main\"]) to runGit(remoteDir, [\"--git-dir=.\", \"rev-parse\", \"main\"]). Only the merge commit holds this change, so the PR does not get it. Can you put this change on mine as a fork commit (for example, folded into 6a03917c3c, which is already owned by git-land-worktree) so that the PR gets it?"
+      "stale": null
     },
     {
       "slug": "git-failure-reasons",
@@ -395,18 +400,20 @@
       "slug": "worktree-complete-recipes",
       "number": 20,
       "title": "feat(git): run worktree-complete recipes when landing",
-      "body": "A repository could prepare a new worktree with `just worktree` (#7), but it could not clean up when the worktree landed.\n\n- Landing a worktree runs `just worktree-complete` in it after the merge and before the worktree is removed, if the justfile has that recipe.\n- The recipe output shows as hook progress in the Git action.\n- If the recipe fails, the worktree stays. You can fix the problem and land again.\n- `hasRunnableJustRecipe` moves to `justfileRecipe.ts` so the setup runner and `GitManager` share it.\n\nTests are in `GitManager.test.ts`.\n\nThe base is `base/mine-7ac5a8e`, the parent of this commit on `mine`. This work needs landing (#4) and the justfile recipe runner (#7), which are on different bases.\n",
+      "body": "A repository could prepare a new worktree with `just worktree` (#7), but it could not clean up when the worktree landed.\n\n- Landing a worktree runs `just worktree-complete` in it after the merge and before the worktree is removed, if the justfile has that recipe.\n- The recipe output shows as hook progress in the Git action.\n- If the recipe fails, the worktree stays. You can fix the problem and land again.\n- `hasRunnableJustRecipe` moves to `justfileRecipe.ts` so the setup runner and `GitManager` share it.\n- The project settings user guide describes the new recipe.\n\nTests are in `GitManager.test.ts`.\n\nThis PR is stacked on pr/git-land-worktree because the recipe runs inside the land action (#4) that PR adds.\n\n---\nKept in sync from mine by fork-prs.",
       "commits": [
         "ade106c6b8a94cab7afedfa6404f69c0ec32d609"
       ],
       "parent": "git-land-worktree",
       "parentReason": "It needs the land flow from git-land-worktree and the justfile recipe from justfile-worktree-setup, which sits lower in the same stack.",
       "status": "open",
-      "baseTag": null,
-      "builtOn": null,
-      "head": null,
-      "applied": [],
-      "stale": "Its parent git-land-worktree failed to build."
+      "baseTag": "v0.1.3",
+      "builtOn": "e23f391a089a61c719ccd9b968c025accd8ae502",
+      "head": "4d79bba7e693975baba656ffdcc35da7651a85c5",
+      "applied": [
+        "ade106c6b8a94cab7afedfa6404f69c0ec32d609"
+      ],
+      "stale": null
     },
     {
       "slug": "history-collapse",
@@ -471,7 +478,7 @@
       "slug": "land-without-base-checkout",
       "number": 24,
       "title": "fix(git): land branches without requiring main checkout",
-      "body": "Landing a worktree failed unless the main checkout was on the base branch: \"The main checkout at … is on other. Switch it to main, then land again.\" You had to switch branches in a checkout you were not using.\n\nLanding now finds the worktree that has the base branch checked out, if one does:\n\n- **No checkout has the base branch.** Landing moves the base branch ref forward. No working tree changes.\n- **A checkout has the base branch.** Landing updates that checkout, as before. It refuses if that checkout has uncommitted changes, and the error names its path.\n- The main checkout keeps its current branch and stays clean.\n- A rebase conflict stays in the worktree being landed, as before.\n- When the main checkout is not on the base branch, the success toast does not offer to push. A push from there would push the wrong branch.\n\nTests in `GitManager.test.ts` cover these cases: landing while main is on another branch, updating a separate checkout of main, refusing when that checkout is dirty, and keeping a conflict in the worktree.\n\nThe base is `base/mine-5d04115`, the parent of this commit on `mine`.\n\nClaude Opus 5.5 (claude-opus-5-5) in Claude Code, run through T3 Code.\n",
+      "body": "Landing a worktree failed unless the main checkout was on the base branch: \"The main checkout at … is on other. Switch it to main, then land again.\" You had to switch branches in a checkout you were not using.\n\nLanding now finds the worktree that has the base branch checked out, if one does:\n\n- **No checkout has the base branch.** Landing moves the base branch ref forward. No working tree changes.\n- **A checkout has the base branch.** Landing updates that checkout, as before. It refuses if that checkout has uncommitted changes, and the error names its path.\n- The main checkout keeps its current branch and stays clean.\n- A rebase conflict stays in the worktree being landed, as before.\n- When the main checkout is not on the base branch, the success toast does not offer to push. A push from there would push the wrong branch.\n\nTests in `GitManager.test.ts` cover these cases: landing while main is on another branch, updating a separate checkout of main, refusing when that checkout is dirty, and keeping a conflict in the worktree.\n\nThis PR is stacked on pr/git-timeline-cards because that PR adds the land action, which this PR changes.\n\nClaude Opus 5.5 (claude-opus-5-5) in Claude Code, run through T3 Code.\n\n---\nKept in sync from mine by fork-prs.",
       "commits": [
         "49557d884ea8d048e0628622a61b86b875a25586",
         "c1ef3547756b343903ed6d007d99d92fed55fac1"
@@ -479,11 +486,14 @@
       "parent": "git-timeline-cards",
       "parentReason": "Commit 29b721553b in git-timeline-cards adds rebaseOnto, which the land fix needs.",
       "status": "open",
-      "baseTag": null,
-      "builtOn": null,
-      "head": null,
-      "applied": [],
-      "stale": "Its parent git-timeline-cards failed to build."
+      "baseTag": "v0.1.3",
+      "builtOn": "3d98864c0ca26c65156dc584a439ead2e42398e8",
+      "head": "06fc55c34d69c7c541e6f2914ee4fc559d4ab5e9",
+      "applied": [
+        "49557d884ea8d048e0628622a61b86b875a25586",
+        "c1ef3547756b343903ed6d007d99d92fed55fac1"
+      ],
+      "stale": null
     },
     {
       "slug": "sidebar-active-rail",
@@ -547,9 +557,10 @@
       "applied": [
         "16579e2e669e56f7b2543cb5fa90a428417fbbf4",
         "90dcb0f5ce91c0594feca80e7de567b3b540c3e2",
-        "b565edb5ac0c56e498472287ef49618a1328b17c"
+        "b565edb5ac0c56e498472287ef49618a1328b17c",
+        "11cb8b5f005212f6bed5581454f00362c038725a"
       ],
-      "stale": "On mine, can you split c3ae8ab95b (\"chore: port merge resolutions to v0.1.3\") into two commits? The first commit must hold only the `detailsOnly` port, which belongs to expanded-work-details. That means the lone-entry `<SimpleWorkEntryRow detailsOnly />` branch in apps/web/src/components/chat/TimelineWorkGroupRows.tsx, plus the `detailsOnly` prop, `expandedState`, the `detailsOnly ? \"\" : previewText` change and the `if (detailsOnly && canExpandProjectedItem)` return in TimelineWorkEntryRow.tsx. The second commit must hold only the runtime port for command-runtime."
+      "stale": null
     },
     {
       "slug": "server-health",
@@ -802,11 +813,14 @@
   ],
   "stacks": [
     {
-      "number": 42,
+      "number": 43,
       "slugs": [
         "justfile-recipes-menu",
         "justfile-worktree-setup",
-        "git-commit-preferences"
+        "git-commit-preferences",
+        "git-land-worktree",
+        "git-timeline-cards",
+        "land-without-base-checkout"
       ]
     }
   ],
