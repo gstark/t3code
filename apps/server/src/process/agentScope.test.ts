@@ -50,6 +50,8 @@ const withFakeSystemd = <A, E>(
     readonly calls: ReadonlyArray<ReadonlyArray<string>>;
     readonly stateDir: string;
     readonly cgroupRoot: string;
+    /** Holds the fake commands, and is the host PATH. */
+    readonly bin: string;
   }) => Effect.Effect<A, E>,
   // A user manager older than systemd 253 rejects OOMPolicy on scopes.
   {
@@ -113,7 +115,7 @@ const withFakeSystemd = <A, E>(
       }),
     );
     const { stateDir } = yield* ServerConfig.ServerConfig;
-    return yield* body({ scope, units, calls, stateDir, cgroupRoot }).pipe(
+    return yield* body({ scope, units, calls, stateDir, cgroupRoot, bin }).pipe(
       Effect.ensuring(Effect.sync(() => NodeFS.rmSync(bin, { recursive: true, force: true }))),
     );
   }).pipe(
@@ -324,6 +326,59 @@ describe("AgentScope service", () => {
       { stopFails: true },
     );
   });
+
+  it.effect("gives each thread its own temp directory under the state dir", () =>
+    withFakeSystemd(({ scope, stateDir }) =>
+      Effect.gen(function* () {
+        const launch = yield* scope.wrap({
+          command: "agent",
+          args: [],
+          name: "t",
+          threadId: "thread/1",
+        });
+        const tempDir = NodePath.join(stateDir, "tmp", "thread%2F1");
+        // `/bin/sh -c <script> t3-agent <tempDir> ...`
+        expect(launch.args[3]).toBe(tempDir);
+        expect(NodeFS.statSync(tempDir).isDirectory()).toBe(true);
+
+        const shared = yield* scope.wrap({ command: "agent", args: [], name: "server" });
+        expect(shared.args[3]).toBe("");
+      }),
+    ),
+  );
+
+  it.effect("keeps a temp directory the provider set for itself", () =>
+    withFakeSystemd(({ scope, bin }) =>
+      Effect.gen(function* () {
+        const launch = yield* scope.wrap({
+          command: "agent",
+          args: [],
+          name: "acp",
+          threadId: "thread-1",
+          env: { PATH: bin, TMPDIR: "/srv/agent-run" },
+        });
+        expect(launch.args[3]).toBe("");
+      }),
+    ),
+  );
+
+  it.effect("keeps the agent's scope when a terminal launches on the same thread", () =>
+    withFakeSystemd(({ scope, units }) =>
+      Effect.gen(function* () {
+        const agent = yield* scope.wrap({ command: "agent", args: [], name: "t", threadId: "a" });
+        const terminal = yield* scope.wrap({
+          command: "agent",
+          args: [],
+          name: "terminal",
+          threadId: "a",
+          trackScope: false,
+        });
+        expect(terminal.args[3]).toBe(agent.args[3]);
+        units.set(unitOf(agent), { activeState: "failed", result: "oom-kill" });
+        expect(yield* scope.oomKilled("a")).toBe(true);
+      }),
+    ),
+  );
 
   it.effect("leaves a quiet slice alone", () =>
     withFakeSystemd(({ scope, calls }) =>

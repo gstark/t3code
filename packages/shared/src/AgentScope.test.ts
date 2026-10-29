@@ -27,3 +27,27 @@ describe.skipIf(HostProcess.Platform.defaultValue() !== "linux")("agentScopeComm
     expect(args).toEqual(["a b", "$HOME"]);
   });
 });
+
+describe.skipIf(HostProcess.Platform.defaultValue() === "win32")("agent temp directory", () => {
+  const printTemp = (tempDir: string | undefined) => {
+    const launch = agentScopeCommand({
+      command: "/bin/sh",
+      args: ["-c", 'printf "%s\\n" "$TMPDIR" "$TMP" "$TEMP"'],
+      tempDir,
+    });
+    return NodeChildProcess.spawnSync(launch.command, [...launch.args], {
+      encoding: "utf8",
+      env: { TMPDIR: "/inherited", TMP: "/inherited", TEMP: "/inherited" },
+    })
+      .stdout.trimEnd()
+      .split("\n");
+  };
+
+  it("points TMPDIR, TMP, and TEMP at the thread's directory", () => {
+    expect(printTemp("/state/tmp/thread 1")).toEqual(Array(3).fill("/state/tmp/thread 1"));
+  });
+
+  it("keeps the inherited temp directory without one", () => {
+    expect(printTemp(undefined)).toEqual(Array(3).fill("/inherited"));
+  });
+});
