@@ -5,7 +5,7 @@ import {
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
 import { useNavigate } from "@tanstack/react-router";
-import { Atom } from "effect/unstable/reactivity";
+import { Atom } from "effect/reactivity";
 import { useEffect, useState } from "react";
 import { create } from "zustand";
 

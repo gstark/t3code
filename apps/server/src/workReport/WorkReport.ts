@@ -8,6 +8,7 @@ import {
   ThreadId,
   WorkReportError,
   type ModelSelection,
+  type OrchestrationV2CheckpointFileSummary,
   type WorkReportRun,
   type WorkReportStartResult,
 } from "@t3tools/contracts";
@@ -22,10 +23,11 @@ import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
-import * as SqlClient from "effect/unstable/sql/SqlClient";
+import * as SqlClient from "effect/sql/SqlClient";
 
-import * as OrchestrationEngine from "../orchestration/Services/OrchestrationEngine.ts";
-import * as ProjectionSnapshotQuery from "../orchestration/Services/ProjectionSnapshotQuery.ts";
+import * as ThreadLaunchService from "../orchestration-v2/ThreadLaunchService.ts";
+import * as ThreadManagementService from "../orchestration-v2/ThreadManagementService.ts";
+import * as ProjectService from "../project/ProjectService.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import * as WorkspacePaths from "../workspace/WorkspacePaths.ts";
 import { DEFAULT_REPORT_INSTRUCTIONS } from "./defaultReportInstructions.ts";
@@ -110,44 +112,47 @@ export class WorkReport extends Context.Service<
 const truncate = (text: string, limit: number) =>
   text.length <= limit ? text : `${text.slice(0, limit)}… [${text.length - limit} more characters]`;
 
-const CheckpointFiles = Schema.fromJsonString(
-  Schema.Array(
-    Schema.Struct({
-      path: Schema.String,
-      kind: Schema.optional(Schema.String),
-      additions: Schema.optional(Schema.Number),
-      deletions: Schema.optional(Schema.Number),
-    }),
-  ),
-);
-const decodeCheckpointFiles = Schema.decodeUnknownOption(CheckpointFiles);
+const describeFiles = (files: ReadonlyArray<OrchestrationV2CheckpointFileSummary>) =>
+  files
+    .slice(0, FILES_PER_TURN)
+    .map((file) => `${file.kind} ${file.path} (+${file.additions} -${file.deletions})`);
 
-const describeFiles = (json: string | null): ReadonlyArray<string> =>
-  Option.match(json === null ? Option.none() : decodeCheckpointFiles(json), {
-    onNone: () => [],
-    onSome: (files) =>
-      files
-        .slice(0, FILES_PER_TURN)
-        .map(
-          (file) =>
-            `${file.kind ?? "changed"} ${file.path} (+${file.additions ?? 0} -${file.deletions ?? 0})`,
-        ),
-  });
+const describeProblem = (row: {
+  readonly type: string;
+  readonly input: string | null;
+  readonly exitCode: number | null;
+  readonly failureMessage: string | null;
+}) =>
+  truncate(
+    row.type === "error"
+      ? `Error: ${row.failureMessage ?? "unknown"}`
+      : `Command failed${row.exitCode === null ? "" : ` (exit ${row.exitCode})`}: ${row.input ?? ""}`,
+    PROBLEM_DETAIL_LIMIT,
+  );
 
 const failure = (message: string) => (cause: unknown) => new WorkReportError({ message, cause });
+
+/** One user-to-agent cycle of a digest, before paging. */
+interface TurnDraft {
+  readonly runId: string | null;
+  readonly requestedAt: string;
+  user: string | null;
+  assistant: string | null;
+}
 
 const make = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
   const settingsService = yield* ServerSettings.ServerSettingsService;
-  const snapshots = yield* ProjectionSnapshotQuery.ProjectionSnapshotQuery;
-  const engine = yield* OrchestrationEngine.OrchestrationEngineService;
+  const projects = yield* ProjectService.ProjectService;
+  const threads = yield* ThreadManagementService.ThreadManagementService;
+  const threadLaunch = yield* ThreadLaunchService.ThreadLaunchService;
   const workspacePaths = yield* WorkspacePaths.WorkspacePaths;
   const fileSystem = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const crypto = yield* Crypto.Crypto;
   const startLock = yield* Semaphore.make(1);
 
-  const uuid = crypto.randomUUIDv4.pipe(Effect.orDie);
+  const uuid = crypto.randomUUIDv4().pipe(Effect.orDie);
   const commandId = (tag: string) =>
     uuid.pipe(Effect.map((id) => CommandId.make(`server:work-report-${tag}:${id}`)));
   const nowIso = DateTime.now.pipe(Effect.map(DateTime.formatIso));
@@ -171,41 +176,38 @@ const make = Effect.gen(function* () {
     const workspaceRoot = yield* workspacePaths
       .normalizeWorkspaceRoot(folder, { createIfMissing: true })
       .pipe(Effect.mapError((cause) => new WorkReportError({ message: cause.message, cause })));
-    const existing = yield* snapshots
-      .getActiveProjectByWorkspaceRoot(workspaceRoot)
-      .pipe(Effect.mapError(failure("Could not look up the reports folder project.")));
-    if (Option.isSome(existing)) return existing.value.id;
-    const projectId = ProjectId.make(yield* uuid);
-    yield* engine
-      .dispatch({
-        type: "project.create",
+    const { project } = yield* projects
+      .bootstrap({
         commandId: yield* commandId("project"),
-        projectId,
+        projectId: ProjectId.make(yield* uuid),
         title: path.basename(workspaceRoot) || "Work reports",
         workspaceRoot,
-        createWorkspaceRootIfMissing: true,
-        createdAt: yield* nowIso,
       })
       .pipe(Effect.mapError(failure("Could not add the reports folder as a project.")));
-    return projectId;
+    return project.id;
   });
 
-  const writeDefaultInstructions = (workspaceRoot: string) =>
-    Effect.gen(function* () {
+  const writeDefaultInstructions = Effect.fn("WorkReport.writeDefaultInstructions")(
+    function* (workspaceRoot: string) {
       const file = path.join(workspaceRoot, "AGENTS.md");
       if (yield* fileSystem.exists(file)) return;
       yield* fileSystem.writeFileString(file, DEFAULT_REPORT_INSTRUCTIONS);
-    }).pipe(Effect.mapError(failure("Could not write AGENTS.md in the reports folder.")));
+    },
+    Effect.mapError(failure("Could not write AGENTS.md in the reports folder.")),
+  );
 
   /** The running report thread, if it still exists and is not archived. */
-  const runningThreadId = (run: WorkReportRun | null) =>
-    Effect.gen(function* () {
-      if (run === null) return null;
-      const thread = yield* snapshots
-        .getThreadShellById(run.threadId)
-        .pipe(Effect.mapError(failure("Could not read the running report thread.")));
-      return Option.isSome(thread) && thread.value.archivedAt === null ? run.threadId : null;
-    });
+  const runningThreadId = Effect.fn("WorkReport.runningThreadId")(function* (
+    run: WorkReportRun | null,
+  ) {
+    if (run === null) return null;
+    const thread = yield* threads
+      .getThreadShell(run.threadId)
+      .pipe(Effect.mapError(failure("Could not read the running report thread.")));
+    return thread !== null && thread.archivedAt === null && thread.deletedAt === null
+      ? run.threadId
+      : null;
+  });
 
   const start: WorkReport["Service"]["start"] = (input) =>
     startLock.withPermits(1)(
@@ -221,8 +223,8 @@ const make = Effect.gen(function* () {
         if (projectId === null) {
           return yield* new WorkReportError({ message: "Choose a reports folder first." });
         }
-        const project = yield* snapshots
-          .getProjectShellById(projectId)
+        const project = yield* projects
+          .getById(projectId)
           .pipe(Effect.mapError(failure("Could not read the reports folder project.")));
         if (Option.isNone(project)) {
           return yield* new WorkReportError({
@@ -241,44 +243,35 @@ const make = Effect.gen(function* () {
           windowStart: coveredUntil,
           windowEnd: now,
         };
-        const resolved = resolveProjectSettings(settings, projectId).settings;
+        const resolved = resolveProjectSettings(settings, projectId, project.value).settings;
         const modelSelection: ModelSelection = resolved.defaultModelSelection ?? {
           instanceId: ProviderInstanceId.make("codex"),
           model: DEFAULT_MODEL,
         };
         const since = coveredUntil === null ? "the last 7 days" : coveredUntil;
-        yield* engine
-          .dispatch({
-            type: "thread.create",
-            commandId: yield* commandId("thread"),
+        // Record the run before launching: the report agent calls the work
+        // report tools as soon as its turn starts. A launch that fails before
+        // the thread exists leaves a run that `runningThreadId` ignores.
+        yield* updateWorkReport({ activeRun: run });
+        yield* threadLaunch
+          .launch({
+            commandId: yield* commandId("launch"),
             threadId: run.threadId,
             projectId,
             title: `Work report ${now.slice(0, 10)}`,
             modelSelection,
             runtimeMode: resolved.defaultRuntimeMode,
             interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
-            branch: null,
-            worktreePath: null,
-            createdAt: now,
-          })
-          .pipe(Effect.mapError(failure("Could not create the report thread.")));
-        yield* updateWorkReport({ activeRun: run });
-        yield* engine
-          .dispatch({
-            type: "thread.turn.start",
-            commandId: yield* commandId("turn"),
-            threadId: run.threadId,
-            message: {
+            workspaceStrategy: { type: "root" },
+            initialMessage: {
               messageId: MessageId.make(yield* uuid),
-              role: "user",
               text: `Write the work report for threads settled from ${since} until ${now}. Follow AGENTS.md in this folder.`,
               attachments: [],
             },
-            runtimeMode: resolved.defaultRuntimeMode,
-            interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
-            createdAt: now,
+            createdBy: "system",
+            creationSource: "server",
           })
-          .pipe(Effect.mapError(failure("Could not start the report turn.")));
+          .pipe(Effect.mapError(failure("Could not start the report thread.")));
         return { threadId: run.threadId, started: true };
       }),
     );
@@ -303,162 +296,191 @@ const make = Effect.gen(function* () {
     return { projectId, run: activeRun, windowStart };
   });
 
-  const listSettledThreads: WorkReport["Service"]["listSettledThreads"] = (reportThreadId) =>
-    Effect.gen(function* () {
-      const { projectId, run, windowStart } = yield* requireRun(reportThreadId);
-      const rows = yield* sql<{
-        threadId: string;
-        title: string;
-        projectId: string;
-        projectTitle: string;
-        workspaceRoot: string;
-        branch: string | null;
-        settledAt: string;
-        turnCount: number;
-        pullRequests: string | null;
-      }>`
-        SELECT t.thread_id AS "threadId", t.title, t.project_id AS "projectId",
-          p.title AS "projectTitle", p.workspace_root AS "workspaceRoot", t.branch,
-          t.settled_at AS "settledAt",
-          (SELECT COUNT(*) FROM projection_turns AS turn
-            WHERE turn.thread_id = t.thread_id AND turn.turn_id IS NOT NULL) AS "turnCount",
-          (SELECT GROUP_CONCAT(link.url, char(10)) FROM projection_thread_pull_requests AS link
-            WHERE link.thread_id = t.thread_id AND link.source != 'stack-dismissed') AS "pullRequests"
-        FROM projection_threads AS t
-        JOIN projection_projects AS p ON p.project_id = t.project_id
-        WHERE t.deleted_at IS NULL
-          AND t.settled_override = 'settled'
-          AND t.settled_at > ${windowStart}
-          AND t.settled_at <= ${run.windowEnd}
-          AND t.project_id != ${projectId}
-        ORDER BY t.settled_at ASC
-      `.pipe(Effect.mapError(failure("Could not list settled threads.")));
-      const projectIds = [...new Set(rows.map((row) => ProjectId.make(row.projectId)))];
-      const projects = yield* snapshots
-        .getProjectShells(projectIds)
-        .pipe(Effect.mapError(failure("Could not read projects.")));
-      const repositoryByProject = new Map(
-        projects.map((project) => [project.id, project.repositoryIdentity?.canonicalKey ?? null]),
-      );
-      return {
-        windowStart,
-        windowEnd: run.windowEnd,
-        threads: rows.map((row) => ({
-          threadId: row.threadId,
-          title: row.title,
-          projectTitle: row.projectTitle,
-          workspaceRoot: row.workspaceRoot,
-          repository: repositoryByProject.get(ProjectId.make(row.projectId)) ?? null,
-          branch: row.branch,
-          settledAt: row.settledAt,
-          turnCount: row.turnCount,
-          pullRequests: row.pullRequests === null ? [] : row.pullRequests.split("\n"),
-        })),
-      };
-    });
+  const listSettledThreads: WorkReport["Service"]["listSettledThreads"] = Effect.fn(
+    "WorkReport.listSettledThreads",
+  )(function* (reportThreadId) {
+    const { projectId, run, windowStart } = yield* requireRun(reportThreadId);
+    // No service lists threads by settle time, and the shell snapshot reads
+    // every thread's runs and items, so filter the thread rows here. A turn
+    // is a run, or a user message imported from v1 without one.
+    const rows = yield* sql<{
+      threadId: string;
+      title: string;
+      projectId: string;
+      projectTitle: string;
+      workspaceRoot: string;
+      branch: string | null;
+      settledAt: string;
+      turnCount: number;
+      pullRequests: string | null;
+    }>`
+      SELECT t.thread_id AS "threadId", t.title, t.project_id AS "projectId",
+        p.title AS "projectTitle", p.workspace_root AS "workspaceRoot",
+        json_extract(t.payload_json, '$.branch') AS branch,
+        json_extract(t.payload_json, '$.settledAt') AS "settledAt",
+        (SELECT COUNT(*) FROM orchestration_v2_projection_runs AS run
+          WHERE run.thread_id = t.thread_id AND run.status != 'rolled_back')
+        + (SELECT COUNT(*) FROM orchestration_v2_projection_messages AS message
+          WHERE message.thread_id = t.thread_id AND message.role = 'user'
+            AND message.run_id IS NULL) AS "turnCount",
+        (SELECT GROUP_CONCAT(json_extract(link.value, '$.url'), char(10))
+          FROM json_each(t.payload_json, '$.pullRequests') AS link
+          WHERE json_extract(link.value, '$.source') != 'stack-dismissed') AS "pullRequests"
+      FROM orchestration_v2_projection_threads AS t
+      JOIN projection_projects AS p ON p.project_id = t.project_id
+      WHERE t.deleted_at IS NULL
+        AND json_extract(t.payload_json, '$.settledAt') > ${windowStart}
+        AND json_extract(t.payload_json, '$.settledAt') <= ${run.windowEnd}
+        AND json_extract(t.payload_json, '$.lineage.relationshipToParent') IS NOT 'subagent'
+        AND t.project_id != ${projectId}
+      ORDER BY "settledAt" ASC
+    `.pipe(Effect.mapError(failure("Could not list settled threads.")));
+    const projectIds = [...new Set(rows.map((row) => ProjectId.make(row.projectId)))];
+    const shells = yield* projects
+      .listShells({ projectIds })
+      .pipe(Effect.mapError(failure("Could not read projects.")));
+    const repositoryByProject = new Map(
+      shells.map((project) => [project.id, project.repositoryIdentity?.canonicalKey ?? null]),
+    );
+    return {
+      windowStart,
+      windowEnd: run.windowEnd,
+      threads: rows.map((row) => ({
+        threadId: row.threadId,
+        title: row.title,
+        projectTitle: row.projectTitle,
+        workspaceRoot: row.workspaceRoot,
+        repository: repositoryByProject.get(ProjectId.make(row.projectId)) ?? null,
+        branch: row.branch,
+        settledAt: row.settledAt,
+        turnCount: row.turnCount,
+        pullRequests: row.pullRequests === null ? [] : row.pullRequests.split("\n"),
+      })),
+    };
+  });
 
-  const getThreadDigest: WorkReport["Service"]["getThreadDigest"] = (input) =>
-    Effect.gen(function* () {
-      yield* requireRun(input.reportThreadId);
-      const thread = yield* snapshots
-        .getThreadShellById(input.threadId)
-        .pipe(Effect.mapError(failure("Could not read the thread.")));
-      if (Option.isNone(thread)) {
-        return yield* new WorkReportError({ message: `Thread ${input.threadId} was not found.` });
-      }
-      const readRows = Effect.all(
-        [
-          sql<{
-            turnId: string;
-            requestedAt: string;
-            files: string | null;
-            user: string | null;
-          }>`
-            SELECT turn.turn_id AS "turnId", turn.requested_at AS "requestedAt",
-              turn.checkpoint_files_json AS files, message.text AS user
-            FROM projection_turns AS turn
-            LEFT JOIN projection_thread_messages AS message
-              ON message.message_id = turn.pending_message_id
-            WHERE turn.thread_id = ${input.threadId} AND turn.turn_id IS NOT NULL
-            ORDER BY turn.requested_at ASC, turn.row_id ASC
-          `,
-          // The last assistant message of each turn is its answer; earlier ones narrate.
-          sql<{ turnId: string; text: string }>`
-            SELECT message.turn_id AS "turnId", message.text
-            FROM projection_thread_messages AS message
-            WHERE message.thread_id = ${input.threadId} AND message.role = 'assistant'
-              AND message.created_at = (
-                SELECT MAX(latest.created_at) FROM projection_thread_messages AS latest
-                WHERE latest.thread_id = message.thread_id AND latest.turn_id = message.turn_id
-                  AND latest.role = 'assistant'
-              )
-          `,
-          // Extract in SQLite: activity payloads reach megabytes per thread.
-          sql<{ turnId: string | null; summary: string; detail: string | null }>`
-            SELECT turn_id AS "turnId", summary,
-              json_extract(payload_json, '$.detail') AS detail
-            FROM projection_thread_activities
-            WHERE thread_id = ${input.threadId}
-              AND (tone = 'error'
-                OR (kind = 'tool.completed' AND json_extract(payload_json, '$.status') = 'failed'))
-            ORDER BY created_at ASC
-          `,
-        ],
-        { concurrency: 1 },
-      ).pipe(Effect.mapError(failure("Could not read the thread history.")));
-      const [turns, answers, problems] = yield* readRows;
-      const answerByTurn = new Map(answers.map((row) => [row.turnId, row.text]));
-      const problemsByTurn = new Map<string, Array<string>>();
-      for (const problem of problems) {
-        if (problem.turnId === null) continue;
-        const list = problemsByTurn.get(problem.turnId) ?? [];
-        if (list.length < PROBLEMS_PER_TURN) {
-          const detail = typeof problem.detail === "string" ? `: ${problem.detail}` : "";
-          list.push(truncate(`${problem.summary}${detail}`, PROBLEM_DETAIL_LIMIT));
-        }
-        problemsByTurn.set(problem.turnId, list);
-      }
+  const getThreadDigest: WorkReport["Service"]["getThreadDigest"] = Effect.fn(
+    "WorkReport.getThreadDigest",
+  )(function* (input) {
+    yield* requireRun(input.reportThreadId);
+    const thread = yield* threads
+      .getThreadShell(input.threadId)
+      .pipe(Effect.mapError(failure("Could not read the thread.")));
+    if (thread === null) {
+      return yield* new WorkReportError({ message: `Thread ${input.threadId} was not found.` });
+    }
+    // Imports a v1 thread's transcript on first read, so it comes before the SQL below.
+    const records = yield* threads
+      .getThreadRecords(input.threadId, ["runs", "messages", "checkpoints"], {
+        messageRoles: ["user", "assistant"],
+      })
+      .pipe(Effect.mapError(failure("Could not read the thread history.")));
+    // Extract in SQLite: command items carry their full output.
+    const problems = yield* sql<{
+      runId: string;
+      type: string;
+      input: string | null;
+      exitCode: number | null;
+      failureMessage: string | null;
+    }>`
+      SELECT run_id AS "runId", type,
+        substr(json_extract(payload_json, '$.input'), 1, ${PROBLEM_DETAIL_LIMIT}) AS input,
+        json_extract(payload_json, '$.exitCode') AS "exitCode",
+        json_extract(payload_json, '$.failure.message') AS "failureMessage"
+      FROM orchestration_v2_projection_turn_items
+      WHERE thread_id = ${input.threadId} AND run_id IS NOT NULL
+        AND ((type = 'command_execution' AND (status = 'failed'
+              OR json_extract(payload_json, '$.exitCode') != 0
+              OR json_extract(payload_json, '$.outputIndicatesFailure') = 1))
+          OR (type = 'error' AND json_extract(payload_json, '$.retry') IS NULL))
+      ORDER BY ordinal ASC, turn_item_id ASC
+    `.pipe(Effect.mapError(failure("Could not read the thread history.")));
+    const problemsByRun = new Map<string, Array<string>>();
+    for (const problem of problems) {
+      const list = problemsByRun.get(problem.runId) ?? [];
+      if (list.length < PROBLEMS_PER_TURN) list.push(describeProblem(problem));
+      problemsByRun.set(problem.runId, list);
+    }
 
-      const cursor = Math.max(0, input.cursor);
-      const page: Array<DigestTurn> = [];
-      let used = 0;
-      let index = cursor;
-      for (; index < turns.length; index++) {
-        const turn = turns[index]!;
-        const answer = answerByTurn.get(turn.turnId);
-        const entry: DigestTurn = {
-          index,
-          requestedAt: turn.requestedAt,
-          user: turn.user === null ? null : truncate(turn.user, MESSAGE_LIMIT),
-          assistant: answer === undefined ? null : truncate(answer, MESSAGE_LIMIT),
-          filesChanged: describeFiles(turn.files),
-          problems: problemsByTurn.get(turn.turnId) ?? [],
+    // A turn is a run. Threads imported from v1 have messages without runs,
+    // so there each user message starts a turn.
+    const runsById = new Map(records.runs.map((run) => [run.id as string, run]));
+    const filesByCheckpoint = new Map(
+      records.checkpoints.map((checkpoint) => [checkpoint.id as string, checkpoint.files]),
+    );
+    const turns: Array<TurnDraft> = [];
+    const turnByKey = new Map<string, TurnDraft>();
+    let currentKey: string | undefined;
+    for (const message of records.messages) {
+      const run = message.runId === null ? undefined : runsById.get(message.runId);
+      if (run?.status === "rolled_back") continue;
+      const key = message.runId ?? (message.role === "user" ? message.id : currentKey);
+      if (key === undefined) continue;
+      let turn = turnByKey.get(key);
+      if (turn === undefined) {
+        turn = {
+          runId: message.runId,
+          requestedAt: DateTime.formatIso(run?.requestedAt ?? message.createdAt),
+          user: null,
+          assistant: null,
         };
-        const size = [
-          entry.user ?? "",
-          entry.assistant ?? "",
-          ...entry.filesChanged,
-          ...entry.problems,
-        ].reduce((total, text) => total + text.length, 0);
-        if (page.length > 0 && used + size > DIGEST_PAGE_BUDGET) break;
-        page.push(entry);
-        used += size;
+        turnByKey.set(key, turn);
+        turns.push(turn);
       }
-      return {
-        threadId: input.threadId,
-        title: thread.value.title,
-        totalTurns: turns.length,
-        turns: page,
-        nextCursor: index < turns.length ? index : null,
-      };
-    });
+      if (message.role === "user") {
+        // Steering messages join their run; the first message started it.
+        turn.user ??= message.text;
+        currentKey = key;
+      } else {
+        // Messages arrive in creation order. The last is the answer; earlier ones narrate.
+        turn.assistant = message.text;
+      }
+    }
 
-  const complete: WorkReport["Service"]["complete"] = (reportThreadId) =>
-    Effect.gen(function* () {
+    const cursor = Math.max(0, input.cursor);
+    const page: Array<DigestTurn> = [];
+    let used = 0;
+    let index = cursor;
+    for (; index < turns.length; index++) {
+      const turn = turns[index]!;
+      const checkpointId =
+        turn.runId === null ? null : (runsById.get(turn.runId)?.checkpointId ?? null);
+      const entry: DigestTurn = {
+        index,
+        requestedAt: turn.requestedAt,
+        user: turn.user === null ? null : truncate(turn.user, MESSAGE_LIMIT),
+        assistant: turn.assistant === null ? null : truncate(turn.assistant, MESSAGE_LIMIT),
+        filesChanged: describeFiles(
+          checkpointId === null ? [] : (filesByCheckpoint.get(checkpointId) ?? []),
+        ),
+        problems: turn.runId === null ? [] : (problemsByRun.get(turn.runId) ?? []),
+      };
+      const size = [
+        entry.user ?? "",
+        entry.assistant ?? "",
+        ...entry.filesChanged,
+        ...entry.problems,
+      ].reduce((total, text) => total + text.length, 0);
+      if (page.length > 0 && used + size > DIGEST_PAGE_BUDGET) break;
+      page.push(entry);
+      used += size;
+    }
+    return {
+      threadId: input.threadId,
+      title: thread.title,
+      totalTurns: turns.length,
+      turns: page,
+      nextCursor: index < turns.length ? index : null,
+    };
+  });
+
+  const complete: WorkReport["Service"]["complete"] = Effect.fn("WorkReport.complete")(
+    function* (reportThreadId) {
       const { run } = yield* requireRun(reportThreadId);
       yield* updateWorkReport({ coveredUntil: run.windowEnd, activeRun: null });
       return { coveredUntil: run.windowEnd };
-    });
+    },
+  );
 
   return WorkReport.of({ start, listSettledThreads, getThreadDigest, complete });
 });
