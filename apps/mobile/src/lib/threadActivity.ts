@@ -636,8 +636,6 @@ function itemIcon(item: OrchestrationV2TurnItem): ThreadFeedActivity["icon"] {
       return "zap";
     case "secret_request":
       return "lock";
-    case "history_collapse":
-      return "check";
   }
 }
 
@@ -697,12 +695,6 @@ function itemSummary(
       return "Thread created";
     case "secret_request":
       return item.label;
-    case "history_collapse":
-      return item.status === "running"
-        ? "Collapsed (summarizing)"
-        : item.summary === null
-          ? "Collapsed"
-          : `Collapsed: ${item.summary}`;
     case "dynamic_tool": {
       const classified = classifyToolActivity({
         itemType: "dynamic_tool_call",
@@ -762,8 +754,6 @@ function itemPreview(item: OrchestrationV2TurnItem): string | null {
       return item.targetThreadId;
     case "secret_request":
       return item.reason || null;
-    case "history_collapse":
-      return null;
     case "subagent":
       return item.result ?? item.progress ?? item.prompt;
     case "dynamic_tool":
@@ -2188,8 +2178,6 @@ export function buildThreadFeed(
     const item = row.item;
     if (turnItemIsWorkspacePreparation(item)) continue;
     if (item.type === "todo_list" || item.type === "checkpoint") continue;
-    // The web timeline hides history behind a collapse; mobile only marks where it was.
-    if (item.type === "history_collapse" && item.status === "cancelled") continue;
     if (item.type === "user_message" && foldedAnswerMessageIds.has(item.messageId)) continue;
     if (item.type === "run_interrupt_request") {
       continue;
