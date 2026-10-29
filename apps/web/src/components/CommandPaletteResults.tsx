@@ -3,12 +3,12 @@ import { LegendList, type LegendListRef } from "@legendapp/list/react";
 import { ChevronRightIcon } from "lucide-react";
 import { type ReactNode, type RefObject, useState } from "react";
 import { cn } from "~/lib/utils";
-import { textDirection } from "~/textDirection";
 import {
   formatShortcutLabel,
   shortcutLabelForCommand,
   threadJumpIndexFromCommand,
 } from "../keybindings";
+import { textDirection } from "~/textDirection";
 import {
   type CommandPaletteActionItem,
   type CommandPaletteGroup,
@@ -126,7 +126,8 @@ export function CommandPaletteVirtualizedResults(props: CommandPaletteVirtualize
         data={props.rows}
         keyExtractor={(row) => row.key}
         getItemType={(row) => row.kind}
-        extraData={props.highlightedItemValue}
+        // Shift changes worktree labels, so it must repaint visible rows too.
+        extraData={`${props.highlightedItemValue ?? ""}:${props.shiftHeld === true}`}
         renderItem={({ item: row }) =>
           row.kind === "label" ? (
             <div className={row.first ? undefined : "pt-1.5"}>
@@ -140,6 +141,7 @@ export function CommandPaletteVirtualizedResults(props: CommandPaletteVirtualize
               item={row.item}
               keybindings={props.keybindings}
               isActive={props.highlightedItemValue === row.item.value}
+              shiftHeld={props.shiftHeld ?? false}
               onExecuteItem={props.onExecuteItem}
             />
           )
