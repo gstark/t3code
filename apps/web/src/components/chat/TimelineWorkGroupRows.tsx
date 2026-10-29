@@ -9,7 +9,6 @@ import { type ToolActivityIcon } from "@t3tools/contracts";
 import { liveThoughtLine } from "@t3tools/client-runtime/work-log/presentation";
 import { resolveWorkGroupScrollAnchor } from "@t3tools/client-runtime/work-log/scroll-anchor";
 import { observeResize } from "~/lib/observeResize";
-import { tickTextContent } from "~/lib/tickTextContent";
 import { observeVisibleAnimation } from "../../lib/visibleAnimation";
 import { memo, use, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { LegendList, type LegendListRef } from "@legendapp/list/react";
@@ -49,14 +48,15 @@ import {
   threadReadLabel,
   ThreadReadLabel,
   ReasoningTraceContent,
+  runningWorkEntryStartedAt,
   SimpleWorkEntryRow,
+  WorkingTimer,
 } from "./TimelineWorkEntryRow";
 import {
   remarkThoughtPreview,
   toolGroupSummaryIconName,
   workEntryIconName,
 } from "./TimelineWorkEntryRow.logic";
-import { formatWorkingTimerNow } from "./TimelineWorkGroupRows.logic";
 
 export const WorkGroupSection = memo(function WorkGroupSection({
   anchorKey,
@@ -108,15 +108,6 @@ export const WorkGroupSection = memo(function WorkGroupSection({
     </section>
   );
 });
-
-function WorkingTimer({ createdAt }: { createdAt: string }) {
-  return (
-    <span
-      ref={tickTextContent(() => formatWorkingTimerNow(createdAt), true)}
-      className="tabular-nums"
-    />
-  );
-}
 
 const compactWorkEntryHeight = 24;
 
@@ -374,6 +365,7 @@ function LiveActivityRow({
   failed = false,
   active = false,
   shimmer = false,
+  startedAt = null,
 }: {
   label: ReactNode;
   iconName?: WorkEntryIconName;
@@ -381,6 +373,7 @@ function LiveActivityRow({
   failed?: boolean;
   active?: boolean;
   shimmer?: boolean;
+  startedAt?: string | null;
 }) {
   const animated = active && !failed;
   const showShimmer = animated && shimmer;
@@ -396,6 +389,7 @@ function LiveActivityRow({
         failed={failed}
         announceFailure={failed}
         active={animated && !shimmer}
+        startedAt={startedAt}
       />
       {showShimmer ? (
         <ActivityShimmerOverlay>
@@ -414,6 +408,7 @@ function LiveActivityContent({
   announceFailure = false,
   active = false,
   highlighted = false,
+  startedAt = null,
 }: {
   label: ReactNode;
   iconName: WorkEntryIconName | undefined;
@@ -422,6 +417,7 @@ function LiveActivityContent({
   announceFailure?: boolean;
   active?: boolean;
   highlighted?: boolean;
+  startedAt?: string | null;
 }) {
   const showTrailingFailureMark =
     failed && iconName !== undefined && !toolIconAcceptsTint(toolIcon);
@@ -465,6 +461,10 @@ function LiveActivityContent({
       trailing={
         showTrailingFailureMark ? (
           <XIcon aria-hidden className={cn("size-3 shrink-0", failedToolIconClassName)} />
+        ) : startedAt ? (
+          <span className="shrink-0 whitespace-nowrap text-sidebar-muted-foreground/60 text-xs">
+            <WorkingTimer createdAt={startedAt} />
+          </span>
         ) : null
       }
     />
@@ -566,6 +566,7 @@ export function LiveWorkEntryTimelineRow({
         toolIcon={row.entry.toolIcon ?? row.entry.toolSource?.icon}
         failed={failed}
         active={row.active}
+        startedAt={row.active ? runningWorkEntryStartedAt(row.entry) : null}
       />
     </button>
   );
