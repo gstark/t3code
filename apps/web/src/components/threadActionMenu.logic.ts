@@ -17,6 +17,7 @@ export type ThreadActionMenuId =
   | "unsnooze"
   | "rename"
   | "regenerate-title"
+  | "collapse-history"
   | "mark-unread"
   | "share-guest"
   | "copy"
@@ -85,6 +86,8 @@ export interface ThreadActionMenuState {
     readonly snooze: boolean;
     readonly pinning: boolean;
     readonly titleRegeneration: boolean;
+    /** Only the chat header offers it, beside the history it collapses. */
+    readonly historyCollapse?: boolean;
   };
   readonly snoozePresets: ReadonlyArray<SnoozePreset>;
   /** Guest links need their own grant, so the caller checks it instead of `canOperate`. */
@@ -159,6 +162,16 @@ export function buildThreadActionMenuItems(
             label: state.isRegeneratingTitle ? "Regenerating…" : "Regenerate title",
             icon: "refresh-cw",
             disabled: state.isRegeneratingTitle,
+          },
+        ]
+      : []),
+    ...(state.supports.historyCollapse
+      ? [
+          {
+            id: "collapse-history" as const,
+            label: "Collapse history",
+            icon: "fold-vertical",
+            disabled: state.isRunning,
           },
         ]
       : []),

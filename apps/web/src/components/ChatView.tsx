@@ -74,6 +74,7 @@ import {
   type ServerProvider,
   type ScopedThreadRef,
   type ThreadId,
+  type TurnItemId,
   type RunId,
   ProviderInteractionMode,
   resolveIdleCompaction,
@@ -433,6 +434,9 @@ export default function ChatView(props: ChatViewProps) {
     };
   }, [routeThreadKey]);
   const updateThreadMetadata = useOrchestrationCommand(threadEnvironment.updateMetadata, {
+    reportFailure: false,
+  });
+  const uncollapseThreadHistory = useOrchestrationCommand(threadEnvironment.uncollapseHistory, {
     reportFailure: false,
   });
   const canWriteSourceControl = useEnvironmentScope(environmentId, AuthSourceControlWriteScope);
@@ -1836,6 +1840,22 @@ export default function ChatView(props: ChatViewProps) {
     setTerminalUiLaunchContext,
     setThreadError,
   });
+  const onUncollapseHistory = async (turnItemId: TurnItemId) => {
+    if (!activeThread) return;
+    const result = await uncollapseThreadHistory({
+      environmentId: activeThread.environmentId,
+      input: { threadId: activeThread.id, turnItemId },
+    });
+    if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
+      const error = squashAtomCommandFailure(result);
+      toastManager.add({
+        type: "error",
+        title: "Failed to uncollapse history",
+        ...(error instanceof Error ? { description: error.message } : {}),
+      });
+    }
+  };
+  const onUncollapseHistoryStable = useStableCallback(onUncollapseHistory);
   const {
     saveProjectScript: saveProjectScriptStable,
     updateProjectScript: updateProjectScriptStable,
@@ -3296,6 +3316,9 @@ export default function ChatView(props: ChatViewProps) {
                   ? { onWorktreeSetupWorkLocally: onWorktreeSetupWorkLocallyStable }
                   : {})}
                 {...(onOpenWorktreeSetupTerminal ? { onOpenWorktreeSetupTerminal } : {})}
+                {...(paintOnlyDisplayedTimeline
+                  ? {}
+                  : { onUncollapseHistory: onUncollapseHistoryStable })}
                 isPreparingWorktree={!paintOnlyDisplayedTimeline && isPreparingWorktree}
                 footer={paintOnlyDisplayedTimeline ? null : timelineFooter}
                 listRef={legendListRef}

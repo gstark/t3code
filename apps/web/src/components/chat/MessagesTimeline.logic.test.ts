@@ -4205,3 +4205,53 @@ describe("shouldCollapseUserMessage", () => {
     expect(shouldCollapseUserMessage(`${citation} ${"More text. ".repeat(60)}`)).toBe(true);
   });
 });
+
+describe("history collapses", () => {
+  const at = "2026-10-16T12:00:00Z";
+  const message = (id: string): TimelineEntry => ({
+    kind: "message",
+    id,
+    createdAt: at,
+    message: {
+      id: MessageId.make(id),
+      role: "user",
+      text: id,
+      runId: null,
+      streaming: false,
+      createdAt: at,
+      updatedAt: at,
+    },
+  });
+  const collapse = (id: string, summary: string | null): TimelineEntry => ({
+    kind: "history-collapse",
+    id,
+    createdAt: at,
+    turnItemId: TurnItemId.make(id),
+    summary,
+    summarizing: summary === null,
+  });
+  const rowIds = (expandedHistoryCollapseIds?: ReadonlySet<string>) =>
+    deriveMessagesTimelineRows({
+      timelineEntries: [
+        message("one"),
+        message("two"),
+        collapse("first", "Asked twice"),
+        message("three"),
+        collapse("second", null),
+        message("four"),
+      ],
+      ...(expandedHistoryCollapseIds ? { expandedHistoryCollapseIds } : {}),
+      isWorking: false,
+      turnDiffSummaries: [],
+      supportsConversationRollback: false,
+    }).map((row) => row.id);
+
+  it("hides the history since the previous collapse behind each collapse row", () => {
+    expect(rowIds()).toEqual(["first", "second", "four"]);
+  });
+
+  it("shows an expanded collapse's history below its row", () => {
+    expect(rowIds(new Set(["first"]))).toEqual(["first", "one", "two", "second", "four"]);
+    expect(rowIds(new Set(["second"]))).toEqual(["first", "second", "three", "four"]);
+  });
+});

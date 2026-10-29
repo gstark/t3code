@@ -15,6 +15,8 @@ export type {
   BranchNameGenerationResult,
   CommitMessageGenerationInput,
   CommitMessageGenerationResult,
+  HistorySummaryGenerationInput,
+  HistorySummaryGenerationResult,
   PrContentGenerationInput,
   PrContentGenerationResult,
   ReviewGuideGenerationInput,
@@ -32,6 +34,7 @@ type TextGenerationOp =
   | "generatePrContent"
   | "generateBranchName"
   | "generateThreadTitle"
+  | "generateHistorySummary"
   | "generateReviewGuide";
 
 const resolveInstance = (
@@ -73,6 +76,13 @@ export const make = Effect.gen(function* () {
       return resolveInstance(registry, "generateBranchName", input.modelSelection.instanceId).pipe(
         Effect.flatMap((textGeneration) => textGeneration.generateBranchName(input)),
       );
+    }),
+    generateHistorySummary: Effect.fn("TextGeneration.generateHistorySummary")(function (input) {
+      return resolveInstance(
+        registry,
+        "generateHistorySummary",
+        input.modelSelection.instanceId,
+      ).pipe(Effect.flatMap((textGeneration) => textGeneration.generateHistorySummary(input)));
     }),
     generateReviewGuide: Effect.fn("TextGeneration.generateReviewGuide")(function (input) {
       return resolveInstance(registry, "generateReviewGuide", input.modelSelection.instanceId).pipe(

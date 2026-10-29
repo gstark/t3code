@@ -281,6 +281,7 @@ function createTextGeneration(
       Effect.succeed({
         title: "Update workflow",
       }),
+    generateHistorySummary: () => Effect.succeed({ summary: "Updated the workflow" }),
     generateReviewGuide: () => Effect.succeed({ stops: [] }),
     ...overrides,
   };
@@ -330,6 +331,7 @@ function createTextGeneration(
             }),
         ),
       ),
+    generateHistorySummary: (input) => implementation.generateHistorySummary(input),
     generateReviewGuide: (input) => implementation.generateReviewGuide(input),
   };
 }

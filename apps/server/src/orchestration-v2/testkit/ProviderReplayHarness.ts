@@ -52,6 +52,7 @@ import * as PreviewAgentActivity from "../../preview/PreviewAgentActivity.ts";
 import * as RunExecutionService from "../RunExecutionService.ts";
 import * as RunFinalizationService from "../RunFinalizationService.ts";
 import * as ThreadTitleRegenerationService from "../ThreadTitleRegenerationService.ts";
+import * as HistoryCollapseSummaryService from "../HistoryCollapseSummaryService.ts";
 import * as RuntimePolicy from "../RuntimePolicy.ts";
 import * as TurnItemPositionStore from "../TurnItemPositionStore.ts";
 import * as RuntimeRequestService from "../RuntimeRequestService.ts";
@@ -441,6 +442,14 @@ export function layerWithRegistry<Error>(
   const layerRunFinalizationServiceProvided = RunFinalizationService.layer.pipe(
     Layer.provide(Layer.merge(layerCheckpointCaptureServiceProvided, layerStores)),
   );
+  const layerHistoryCollapseSummaryTest = Layer.succeed(
+    HistoryCollapseSummaryService.HistoryCollapseSummaryService,
+    HistoryCollapseSummaryService.HistoryCollapseSummaryService.of({
+      execute: Effect.fn("HistoryCollapseSummaryService.execute")(function () {
+        return Effect.void;
+      }),
+    }),
+  );
   const layerThreadTitleRegenerationTest = Layer.succeed(
     ThreadTitleRegenerationService.ThreadTitleRegenerationService,
     ThreadTitleRegenerationService.ThreadTitleRegenerationService.of({
@@ -501,6 +510,7 @@ export function layerWithRegistry<Error>(
         layerProviderTurnStartServiceProvided,
         layerRuntimeRequestServiceProvided,
         layerThreadTitleRegenerationTest,
+        layerHistoryCollapseSummaryTest,
         layerServerSettings,
         layerThreadManagementProvided,
       ),

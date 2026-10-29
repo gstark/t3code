@@ -521,6 +521,9 @@ function commandThreadId(command: OrchestrationV2ServerCommand): ThreadId {
     case "thread.created.record":
       return command.parentThreadId;
     case "secret_request.record":
+    case "thread.history.collapse":
+    case "thread.history.uncollapse":
+    case "thread.history-collapse.complete":
       return command.threadId;
     case "thread.fork":
     case "thread.merge_back":
@@ -552,6 +555,19 @@ function pendingThreadTitleGenerationEffect(
     commandId,
     threadId,
     request: { type: "thread-title.generate", kind },
+  };
+}
+
+function pendingHistoryCollapseSummaryEffect(
+  commandId: CommandId,
+  threadId: ThreadId,
+  turnItemId: TurnItemId,
+): PendingOrchestrationEffectV2 {
+  return {
+    id: `effect:${commandId}:history-collapse.summarize`,
+    commandId,
+    threadId,
+    request: { type: "history-collapse.summarize", turnItemId },
   };
 }
 
@@ -7858,6 +7874,129 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
     },
   );
 
+  /**
+   * Appends a runless collapse marker. Clients hide the history between the
+   * previous active marker and this one; the summary effect fills in its line.
+   */
+  const dispatchHistoryCollapse = Effect.fn("orchestrationV2.dispatch.historyCollapse")(function* (
+    command: Extract<OrchestrationV2Command, { readonly type: "thread.history.collapse" }>,
+    events: Ref.Ref<Array<OrchestrationV2DomainEvent>>,
+    effects: Ref.Ref<Array<PendingOrchestrationEffectV2>>,
+  ) {
+    const projection = yield* loadProjectionForCommand(command, ["runs", "turnItems"], {
+      turnItemTypes: ["user_message", "assistant_message", "history_collapse"],
+    });
+    const reject = (cause: string) =>
+      new OrchestratorDispatchError({
+        commandId: command.commandId,
+        commandType: command.type,
+        cause,
+      });
+    if (projection.thread.deletedAt !== null) {
+      return yield* reject(`Thread ${command.threadId} is deleted.`);
+    }
+    // A running turn would keep writing into the range being summarized.
+    if (projection.runs.some(isBlockingRun)) {
+      return yield* reject(
+        `Thread ${command.threadId} is working and cannot collapse its history.`,
+      );
+    }
+    const lastCollapseOrdinal = projection.turnItems.reduce(
+      (ordinal, item) =>
+        item.type === "history_collapse" && item.status !== "cancelled"
+          ? Math.max(ordinal, item.ordinal)
+          : ordinal,
+      -1,
+    );
+    if (
+      !projection.turnItems.some(
+        (item) => item.type !== "history_collapse" && item.ordinal > lastCollapseOrdinal,
+      )
+    ) {
+      return yield* reject(`Thread ${command.threadId} has no history to collapse.`);
+    }
+    const now = yield* DateTime.now;
+    const turnItemId = TurnItemId.make(`history-collapse:${command.commandId}`);
+    yield* emit(
+      events,
+      command,
+    )({
+      type: "turn-item.updated",
+      threadId: command.threadId,
+      occurredAt: now,
+      payload: {
+        id: turnItemId,
+        threadId: command.threadId,
+        runId: null,
+        nodeId: null,
+        providerThreadId: null,
+        providerTurnId: null,
+        nativeItemRef: null,
+        parentItemId: null,
+        ordinal: yield* nextTurnItemOrdinal(projection),
+        status: "running",
+        title: null,
+        startedAt: now,
+        completedAt: null,
+        updatedAt: now,
+        type: "history_collapse",
+        summary: null,
+      },
+    });
+    yield* Ref.update(effects, (existing) => [
+      ...existing,
+      pendingHistoryCollapseSummaryEffect(command.commandId, command.threadId, turnItemId),
+    ]);
+  });
+
+  /** Uncollapsing cancels the marker, and completing a cancelled one does nothing. */
+  const dispatchHistoryCollapseUpdate = Effect.fn("orchestrationV2.dispatch.historyCollapseUpdate")(
+    function* (
+      command: Extract<
+        OrchestrationV2ServerCommand,
+        { readonly type: "thread.history.uncollapse" | "thread.history-collapse.complete" }
+      >,
+      events: Ref.Ref<Array<OrchestrationV2DomainEvent>>,
+    ) {
+      const item = yield* projectionStore
+        .getTurnItem({ threadId: command.threadId, itemId: command.turnItemId })
+        .pipe(
+          Effect.mapError(
+            (cause) => new OrchestratorProjectionError({ threadId: command.threadId, cause }),
+          ),
+        );
+      if (item?.type !== "history_collapse") {
+        if (command.type === "thread.history-collapse.complete") return;
+        return yield* new OrchestratorDispatchError({
+          commandId: command.commandId,
+          commandType: command.type,
+          cause: `Thread ${command.threadId} has no history collapse ${command.turnItemId}.`,
+        });
+      }
+      if (item.status === "cancelled") return;
+      if (command.type === "thread.history-collapse.complete" && item.status !== "running") return;
+      const now = yield* DateTime.now;
+      yield* emit(
+        events,
+        command,
+      )({
+        type: "turn-item.updated",
+        threadId: command.threadId,
+        occurredAt: now,
+        payload:
+          command.type === "thread.history.uncollapse"
+            ? { ...item, status: "cancelled", completedAt: item.completedAt ?? now, updatedAt: now }
+            : {
+                ...item,
+                status: "completed",
+                summary: command.summary,
+                completedAt: now,
+                updatedAt: now,
+              },
+      });
+    },
+  );
+
   const dispatchRuntimeRequestRespond = Effect.fn("Orchestrator.dispatchRuntimeRequestRespond")(
     function* (
       command: Extract<OrchestrationV2Command, { readonly type: "runtime-request.respond" }>,
@@ -12087,6 +12226,13 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
         break;
       case "secret_request.record":
         yield* dispatchSecretRequestRecord(command, events);
+        break;
+      case "thread.history.collapse":
+        yield* dispatchHistoryCollapse(command, events, effects);
+        break;
+      case "thread.history.uncollapse":
+      case "thread.history-collapse.complete":
+        yield* dispatchHistoryCollapseUpdate(command, events);
         break;
       default:
         return yield* dispatchUnsupported(command);
