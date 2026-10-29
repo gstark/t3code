@@ -31,8 +31,8 @@
         "7bc6bd48cc951809254453d20f81bd47313a8407",
         "cc783421215c8ca7e48319dcffc7da0fddab9157"
       ],
-      "parent": null,
-      "parentReason": null,
+      "parent": "justfile-worktree-setup",
+      "parentReason": "Gavin chose one stack so that worktree-complete-recipes can sit on both the justfile and land PRs.",
       "status": "open",
       "baseTag": "v0.1.3",
       "builtOn": "d2c440312e5f39d59827ed466838a623516454d6",
@@ -41,7 +41,7 @@
         "7bc6bd48cc951809254453d20f81bd47313a8407",
         "cc783421215c8ca7e48319dcffc7da0fddab9157"
       ],
-      "stale": null
+      "stale": "drift: In apps/web/src/components/GitActionsControl.logic.ts, buildMenuItems on mine returns `[commitItem, ...commitPushItems, pushItem]` when a PR is open, but the PR still returns `[commitItem, pushItem]`. No feature commit made this change. It came from the conflict resolution in the merge \"Merge upstream v0.1.3 into mine\" (057af03e2e). Is this change part of git-commit-preferences, which would let you switch the preference while a PR is open? If yes, the PR must get it. If it belongs to git-land-worktree, you must move it into a land commit on mine."
     },
     {
       "slug": "git-timeline-cards",
@@ -60,7 +60,7 @@
       "builtOn": null,
       "head": null,
       "applied": [],
-      "stale": "drift: In apps/server/src/git/GitManager.test.ts, the test \"pushes and creates PR from a no-upstream branch when local commits are ahead of base\" on mine sets `url.<bare remote>.insteadOf` for git@github.com:pingdotgg/codething-mvp.git (\"The sync before a push fetches origin; keep that fetch local\"). Only the v0.1.3 merge commit 057af03e2e adds it, so the git-timeline-cards PR does not get it, and its sync before push would fetch github.com. Must this hunk move into commit 29b721553b (or the \"port merge resolutions to v0.1.3\" commit) on mine, so that this PR gets it?"
+      "stale": "Gavin, can you rebuild the git-timeline-cards commits on mine so they contain only the current turn-item version? That version is apps/server/src/git/recordGitAction.ts, the \"thread.git-action.record\" command in packages/contracts, the git_action handling in apps/web/src/session-logic.ts and apps/web/src/components/chat/MessagesTimeline.logic.ts/.tsx, and GitActionCard.tsx. The rebuild must also drop the old gitActionActivity.ts commit and its \"thread.activity.append\" call in apps/server/src/ws.ts."
     },
     {
       "slug": "git-land-worktree",
@@ -85,7 +85,7 @@
         "3202eab666f8bafaa26f6c8e8a48fe35ec6dafd5",
         "2c439addd5c2d3effcccb68f27827b7c85edb972"
       ],
-      "stale": null
+      "stale": "Its parent git-commit-preferences failed to build."
     },
     {
       "slug": "git-failure-reasons",
@@ -396,20 +396,20 @@
       "commits": [
         "ade106c6b8a94cab7afedfa6404f69c0ec32d609"
       ],
-      "parent": "justfile-worktree-setup",
-      "parentReason": "The PR conflicts in apps/server/src/project/ProjectSetupScriptRunner.ts and docs/user/project-settings.md, because it builds on the justfile worktree recipe that justfile-worktree-setup (7ac5a8e6dd) adds. It also conflicts in apps/server/src/git/GitManager.ts and GitManager.test.ts, because it builds on the land flow that git-land-worktree (ab72ac756e, f7aed855e4) adds. A PR can have only one parent, so the PRs must form one chain: upstream tag → git-land-worktree → justfile-worktree-setup → worktree-complete-recipes. With this order, git-land-worktree keeps its base, and PRs that stack on it, such as land-without-base-checkout, do not change. Only the small, 3-file justfile-worktree-setup PR moves. Gavin must make two changes in the fork-prs config on mine. First, set the parent of justfile-worktree-setup to git-land-worktree. Second, set the parent of worktree-complete-recipes to justfile-worktree-setup.",
+      "parent": "git-land-worktree",
+      "parentReason": "It needs the land flow from git-land-worktree and the justfile recipe from justfile-worktree-setup, which sits lower in the same stack.",
       "status": "open",
       "baseTag": null,
       "builtOn": null,
       "head": null,
       "applied": [],
-      "stale": "The PR \"worktree-complete-recipes\" is built on the justfile-worktree-recipe PR (b13d151bab), but its change extends the land action (prepareLand, runLandStep, removeWorktree), which came from ab72ac756e \"feat(web): land worktree changes into the main branch\". That code is not in the base. Do you want to make \"worktree-complete-recipes\" depend on the land-worktree PR as well, or stack the land-worktree PR under it in the fork-prs config? If you choose neither, the PR cannot hold only its own change."
+      "stale": "worktree-complete-recipes needs both git-land-worktree (the land flow in GitManager.ts) and justfile-worktree-setup (hasWorktreeRecipe in ProjectSetupScriptRunner.ts), but a PR can have only one parent. On mine, can you move the justfileRecipe.ts extraction and the ProjectSetupScriptRunner.ts change out of ade106c6b8 into the justfile-worktree-setup feature? Then this PR depends only on git-land-worktree. If you prefer, you can instead make justfile-worktree-setup stack on git-land-worktree."
     },
     {
       "slug": "history-collapse",
       "number": 21,
       "title": "feat(web): collapse chat history into summaries",
-      "body": "A long thread gets busy, and there was no way to tidy the history you have already read.\n\n- **Collapse history** in the chat header menu folds everything since the previous collapse into one row. The row shows \"Collapsed (summarizing)\" at once.\n- The server asks the text generation model for a one-line summary and replaces the placeholder with it. If that fails, the row shows \"Collapsed\".\n- You can collapse many times. Each collapse covers only what came after the previous one.\n- Click a row to look inside it for the current visit. Its **×** uncollapses it for good.\n- Collapses are saved with the thread. They change only the display, not what the provider sees. An agent that reads the thread through MCP sees one line that marks the collapse and gives its summary.\n- The server rejects a collapse while a turn runs or when nothing new needs collapsing.\n\nHow it works:\n\n- A collapse is a runless `history_collapse` timeline item, stored like the git-action item, so there is no migration. Its status is `running` while it summarizes, `completed` after, and `cancelled` when you uncollapse it.\n- New commands: `thread.history.collapse`, `thread.history.uncollapse`, and the internal `thread.history-collapse.complete`.\n- `HistoryCollapseSummaryService` runs from a `history-collapse.summarize` effect. That effect shares the per-thread lane with title generation, so it never delays provider effects.\n- `generateHistorySummary` is a new text generation operation for every provider, Muse included. ACP Registry and FX do not support it.\n- Clients show the menu item only when the server reports the `threadHistoryCollapse` capability.\n- The thread sidebar user guide describes the feature.\n\nNot included: mobile shows a \"Collapsed: summary\" row but does not hide the history. There is no keybinding, command palette entry, or MCP tool, and find-in-thread does not open a collapse.\n\nTests are in `HistoryCollapse.test.ts` and `MessagesTimeline.logic.test.ts`. I did not check it in a running app.\n\nThe base is `base/mine-4869a6f`, the parent of this commit on `mine`.\n\nClaude Opus 5.5 (claude-opus-5-5) in Claude Code, run through T3 Code.\n\n---\nKept in sync from mine by fork-prs.",
+      "body": "A long thread gets busy, and there was no way to tidy the history you have already read.\n\n- **Collapse history** in the chat header menu folds everything since the previous collapse into one row. The row shows \"Collapsed (summarizing)\" at once.\n- The server asks the text generation model for a one-line summary and replaces the placeholder with it. If that fails, the row shows \"Collapsed\".\n- You can collapse many times. Each collapse covers only what came after the previous one.\n- Click a row to look inside it for the current visit. Its **×** uncollapses it for good.\n- Collapses are saved with the thread. They change only the display, not what the provider sees. An agent that reads the thread through MCP sees one line that marks the collapse and gives its summary.\n- The server rejects a collapse while a turn runs or when nothing new needs collapsing.\n\nHow it works:\n\n- A collapse is a runless `history_collapse` timeline item, stored like the git-action item, so there is no migration. Its status is `running` while it summarizes, `completed` after, and `cancelled` when you uncollapse it.\n- New commands: `thread.history.collapse`, `thread.history.uncollapse`, and the internal `thread.history-collapse.complete`.\n- `HistoryCollapseSummaryService` runs from a `history-collapse.summarize` effect. That effect shares the per-thread lane with title generation, so it never delays provider effects.\n- `generateHistorySummary` is a new text generation operation for every provider, Muse included. ACP Registry and FX do not support it.\n- Clients show the menu item only when the server reports the `threadHistoryCollapse` capability.\n- The thread sidebar user guide describes the feature.\n\nNot included: the mobile app is unchanged, so it does not show or hide collapses. There is no keybinding, command palette entry, or MCP tool, and find-in-thread does not open a collapse.\n\nTests are in `HistoryCollapse.test.ts` and `MessagesTimeline.logic.test.ts`. I did not check it in a running app.\n\nThe base is `base/mine-4869a6f`, the parent of this commit on `mine`.\n\nClaude Opus 5.5 (claude-opus-5-5) in Claude Code, run through T3 Code.\n\n---\nKept in sync from mine by fork-prs.",
       "commits": [
         "56d7d3636bbecb67f5e894d613c4039b06d1c879",
         "fdd558093ff281f10d99bb1a9aec0762b5229c76"
@@ -418,13 +418,13 @@
       "parentReason": null,
       "status": "open",
       "baseTag": "v0.1.3",
-      "builtOn": null,
-      "head": "83e627d72ce6e28dda7894d25cc8da614723a941",
+      "builtOn": "d2c440312e5f39d59827ed466838a623516454d6",
+      "head": "9b2f4d051cdfbaae4766209d4a18179ff4cdfa94",
       "applied": [
         "56d7d3636bbecb67f5e894d613c4039b06d1c879",
         "fdd558093ff281f10d99bb1a9aec0762b5229c76"
       ],
-      "stale": "drift: In packages/contracts/src/orchestrationV2.ts, in both the OrchestrationV2TurnItem union and the OrchestrationV2TurnItemJson union, the history_collapse member on mine spreads the base fields (`...OrchestrationV2TurnItemBaseFields` and `...OrchestrationV2TurnItemJsonBaseFields`) before `...OrchestrationV2HistoryCollapseFields`. On the PR, these members do not have the base fields. These lines seem to belong to history-collapse, not to git-timeline-cards. Did they come from the git-action merge resolution on mine? If not, Gavin, please check that commit 56d7d3636b on mine adds the base-fields spread to both history_collapse union members, so that the PR gets the base fields too."
+      "stale": null
     },
     {
       "slug": "justfile-recipes-docs",
@@ -473,14 +473,14 @@
         "49557d884ea8d048e0628622a61b86b875a25586",
         "43f288ac441b67005cc93161636ddbba2a440777"
       ],
-      "parent": "git-land-worktree",
-      "parentReason": "The PR changes prepareLand and runLandStep in apps/server/src/git/GitManager.ts and its tests. The upstream tag does not have that land code. The git-land-worktree PR adds the land feature to GitManager.ts and GitManager.test.ts, and those are the commits ab72ac756e, f7aed855e4, 3202eab666 and ade106c6b8 that the failure names. This PR must use git-land-worktree as its base.",
+      "parent": "worktree-complete-recipes",
+      "parentReason": "Commit 49557d884e rewrites prepareLand and runLandStep in apps/server/src/git/GitManager.ts. Its diff context includes the `just worktree-complete` recipe docstring and the \"Runs the justfile's `worktree-complete` recipe\" step. Commit ade106c6b8 adds that code, and the worktree-complete-recipes PR holds that commit. That PR sits on the git-land-worktree code (ab72ac756e, f7aed855e4, 3202eab666). So stacking on worktree-complete-recipes gives this PR all the land code it changes. It does not need git-timeline-cards.",
       "status": "open",
       "baseTag": null,
       "builtOn": null,
       "head": null,
       "applied": [],
-      "stale": "Gavin, this PR needs a decision about its base. Commit 49557d884e replaces `mergeOrFail(branch)` in `runLandStep` (`apps/server/src/git/GitManager.ts`) with `fastForwardBase(branch)`. That change only works because mine rebases the branch in its worktree first with `rebaseOnto(worktreePath, branch, baseBranch)`. The current base (62b7399a14) does not have `rebaseOnto` or the land-time rebase. Two of its tests also come from the rebase feature: \"rebases a landing branch in its worktree…\" and \"keeps a landing conflict in the worktree…\". If I remove the rebase, landing fails each time main has moved ahead. Must this PR stack on the PR that adds the rebase before land (please name it)? Or must it keep a merge fallback on this base?"
+      "stale": "Its parent worktree-complete-recipes failed to build."
     },
     {
       "slug": "sidebar-active-rail",
@@ -786,13 +786,6 @@
     }
   ],
   "stacks": [
-    {
-      "number": 38,
-      "slugs": [
-        "git-commit-preferences",
-        "git-land-worktree"
-      ]
-    },
     {
       "number": 37,
       "slugs": [
