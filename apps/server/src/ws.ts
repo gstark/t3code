@@ -1820,9 +1820,6 @@ export const layerWsRpc = (
           .refreshStatus(cwd)
           .pipe(Effect.ignoreCause({ log: true }), Effect.forkDetach, Effect.asVoid);
 
-      // A landed worktree is gone, so its thread continues in the main checkout
-      // on the base branch. Never fails: the land already succeeded, so a lost
-      // update is only logged.
       // The thread's conversation, so generated commit and PR text can say why.
       // A plain push writes nothing, and a failed read only loses that context.
       const gitWriterThreadContext = (input: GitRunStackedActionInput) =>

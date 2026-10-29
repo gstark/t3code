@@ -3032,11 +3032,9 @@ export const make = Effect.gen(function* () {
   });
 
   /**
-   * Checks that the worktree at `cwd` can land before anything is committed:
-   * it is a linked worktree on a branch. `merges` is false when there is
-   * nothing to commit and the branch has no commits beyond the base, so
-   * landing only cleans up the worktree. `baseCheckoutPath` is the worktree
-   * that has the base branch checked out, or null; only a merge needs it clean.
+   * Checks before any commit that `cwd` is a linked worktree on a branch. `merges`
+   * is false when there is nothing to land, so landing only cleans up. Only a merge
+   * needs `baseCheckoutPath`, the checkout on the base branch, to be clean.
    */
   const prepareLand = Effect.fn("prepareLand")(function* (
     cwd: string,
