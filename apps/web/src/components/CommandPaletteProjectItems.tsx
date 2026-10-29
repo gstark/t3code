@@ -29,6 +29,7 @@ interface ProjectItemsInput {
   readonly projectGroupByTargetKey: ReadonlyMap<string, SidebarProjectSnapshot>;
   readonly locationByEnvironmentId: ReadonlyMap<EnvironmentId, CommandPaletteProjectLocation>;
   readonly runProject: (project: CommandPaletteProject) => Promise<void>;
+  readonly runProjectInWorktree?: (project: CommandPaletteProject) => Promise<void>;
 }
 
 function projectFaviconIcon(project: Project) {
@@ -90,6 +91,9 @@ export function buildNewThreadInProjectItems(input: ProjectItemsInput) {
     ),
     icon: projectFaviconIcon,
     runProject: input.runProject,
+    ...(input.runProjectInWorktree !== undefined
+      ? { runProjectInWorktree: input.runProjectInWorktree }
+      : {}),
   });
 }
 
