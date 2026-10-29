@@ -68,6 +68,7 @@ import {
   SettingsIcon,
   SquarePenIcon,
   TextSearchIcon,
+  TriangleAlertIcon,
   UserPlusIcon,
 } from "lucide-react";
 import { openThreadFind } from "./chat/threadFindStore";
@@ -225,7 +226,10 @@ import { stackedThreadToast, toastManager } from "./ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
 import { ComposerHandleContext, useComposerHandleContext } from "../composerHandleContext";
 import type { ChatComposerHandle } from "./chat/ChatComposer";
-import { buildSidebarProjectPickerEntries } from "../sidebarProjectGrouping";
+import {
+  buildSidebarProjectPickerEntries,
+  type SidebarProjectPickerEntry,
+} from "../sidebarProjectGrouping";
 import { PullRequestGlyph } from "~/components/pullRequest/pullRequestIcons";
 import { readPullRequestListPreferences } from "~/components/pullRequest/pullRequestListPreferences";
 import { useThreadRouteTarget } from "../hooks/useThreadRouteTarget";
@@ -508,16 +512,26 @@ function OpenCommandPaletteDialog(props: {
   const projectPickerEntries = buildSidebarProjectPickerEntries({
     groups: projectGroups,
     preferredProjectRef: contextualProjectRef,
+    defaultEnvironmentByProjectKey: clientSettings.projectDefaultEnvironments,
+    isEnvironmentConnected: (environmentId) =>
+      environments.some(
+        (environment) =>
+          environment.environmentId === environmentId &&
+          environment.connection.phase === "connected",
+      ),
   });
   const pickerProjects = projectPickerEntries.map(({ group, targetProject }) => ({
     ...targetProject,
     displayName: group.displayName,
   }));
-  const projectGroupByTargetKey = new Map(
-    projectPickerEntries.map(({ group, targetProject }) => [
-      `${targetProject.environmentId}:${targetProject.id}`,
-      group,
+  const projectEntryByTargetKey = new Map(
+    projectPickerEntries.map((entry) => [
+      `${entry.targetProject.environmentId}:${entry.targetProject.id}`,
+      entry,
     ]),
+  );
+  const projectGroupByTargetKey = new Map(
+    [...projectEntryByTargetKey].map(([key, entry]) => [key, entry.group]),
   );
 
   const addProjectEnvironmentOptions = (() => {
@@ -752,29 +766,91 @@ function OpenCommandPaletteDialog(props: {
     runProject: openProjectFromSearch,
   });
 
+  const buildUnavailableDefaultEnvironmentItem = (
+    item: CommandPaletteActionItem,
+    availableMembers: SidebarProjectPickerEntry["availableMembers"],
+    defaultEnvironmentId: EnvironmentId,
+  ): CommandPaletteSubmenuItem => {
+    const defaultLabel =
+      projectEnvironmentLocationById.get(defaultEnvironmentId)?.label ?? "Default environment";
+    const memberItems = availableMembers.map((member): CommandPaletteActionItem => {
+      const location = projectEnvironmentLocationById.get(member.environmentId);
+      const projectRef = scopeProjectRef(member.environmentId, member.id);
+      return {
+        kind: "action",
+        value: `new-thread-in-environment:${member.environmentId}:${member.id}`,
+        searchTerms: [location?.label ?? "", member.workspaceRoot],
+        title: location?.label ?? "Remote",
+        description: member.workspaceRoot,
+        icon: (
+          <EnvironmentMachineIcon
+            kind={location?.machine ?? "server"}
+            className={ITEM_ICON_CLASS}
+          />
+        ),
+        run: async () => {
+          await handleNewThread(projectRef);
+        },
+      };
+    });
+    const { run: _run, ...itemWithoutRun } = item;
+    return {
+      ...itemWithoutRun,
+      kind: "submenu",
+      description: (
+        <span className="flex min-w-0 items-center gap-1 text-warning">
+          <TriangleAlertIcon aria-hidden className="size-3 shrink-0" />
+          <span className="truncate">{defaultLabel} unavailable · choose an environment</span>
+        </span>
+      ),
+      addonIcon: <TriangleAlertIcon className={ADDON_ICON_CLASS} />,
+      groups: [
+        {
+          value: "environments",
+          label: `${defaultLabel} is unavailable. Start in:`,
+          items:
+            memberItems.length > 0
+              ? memberItems
+              : [
+                  {
+                    kind: "action",
+                    value: "new-thread-in-environment:none",
+                    searchTerms: [],
+                    title: "No connected environment has this project",
+                    icon: <TriangleAlertIcon className={ITEM_ICON_CLASS} />,
+                    disabled: true,
+                    run: async () => {},
+                  },
+                ],
+        },
+      ],
+    };
+  };
+
   const projectThreadItems = (() => {
     const isScratch = (project: CommandPaletteProject) =>
       isScratchProject(project, scratchWorkspaceRootFor(project.environmentId));
+    // The no-project home shows once, as the "No project" item below.
+    const threadProjects = pickerProjects.filter((project) => !isScratch(project));
     const projectItems = enumerateCommandPaletteItems(
       buildNewThreadInProjectItems({
-        projects: pickerProjects.filter((project) => !isScratch(project)),
+        projects: threadProjects,
         projectGroupByTargetKey,
         locationByEnvironmentId: projectEnvironmentLocationById,
         runProject: async (project) => {
-          const group = projectGroupByTargetKey.get(`${project.environmentId}:${project.id}`);
-          const contextualRefBelongsToGroup =
-            contextualProjectRef !== null &&
-            group?.memberProjectRefs.some(
-              (projectRef) =>
-                projectRef.environmentId === contextualProjectRef.environmentId &&
-                projectRef.projectId === contextualProjectRef.projectId,
-            );
-          await handleNewThread(
-            contextualRefBelongsToGroup
-              ? contextualProjectRef
-              : scopeProjectRef(project.environmentId, project.id),
-          );
+          await handleNewThread(scopeProjectRef(project.environmentId, project.id));
         },
+      }).map((item, index) => {
+        // A project whose default environment cannot take the thread does not
+        // fall back silently: Enter opens a choice of the connected checkouts.
+        const project = threadProjects[index]!;
+        const entry = projectEntryByTargetKey.get(`${project.environmentId}:${project.id}`);
+        if (!entry || entry.unavailableDefaultEnvironmentId === null) return item;
+        return buildUnavailableDefaultEnvironmentItem(
+          item,
+          entry.availableMembers,
+          entry.unavailableDefaultEnvironmentId,
+        );
       }),
     );
     if (scratchTargetEnvironmentId === null) return projectItems;
