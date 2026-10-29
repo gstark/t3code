@@ -48,7 +48,9 @@ describe("work report nudge", () => {
 
   it("waits nudgeAfterHours after the last report", () => {
     const covered = { ...settings, coveredUntil: "2026-10-09T00:00:00.000Z", nudgeAfterHours: 16 };
-    expect(workReportCountSince(covered, Date.now())).toBe("2026-10-09T00:00:00.000Z");
+    expect(workReportCountSince(covered, Date.parse("2026-10-10T00:00:00.000Z"))).toBe(
+      "2026-10-09T00:00:00.000Z",
+    );
     expect(workReportDueAtMs(covered)).toBe(Date.parse("2026-10-09T16:00:00.000Z"));
   });
 });
