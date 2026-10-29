@@ -22,9 +22,10 @@ import {
   turnItemNeedsDetailFetch,
 } from "@t3tools/client-runtime/work-log/item-detail";
 import { claudeSkillInvocation } from "@t3tools/shared/toolActivity";
-import { memo, use, useState, type KeyboardEvent } from "react";
+import { memo, use, useRef, useState, type KeyboardEvent } from "react";
 import * as DateTime from "effect/DateTime";
 import { formatDuration } from "@t3tools/shared/orchestrationTiming";
+import { tickTextContent } from "~/lib/tickTextContent";
 import {
   workEntryDisplayIndicatesToolFailure,
   workEntrySignalsSevereFailure,
@@ -55,6 +56,7 @@ import {
   type TimelineWorkEntry,
 } from "./timelineRowContext";
 import { MESSAGE_HEADING_LEVEL, TimelineRowTimestamp } from "./TimelineRowParts";
+import { formatWorkingTimerNow } from "./TimelineWorkGroupRows.logic";
 import {
   failedToolIconClassName,
   toolIconAcceptsTint,
@@ -112,7 +114,7 @@ export function ThreadReadLabel({
 }
 
 const toolCallExpandedBodyClassName =
-  "max-h-64 cursor-text overflow-auto whitespace-pre-wrap break-words font-mono text-secondary-label text-(length:--font-size-code,var(--text-2xs)) leading-relaxed select-text";
+  "cursor-text overflow-auto whitespace-pre-wrap break-words font-mono text-secondary-label text-(length:--font-size-code,var(--text-2xs)) leading-relaxed select-text";
 
 const stopRowToggle = (e: { stopPropagation: () => void }) => e.stopPropagation();
 
@@ -147,7 +149,31 @@ type WorkEntryRowProps = {
   workspaceRoot: string | undefined;
   displayLabel?: string | undefined;
   onToggleEntry?: ((collapsed: boolean) => void) | undefined;
+  detailsOnly?: boolean;
 };
+
+/**
+ * Start of a work entry that still runs, so the live row shows how long the
+ * thread shows what it waits on. Questions and approvals wait on the user.
+ */
+export function runningWorkEntryStartedAt(entry: TimelineWorkEntry): string | null {
+  const payload = entry.structuredPayload;
+  return entry.toolLifecycleStatus === "inProgress" &&
+    payload?.startedAt &&
+    payload.type !== "user_input_request" &&
+    payload.type !== "approval_request"
+    ? DateTime.formatIso(payload.startedAt)
+    : null;
+}
+
+export function WorkingTimer({ createdAt }: { createdAt: string }) {
+  return (
+    <span
+      ref={tickTextContent(() => formatWorkingTimerNow(createdAt), true)}
+      className="tabular-nums"
+    />
+  );
+}
 
 export const SimpleWorkEntryRow = memo(function SimpleWorkEntryRow(props: WorkEntryRowProps) {
   const ctx = use(TimelineRowCtx);
@@ -171,9 +197,10 @@ export const SimpleWorkEntryRow = memo(function SimpleWorkEntryRow(props: WorkEn
 });
 
 function WorkEntryLogRow(props: WorkEntryRowProps) {
-  const { workEntry, workspaceRoot, displayLabel } = props;
+  const { workEntry, workspaceRoot, displayLabel, detailsOnly } = props;
   const ctx = use(TimelineRowCtx);
   const { threadRef, onImageExpand, timestampFormat } = ctx;
+  const { isWorking, latestRunId } = use(TimelineRowActivityCtx);
   const { retryableWorkspacePreparationRunIds, onRetryWorkspacePreparation } = ctx;
   const threadTarget = useThreadReadTarget(workEntry, ctx.activeThreadEnvironmentId);
   const createdThread =
@@ -185,9 +212,11 @@ function WorkEntryLogRow(props: WorkEntryRowProps) {
       ? notificationChildThreadId(workEntry.projectedItem.item.source)
       : undefined;
   const groupView = use(WorkGroupViewCtx);
-  const [expanded, setExpanded] = useState(
+  const [expandedState, setExpanded] = useState(
     () => groupView?.state.expandedEntries.has(workEntry.id) ?? false,
   );
+  const expanded = detailsOnly === true || expandedState;
+  const rowRef = useRef<HTMLDivElement>(null);
   const toggleExpanded = () => {
     const next = !expanded;
     if (groupView) {
@@ -198,6 +227,15 @@ function WorkEntryLogRow(props: WorkEntryRowProps) {
       props.onToggleEntry?.(!next);
     }
     setExpanded(next);
+    // After the timeline settles, scroll opened details into view, including
+    // inside an expanded group's own scroller.
+    if (next) {
+      requestAnimationFrame(() =>
+        requestAnimationFrame(() =>
+          rowRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" }),
+        ),
+      );
+    }
   };
   const failureItem = workEntry.projectedItem?.item;
   if (failureItem?.type === "error" && failureItem.status === "failed") {
@@ -301,6 +339,11 @@ function WorkEntryLogRow(props: WorkEntryRowProps) {
       ? DateTime.toEpochMillis(payload.completedAt) - DateTime.toEpochMillis(payload.startedAt)
       : 0;
   const runtime = runtimeMs > 0 ? formatDuration(runtimeMs) : null;
+  // A stale in-progress entry from an ended run must not tick.
+  const liveStartedAt =
+    !runtime && isWorking && workEntry.runId === latestRunId
+      ? runningWorkEntryStartedAt(workEntry)
+      : null;
   const skill =
     payload?.type === "dynamic_tool"
       ? claudeSkillInvocation(payload.toolName, payload.input)
@@ -335,7 +378,7 @@ function WorkEntryLogRow(props: WorkEntryRowProps) {
         : buildToolCallExpandedBody(
             workEntry,
             workspaceRoot,
-            previewText,
+            detailsOnly ? "" : previewText,
             viewedImage ? viewedImagePath : null,
           )
       : null;
@@ -397,8 +440,72 @@ function WorkEntryLogRow(props: WorkEntryRowProps) {
       }
     : {};
 
+  const details = (
+    <>
+      {expanded && viewedImage && threadRef ? (
+        <WorkLogDetails kind="media">
+          <ChatMarkdownAssetImage
+            environmentId={threadRef.environmentId}
+            resource={viewedImage.resource}
+            alt={viewedImage.alt}
+            srcFragment={viewedImage.srcFragment}
+            workspaceRoot={workspaceRoot}
+            maxHeightRem={16}
+            onImageExpand={onImageExpand}
+          />
+        </WorkLogDetails>
+      ) : null}
+      {expanded && workEntry.questionAnswer ? (
+        <QuestionAnswerHistory answer={workEntry.questionAnswer} />
+      ) : null}
+      {expanded && isReasoning ? <ReasoningTraceContent entries={[workEntry]} /> : null}
+      {expanded &&
+      !isReasoning &&
+      !workEntry.questionAnswer &&
+      canExpandProjectedItem &&
+      (expandedBody ||
+        plainOutputFetches ||
+        (workEntry.projectedItem && plainOutput === undefined)) ? (
+        <WorkLogDetails kind="panel">
+          {workEntry.projectedItem && plainOutput === undefined ? (
+            <V2ItemInspector
+              projectedItem={workEntry.projectedItem}
+              environmentId={ctx.activeThreadEnvironmentId}
+              cwd={ctx.markdownCwd}
+              workspaceRoot={workspaceRoot}
+              onOpenThread={ctx.onOpenThread}
+              onOpenTurnDiff={ctx.onOpenTurnDiff}
+              onRollbackCheckpoint={ctx.onRollbackCheckpoint}
+              onImageExpand={ctx.onImageExpand}
+              source={ctx.turnItemSource}
+            />
+          ) : (
+            <>
+              {expandedBody ? (
+                <pre className={toolCallExpandedBodyClassName}>{expandedBody}</pre>
+              ) : null}
+              {plainOutputFetches && workEntry.projectedItem ? (
+                <FetchedToolOutput
+                  projectedItem={workEntry.projectedItem}
+                  environmentId={ctx.activeThreadEnvironmentId}
+                  onImageExpand={onImageExpand}
+                  source={ctx.turnItemSource}
+                />
+              ) : null}
+            </>
+          )}
+        </WorkLogDetails>
+      ) : null}
+    </>
+  );
+  // The disclosure header already labels this entry, so show only its details.
+  if (detailsOnly && canExpandProjectedItem) {
+    return <div className="mb-1 px-0.5">{details}</div>;
+  }
+
   return (
     <WorkLogRow
+      ref={rowRef}
       data-v2-item-type={workEntry.projectedItem?.item.type}
       data-v2-item-visibility={workEntry.projectedItem?.visibility}
       {...rowToggleProps}
@@ -500,6 +607,10 @@ function WorkEntryLogRow(props: WorkEntryRowProps) {
             <span className="shrink-0 whitespace-nowrap text-sidebar-muted-foreground/60 text-xs tabular-nums">
               {runtime}
             </span>
+          ) : liveStartedAt ? (
+            <span className="shrink-0 whitespace-nowrap text-sidebar-muted-foreground/60 text-xs">
+              <WorkingTimer createdAt={liveStartedAt} />
+            </span>
           ) : null}
           <span
             className={cn(
@@ -518,60 +629,7 @@ function WorkEntryLogRow(props: WorkEntryRowProps) {
         </>
       }
     >
-      {expanded && viewedImage && threadRef ? (
-        <WorkLogDetails kind="media">
-          <ChatMarkdownAssetImage
-            environmentId={threadRef.environmentId}
-            resource={viewedImage.resource}
-            alt={viewedImage.alt}
-            srcFragment={viewedImage.srcFragment}
-            workspaceRoot={workspaceRoot}
-            maxHeightRem={16}
-            onImageExpand={onImageExpand}
-          />
-        </WorkLogDetails>
-      ) : null}
-      {expanded && workEntry.questionAnswer ? (
-        <QuestionAnswerHistory answer={workEntry.questionAnswer} />
-      ) : null}
-      {expanded && isReasoning ? <ReasoningTraceContent entries={[workEntry]} /> : null}
-      {expanded &&
-      !isReasoning &&
-      !workEntry.questionAnswer &&
-      canExpandProjectedItem &&
-      (expandedBody ||
-        plainOutputFetches ||
-        (workEntry.projectedItem && plainOutput === undefined)) ? (
-        <WorkLogDetails kind="panel">
-          {workEntry.projectedItem && plainOutput === undefined ? (
-            <V2ItemInspector
-              projectedItem={workEntry.projectedItem}
-              environmentId={ctx.activeThreadEnvironmentId}
-              cwd={ctx.markdownCwd}
-              workspaceRoot={workspaceRoot}
-              onOpenThread={ctx.onOpenThread}
-              onOpenTurnDiff={ctx.onOpenTurnDiff}
-              onRollbackCheckpoint={ctx.onRollbackCheckpoint}
-              onImageExpand={ctx.onImageExpand}
-              source={ctx.turnItemSource}
-            />
-          ) : (
-            <>
-              {expandedBody ? (
-                <pre className={toolCallExpandedBodyClassName}>{expandedBody}</pre>
-              ) : null}
-              {plainOutputFetches && workEntry.projectedItem ? (
-                <FetchedToolOutput
-                  projectedItem={workEntry.projectedItem}
-                  environmentId={ctx.activeThreadEnvironmentId}
-                  onImageExpand={onImageExpand}
-                  source={ctx.turnItemSource}
-                />
-              ) : null}
-            </>
-          )}
-        </WorkLogDetails>
-      ) : null}
+      {details}
     </WorkLogRow>
   );
 }
