@@ -26,22 +26,24 @@
       "slug": "git-commit-preferences",
       "number": 2,
       "title": "feat(web): remember commit-only and commit-and-push as the default Git action",
-      "body": "The Git button always offered the full commit, push, and pull request flow.\n\n- The Git button remembers the last commit path you used: \"Commit\", \"Commit & push\", or \"Commit, push & PR\".\n- The choice is saved in local storage for each project. Worktree threads of the same project share it.\n- The Git menu shows the commit paths that the button does not use. Pick one to change the default.\n- If you choose \"Commit\" or \"Commit & push\", the button pushes ahead commits without a pull request. It also does not suggest a pull request for a synced branch.\n\nTests are in `GitActionsControl.logic.test.ts`.\n\n---\nKept in sync from mine by fork-prs.",
+      "body": "The Git button always offered the full commit, push, and pull request flow.\n\n- The Git button remembers the last commit path you used: \"Commit\", \"Commit & push\", or \"Commit, push & PR\".\n- The choice is saved in local storage for each project. Worktree threads of the same project share it.\n- The Git menu shows the commit paths that the button does not use. Pick one to change the default.\n- On the default branch, or while a pull request is open, the menu does not offer \"Commit, push & PR\".\n- If you choose \"Commit\" or \"Commit & push\", the button pushes ahead commits without a pull request. It also does not suggest a pull request for a synced branch.\n\nTests are in `GitActionsControl.logic.test.ts`.\n\nThis PR is stacked on pr/justfile-worktree-setup because that feature comes before it on mine. It does not use code from that PR.\n\n---\nKept in sync from mine by fork-prs.",
       "commits": [
         "7bc6bd48cc951809254453d20f81bd47313a8407",
-        "cc783421215c8ca7e48319dcffc7da0fddab9157"
+        "cc783421215c8ca7e48319dcffc7da0fddab9157",
+        "a22ad01e5b6dc81d92b6ff11b927b6fbb06b9916"
       ],
       "parent": "justfile-worktree-setup",
       "parentReason": "Gavin chose one stack so that worktree-complete-recipes can sit on both the justfile and land PRs.",
       "status": "open",
       "baseTag": "v0.1.3",
-      "builtOn": "d2c440312e5f39d59827ed466838a623516454d6",
-      "head": "6e5a6e7901a2bb8e0a03a24210b9427353d04aef",
+      "builtOn": "b13d151babf11b328bee1c644fcf8bb4dd34cd26",
+      "head": "5c9f1a3c779b0fabea0d7b1c01fbbe68f6cd4db2",
       "applied": [
         "7bc6bd48cc951809254453d20f81bd47313a8407",
-        "cc783421215c8ca7e48319dcffc7da0fddab9157"
+        "cc783421215c8ca7e48319dcffc7da0fddab9157",
+        "a22ad01e5b6dc81d92b6ff11b927b6fbb06b9916"
       ],
-      "stale": "drift: In apps/web/src/components/GitActionsControl.logic.ts, buildMenuItems on mine returns `[commitItem, ...commitPushItems, pushItem]` when a PR is open, but the PR still returns `[commitItem, pushItem]`. No feature commit made this change. It came from the conflict resolution in the merge \"Merge upstream v0.1.3 into mine\" (057af03e2e). Is this change part of git-commit-preferences, which would let you switch the preference while a PR is open? If yes, the PR must get it. If it belongs to git-land-worktree, you must move it into a land commit on mine."
+      "stale": null
     },
     {
       "slug": "git-timeline-cards",
@@ -51,7 +53,8 @@
       "commits": [
         "82911d751a405e7e7690afae5bdbdcd59a21449e",
         "29b721553bc8d2d617bed7bcef50c8b9851ff053",
-        "8fd069b04046aeef3b82775cc9e63532dabc92ca"
+        "f5772a556fcaaf518bc52250bc276145a88b5c95",
+        "d94ff2ba942b0d1670db53e60af4f1c31cbac7c1"
       ],
       "parent": "git-land-worktree",
       "parentReason": "git-sync-before-push uses the \"land\" result that git-land-worktree adds (ab72ac756e: GitManager.ts, ws.ts, packages/contracts/src/git.ts). It also uses GitActionActivityPayload from the \"show git actions in the thread timeline\" commit (82911d751a). No candidate PR has that commit on its own. git-land-worktree changes apps/web/src/components/chat/GitActionCard.tsx, and the timeline commit creates that file. So the git-land-worktree PR must already include the timeline commit or stack on it. Stacking on git-land-worktree therefore supplies both dependencies.",
@@ -60,7 +63,7 @@
       "builtOn": null,
       "head": null,
       "applied": [],
-      "stale": "Gavin, can you rebuild the git-timeline-cards commits on mine so they contain only the current turn-item version? That version is apps/server/src/git/recordGitAction.ts, the \"thread.git-action.record\" command in packages/contracts, the git_action handling in apps/web/src/session-logic.ts and apps/web/src/components/chat/MessagesTimeline.logic.ts/.tsx, and GitActionCard.tsx. The rebuild must also drop the old gitActionActivity.ts commit and its \"thread.activity.append\" call in apps/server/src/ws.ts."
+      "stale": "Its parent git-land-worktree failed to build."
     },
     {
       "slug": "git-land-worktree",
@@ -71,7 +74,7 @@
         "ab72ac756eafac279a11e25c073e0c69c19bc0df",
         "f7aed855e428c19b724c8378346be02ecfa0e3de",
         "3202eab666f8bafaa26f6c8e8a48fe35ec6dafd5",
-        "2c439addd5c2d3effcccb68f27827b7c85edb972"
+        "6a03917c3c0e6336d90c3dd9f7206986cbaa8d41"
       ],
       "parent": "git-commit-preferences",
       "parentReason": "The conflicts in GitActionsControl.logic.ts and GitActionsControl.tsx come from git-commit-preferences, which the build skipped (it used v0.1.3). The conflicts in packages/contracts/src/git.ts and apps/server/src/ws.ts do not come from any candidate. They come from the GitActionActivityPayload split and the appendGitActionActivity context. Both belong to git-timeline-cards, and git-timeline-cards stacks on git-land-worktree. A parent cannot fix that cycle, so Gavin must change mine.",
@@ -83,9 +86,9 @@
         "ab72ac756eafac279a11e25c073e0c69c19bc0df",
         "f7aed855e428c19b724c8378346be02ecfa0e3de",
         "3202eab666f8bafaa26f6c8e8a48fe35ec6dafd5",
-        "2c439addd5c2d3effcccb68f27827b7c85edb972"
+        "6a03917c3c0e6336d90c3dd9f7206986cbaa8d41"
       ],
-      "stale": "Its parent git-commit-preferences failed to build."
+      "stale": "drift: apps/server/src/git/GitManager.test.ts: on mine, the merge commit \"Merge upstream v0.1.3 into mine\" (653616b15d) changed this PR's two land tests (the \"Landed feature/land into main\" test and the \"Cleaned up worktree\" test) from runGit(remoteDir, [\"rev-parse\", \"main\"]) to runGit(remoteDir, [\"--git-dir=.\", \"rev-parse\", \"main\"]). Only the merge commit holds this change, so the PR does not get it. Can you put this change on mine as a fork commit (for example, folded into 6a03917c3c, which is already owned by git-land-worktree) so that the PR gets it?"
     },
     {
       "slug": "git-failure-reasons",
@@ -94,7 +97,7 @@
       "body": "A failed Git action showed \"Git command exited with a non-zero status\" or an internal operation name. You could not tell a rejected push from a network outage.\n\n- The server matches known stderr patterns to fixed explanations and puts them in the `GitCommandError` detail. It never forwards raw stderr.\n- A matched explanation now takes priority over a caller's fallback detail. The fallback applies only when no reason or pattern matches.\n- The web toast shows the explanation through `describeGitActionError` in `client-runtime`.\n\nTests are in `gitFailureDetail.test.ts`, `GitVcsDriverCore.test.ts`, and `gitAction.test.ts`.\n\nMade with Claude Opus 5.5 (claude-opus-5-5) in Claude Code.\n\n---\nKept in sync from mine by fork-prs.",
       "commits": [
         "5788b513cc5d74010acc00e1702521a1c12f8411",
-        "58270675e3cdc80b676187fba688458b660dee7a"
+        "72d1418df6252c4b92e06c2ae8ecafcd37e3c7bd"
       ],
       "parent": null,
       "parentReason": null,
@@ -104,7 +107,7 @@
       "head": "341303bd06c3a76178d9253c15b7b2bf39dbf993",
       "applied": [
         "5788b513cc5d74010acc00e1702521a1c12f8411",
-        "58270675e3cdc80b676187fba688458b660dee7a"
+        "72d1418df6252c4b92e06c2ae8ecafcd37e3c7bd"
       ],
       "stale": null
     },
@@ -115,7 +118,7 @@
       "body": "Projects with a justfile had to copy each recipe into project actions by hand.\n\n- The thread details card's actions menu lists the public recipes from the workspace root `justfile`, or `Justfile` when `justfile` is missing. No setup is needed.\n- A recipe runs in the terminal drawer.\n- A recipe that needs arguments is typed into the terminal without being run, so you can add the arguments.\n- A recipe that is already saved as a `just <name>` action shows once, as that action.\n- The parser is `packages/shared/src/justfile.ts` and has tests.\n- `docs/user/project-settings.md` describes the feature.\n\nPorted to `base/upstream-2026-10-13`. Upstream moved the actions menu from the thread header to the thread details card, so the recipes now attach there.\n\n---\nKept in sync from mine by fork-prs.",
       "commits": [
         "ad59b8c49cbd2445c787e1acd79a61d3d56bcdba",
-        "48a0eb20ec6939ec9deec8d3b38e41c6f4b7c817"
+        "c1121f8264fd64c66f40ef20ebf8429e4540651d"
       ],
       "parent": null,
       "parentReason": null,
@@ -125,7 +128,7 @@
       "head": "cd8cd6286b3c498c34d1a1e44c030a221477c3b5",
       "applied": [
         "ad59b8c49cbd2445c787e1acd79a61d3d56bcdba",
-        "48a0eb20ec6939ec9deec8d3b38e41c6f4b7c817"
+        "c1121f8264fd64c66f40ef20ebf8429e4540651d"
       ],
       "stale": null
     },
@@ -235,7 +238,7 @@
       "body": "There was no way to dictate into the composer without the system menu.\n\n- In the macOS desktop app, the composer shows a microphone button. It focuses the composer and starts macOS Dictation. A new IPC method sends `startDictation:` to the first responder of the main window.\n- A new `composer.dictate` command can be bound in Settings → Keybindings. It has no default key.\n- `docs/user/composer.md` has a short section.\n\nThis is macOS desktop only. Web and mobile do not change.\n\nMade with Claude Opus 5.5 (claude-opus-5-5) in Claude Code.\n\n---\nKept in sync from mine by fork-prs.",
       "commits": [
         "b2c7b53b6574cdc7e7b179111f49950707b9b016",
-        "f3b7a433f3b681e083f58c730d59bd305f182a2d"
+        "341c2bb1a019dc8423d790e8b50c0b4d19b3fbc4"
       ],
       "parent": null,
       "parentReason": null,
@@ -245,7 +248,7 @@
       "head": "603909613bb02bdb164dcfec7664c65cd293f583",
       "applied": [
         "b2c7b53b6574cdc7e7b179111f49950707b9b016",
-        "f3b7a433f3b681e083f58c730d59bd305f182a2d"
+        "341c2bb1a019dc8423d790e8b50c0b4d19b3fbc4"
       ],
       "stale": null
     },
@@ -276,7 +279,7 @@
       "commits": [
         "84c90eaa57c0fec4f374c4094372edf54440ab76",
         "9a8b80129b0d7a5d6d34c94a23157eb441e525a5",
-        "dae312915d14cab7b5485f83c3bb602e2424b6be"
+        "3bda7a4332863835fed75bf19604aeec4dc8a35c"
       ],
       "parent": null,
       "parentReason": null,
@@ -287,7 +290,7 @@
       "applied": [
         "84c90eaa57c0fec4f374c4094372edf54440ab76",
         "9a8b80129b0d7a5d6d34c94a23157eb441e525a5",
-        "dae312915d14cab7b5485f83c3bb602e2424b6be"
+        "3bda7a4332863835fed75bf19604aeec4dc8a35c"
       ],
       "stale": null
     },
@@ -403,7 +406,7 @@
       "builtOn": null,
       "head": null,
       "applied": [],
-      "stale": "worktree-complete-recipes needs both git-land-worktree (the land flow in GitManager.ts) and justfile-worktree-setup (hasWorktreeRecipe in ProjectSetupScriptRunner.ts), but a PR can have only one parent. On mine, can you move the justfileRecipe.ts extraction and the ProjectSetupScriptRunner.ts change out of ade106c6b8 into the justfile-worktree-setup feature? Then this PR depends only on git-land-worktree. If you prefer, you can instead make justfile-worktree-setup stack on git-land-worktree."
+      "stale": "Its parent git-land-worktree failed to build."
     },
     {
       "slug": "history-collapse",
@@ -412,7 +415,7 @@
       "body": "A long thread gets busy, and there was no way to tidy the history you have already read.\n\n- **Collapse history** in the chat header menu folds everything since the previous collapse into one row. The row shows \"Collapsed (summarizing)\" at once.\n- The server asks the text generation model for a one-line summary and replaces the placeholder with it. If that fails, the row shows \"Collapsed\".\n- You can collapse many times. Each collapse covers only what came after the previous one.\n- Click a row to look inside it for the current visit. Its **×** uncollapses it for good.\n- Collapses are saved with the thread. They change only the display, not what the provider sees. An agent that reads the thread through MCP sees one line that marks the collapse and gives its summary.\n- The server rejects a collapse while a turn runs or when nothing new needs collapsing.\n\nHow it works:\n\n- A collapse is a runless `history_collapse` timeline item, stored like the git-action item, so there is no migration. Its status is `running` while it summarizes, `completed` after, and `cancelled` when you uncollapse it.\n- New commands: `thread.history.collapse`, `thread.history.uncollapse`, and the internal `thread.history-collapse.complete`.\n- `HistoryCollapseSummaryService` runs from a `history-collapse.summarize` effect. That effect shares the per-thread lane with title generation, so it never delays provider effects.\n- `generateHistorySummary` is a new text generation operation for every provider, Muse included. ACP Registry and FX do not support it.\n- Clients show the menu item only when the server reports the `threadHistoryCollapse` capability.\n- The thread sidebar user guide describes the feature.\n\nNot included: the mobile app is unchanged, so it does not show or hide collapses. There is no keybinding, command palette entry, or MCP tool, and find-in-thread does not open a collapse.\n\nTests are in `HistoryCollapse.test.ts` and `MessagesTimeline.logic.test.ts`. I did not check it in a running app.\n\nThe base is `base/mine-4869a6f`, the parent of this commit on `mine`.\n\nClaude Opus 5.5 (claude-opus-5-5) in Claude Code, run through T3 Code.\n\n---\nKept in sync from mine by fork-prs.",
       "commits": [
         "56d7d3636bbecb67f5e894d613c4039b06d1c879",
-        "fdd558093ff281f10d99bb1a9aec0762b5229c76"
+        "24099c8a2fcfe159bddb78bfdae1a3fa73904aa7"
       ],
       "parent": null,
       "parentReason": null,
@@ -422,7 +425,7 @@
       "head": "9b2f4d051cdfbaae4766209d4a18179ff4cdfa94",
       "applied": [
         "56d7d3636bbecb67f5e894d613c4039b06d1c879",
-        "fdd558093ff281f10d99bb1a9aec0762b5229c76"
+        "24099c8a2fcfe159bddb78bfdae1a3fa73904aa7"
       ],
       "stale": null
     },
@@ -471,16 +474,16 @@
       "body": "Landing a worktree failed unless the main checkout was on the base branch: \"The main checkout at … is on other. Switch it to main, then land again.\" You had to switch branches in a checkout you were not using.\n\nLanding now finds the worktree that has the base branch checked out, if one does:\n\n- **No checkout has the base branch.** Landing moves the base branch ref forward. No working tree changes.\n- **A checkout has the base branch.** Landing updates that checkout, as before. It refuses if that checkout has uncommitted changes, and the error names its path.\n- The main checkout keeps its current branch and stays clean.\n- A rebase conflict stays in the worktree being landed, as before.\n- When the main checkout is not on the base branch, the success toast does not offer to push. A push from there would push the wrong branch.\n\nTests in `GitManager.test.ts` cover these cases: landing while main is on another branch, updating a separate checkout of main, refusing when that checkout is dirty, and keeping a conflict in the worktree.\n\nThe base is `base/mine-5d04115`, the parent of this commit on `mine`.\n\nClaude Opus 5.5 (claude-opus-5-5) in Claude Code, run through T3 Code.\n",
       "commits": [
         "49557d884ea8d048e0628622a61b86b875a25586",
-        "43f288ac441b67005cc93161636ddbba2a440777"
+        "c1ef3547756b343903ed6d007d99d92fed55fac1"
       ],
-      "parent": "worktree-complete-recipes",
-      "parentReason": "Commit 49557d884e rewrites prepareLand and runLandStep in apps/server/src/git/GitManager.ts. Its diff context includes the `just worktree-complete` recipe docstring and the \"Runs the justfile's `worktree-complete` recipe\" step. Commit ade106c6b8 adds that code, and the worktree-complete-recipes PR holds that commit. That PR sits on the git-land-worktree code (ab72ac756e, f7aed855e4, 3202eab666). So stacking on worktree-complete-recipes gives this PR all the land code it changes. It does not need git-timeline-cards.",
+      "parent": "git-timeline-cards",
+      "parentReason": "Commit 29b721553b in git-timeline-cards adds rebaseOnto, which the land fix needs.",
       "status": "open",
       "baseTag": null,
       "builtOn": null,
       "head": null,
       "applied": [],
-      "stale": "Its parent worktree-complete-recipes failed to build."
+      "stale": "Its parent git-timeline-cards failed to build."
     },
     {
       "slug": "sidebar-active-rail",
@@ -509,7 +512,7 @@
       "commits": [
         "4869a6f194938ea66d450f610a954f4a71913aee",
         "9fb8a235ac959c5c4641d06dee3e91c5837f42cf",
-        "309499c78fba750a04f1f6a2593214fc6b16e090"
+        "6a59a2032870a54e7eec76715dcb61e27692633d"
       ],
       "parent": null,
       "parentReason": null,
@@ -520,7 +523,7 @@
       "applied": [
         "4869a6f194938ea66d450f610a954f4a71913aee",
         "9fb8a235ac959c5c4641d06dee3e91c5837f42cf",
-        "309499c78fba750a04f1f6a2593214fc6b16e090"
+        "6a59a2032870a54e7eec76715dcb61e27692633d"
       ],
       "stale": null
     },
@@ -532,7 +535,8 @@
       "commits": [
         "16579e2e669e56f7b2543cb5fa90a428417fbbf4",
         "90dcb0f5ce91c0594feca80e7de567b3b540c3e2",
-        "ce9f5879e6a7a8914fcafd24f71ede6b0404b20b"
+        "11cb8b5f005212f6bed5581454f00362c038725a",
+        "b565edb5ac0c56e498472287ef49618a1328b17c"
       ],
       "parent": null,
       "parentReason": null,
@@ -543,9 +547,9 @@
       "applied": [
         "16579e2e669e56f7b2543cb5fa90a428417fbbf4",
         "90dcb0f5ce91c0594feca80e7de567b3b540c3e2",
-        "ce9f5879e6a7a8914fcafd24f71ede6b0404b20b"
+        "b565edb5ac0c56e498472287ef49618a1328b17c"
       ],
-      "stale": null
+      "stale": "On mine, can you split c3ae8ab95b (\"chore: port merge resolutions to v0.1.3\") into two commits? The first commit must hold only the `detailsOnly` port, which belongs to expanded-work-details. That means the lone-entry `<SimpleWorkEntryRow detailsOnly />` branch in apps/web/src/components/chat/TimelineWorkGroupRows.tsx, plus the `detailsOnly` prop, `expandedState`, the `detailsOnly ? \"\" : previewText` change and the `if (detailsOnly && canExpandProjectedItem)` return in TimelineWorkEntryRow.tsx. The second commit must hold only the runtime port for command-runtime."
     },
     {
       "slug": "server-health",
@@ -597,8 +601,8 @@
         "4a344cafce4c9bf3c57275a230220ec0d8b1bfcc",
         "6c20386d7a8883db097f1af039ee1d1be8494d0f",
         "77fae34a507ade6ea47511de8243ecc6cc9d688c",
-        "4d7a282ce897c637b8a10d81ef07ea89d1fcadc3",
-        "3fe1dc2c2da1ffdf52d1d75b921f64b1daa97a5e"
+        "3cac476e66675120f721eaf4f19eeb0f0dc1d8a9",
+        "f777305461b143a20ee49e70fb7bd9f7abcab791"
       ],
       "parent": null,
       "parentReason": null,
@@ -611,8 +615,8 @@
         "4a344cafce4c9bf3c57275a230220ec0d8b1bfcc",
         "6c20386d7a8883db097f1af039ee1d1be8494d0f",
         "77fae34a507ade6ea47511de8243ecc6cc9d688c",
-        "4d7a282ce897c637b8a10d81ef07ea89d1fcadc3",
-        "3fe1dc2c2da1ffdf52d1d75b921f64b1daa97a5e"
+        "3cac476e66675120f721eaf4f19eeb0f0dc1d8a9",
+        "f777305461b143a20ee49e70fb7bd9f7abcab791"
       ],
       "stale": null
     },
@@ -679,7 +683,7 @@
       "title": "feat(web): pin the current prompt in the timeline",
       "body": "In a long turn, the prompt scrolls out of view. You then lose track of which request the agent's output answers.\n\nWhen a prompt scrolls fully above the viewport, a compact copy of it now stays pinned at the top of the timeline. The copy shows at most two lines. Click it to scroll back to the prompt. As the next prompt reaches the top, it pushes the pinned copy up and then takes its place. The scroll handler sets this offset directly on the DOM, so scrolling does not re-render the timeline on each frame. The pinned prompt is hidden while find is open.\n\nThe pin is on by default. A \"Pin current prompt\" switch in the thread details panel turns it off for one thread. Opt-outs persist in local storage. The switch does not show for drafts or in the essential density.\n\n`resolveTimelinePinnedPrompt` picks the pinned prompt from the list layout, and focused tests cover it.\n\n---\nKept in sync from mine by fork-prs.",
       "commits": [
-        "492a148d53315152358e3c900e835fa61e8231f2"
+        "86bdb5d6d6c5c88098b32e07cc1b3735d572cd26"
       ],
       "parent": null,
       "parentReason": null,
@@ -688,7 +692,30 @@
       "builtOn": "d2c440312e5f39d59827ed466838a623516454d6",
       "head": "b8f26943a8b7751b4897e3543ab2f1593325691c",
       "applied": [
-        "492a148d53315152358e3c900e835fa61e8231f2"
+        "86bdb5d6d6c5c88098b32e07cc1b3735d572cd26"
+      ],
+      "stale": null
+    },
+    {
+      "slug": "thread-temp-dirs",
+      "number": 41,
+      "title": "fix(server): isolate thread temp files from agent memory",
+      "body": "When `/tmp` is a tmpfs, systemd charges the temp files that agents write to the agents slice as shared memory. Large temp files can then cause an OOM kill of an agent, although the agent itself uses little memory.\n\nThis change gives each thread its own temp directory on disk at `<stateDir>/tmp/<thread id>`:\n\n- `AgentScope.wrap` creates the directory with mode 0700 when it gets a `threadId`. The launch script then exports `TMPDIR`, `TMP`, and `TEMP` to point at it. The script has the same behavior with or without a systemd scope.\n- The directory name is the URI-encoded thread id, with dots also encoded. The name never becomes `.` or `..`.\n- If the server cannot create the directory, it logs a warning. The agent then starts with the temp directory that it inherits.\n- A provider that sets its own `TMPDIR`, such as Antigravity, keeps that directory, because the provider cleans it up itself.\n- A terminal on a thread uses the thread's temp directory. The new `trackScope: false` option stops the terminal from replacing the agent's scope, so `oomKilled` continues to report on the agent.\n- A new `ThreadTempDirs` service removes a thread's directory when the thread is archived or deleted. At start, it also removes the directories of threads that are archived, deleted, or unknown. An unarchived thread gets a new directory at its next launch.\n\nTests cover the launch script exports, directory creation and naming, the provider-owned `TMPDIR` case, the terminal case, and cleanup at start and on events.\n\n---\nKept in sync from mine by fork-prs.",
+      "commits": [
+        "4736e2a120049b41356934f7fb19c0f665284227",
+        "0cb5339fc39a36aa1548c279512e547f5a7a29bc",
+        "757b07e1bbb3053191872970b01a5c45d954c467"
+      ],
+      "parent": null,
+      "parentReason": null,
+      "status": "open",
+      "baseTag": "v0.1.3",
+      "builtOn": "d2c440312e5f39d59827ed466838a623516454d6",
+      "head": "aacd9810e623b1c02fa5d4ef8a8271bf85dc66e3",
+      "applied": [
+        "4736e2a120049b41356934f7fb19c0f665284227",
+        "0cb5339fc39a36aa1548c279512e547f5a7a29bc",
+        "757b07e1bbb3053191872970b01a5c45d954c467"
       ],
       "stale": null
     }
@@ -743,15 +770,15 @@
       "reason": "Changes the fork justfile and mine CLI archive workflow."
     },
     {
-      "sha": "9453ed489c6715de10c4aa5cd8071a9fcbc39564",
+      "sha": "e62b1ac9eeaf6be54f94040da7a704efaef91cc7",
       "reason": "Changes only the mine CLI archive workflow."
     },
     {
-      "sha": "900667f568d02ff5e7181cdcca46ea7555370914",
+      "sha": "f0a21dc2407bee0f23db5ceb9d0f322b264807dc",
       "reason": "It adds the fork-prs tool, its justfile recipe, and its knip entry, which are all fork tooling."
     },
     {
-      "sha": "b0efc6997dffc0ac4cd1a8a16c5cb656a7d37f7b",
+      "sha": "b45ca1d096325fae10d7a68c876a37e7dbb3fd2a",
       "reason": "Walkthroughs are fork-only tooling."
     }
   ],
@@ -761,36 +788,25 @@
       "question": "Should the node-pty pin go upstream as its own PR, or is it only for fork release installs?"
     },
     {
-      "sha": "72fbac687979b1629f8e33c20b1798fcadb05cd6",
-      "question": "This commit mixes per-thread temp directories with a live elapsed timer for running work rows; should the timer go with command-runtime and the temp directories become a new PR?"
-    },
-    {
-      "sha": "f9e332ef5b4b6e47392fc9035e3cbc2a4d3369a8",
+      "sha": "28ecd7f35751fa2d86bb3b6f4fb23ecfad8bfde2",
       "question": "This commit changes code from two PRs. Part 1 shortens the prepareLand comment in apps/server/src/git/GitManager.ts, which mentions baseCheckoutPath from land-without-base-checkout. Part 2 removes a stray comment in apps/server/src/ws.ts that git-land-worktree (ab72ac756e) added. Must the whole commit go to land-without-base-checkout? Or must you split it on mine so that the ws.ts part goes to git-land-worktree?"
     },
     {
-      "sha": "617611d0e6c2e000f582ffe86463566da2244931",
+      "sha": "8d5b5afb49532e30f74687bd341fb4cf9660434e",
       "question": "In apps/web/src/lib/contextWindow.ts, upstream v0.1.3 has no comment above deriveLatestContextWindowSnapshot. The v0.1.3 merge kept the old upstream comment with '(#8144)', and this commit only removes '(#8144)'. Must this commit go to minimap-preview-details, the only fork PR that changes this file? Or must you remove the whole comment on mine so that the file matches upstream?"
     },
     {
-      "sha": "eba2c163ad2ff96494462ea86df04d10782b16c6",
-      "question": "apps/server/src/threadTempDirs.ts comes from fork commit 72fbac6879 'fix(server): isolate thread temp files from agent memory', and no PR has that commit. Must this commit and 72fbac6879 start a new PR, or are they fork-only?"
-    },
-    {
-      "sha": "7611c30c361e866bfea352894b937d0d0967477a",
+      "sha": "262e456401da181a5b931e90d7a4ed67b4f955e7",
       "question": "walkthroughs/support/cursor.ts and explore.ts come from fork commit b774c6ac94 'chore: add scripted feature walkthroughs', and no PR has that commit. Are the walkthroughs fork-only, or must they get a new PR?"
-    },
-    {
-      "sha": "67cb4c591a6b2ebd6ca1c20acc8b81435c2d0ba0",
-      "question": "This commit fixes the per-thread temp directory feature from 72fbac6879 (apps/server/src/process/agentScope.ts). No PR covers that feature. Must it start a new PR, such as \"thread-temp-dirs\", together with the server part of 72fbac6879, or is that feature fork-only?"
     }
   ],
   "stacks": [
     {
-      "number": 37,
+      "number": 42,
       "slugs": [
         "justfile-recipes-menu",
-        "justfile-worktree-setup"
+        "justfile-worktree-setup",
+        "git-commit-preferences"
       ]
     }
   ],
