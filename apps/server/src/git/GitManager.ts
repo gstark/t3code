@@ -3228,13 +3228,8 @@ export const make = Effect.gen(function* () {
   });
 
   /**
-   * Fast-forwards the base branch to the worktree branch, runs the worktree's
-   * `just worktree-complete` recipe when it has one, then removes the worktree
-   * and deletes the branch. The base branch is not pushed; the completion
-   * toast offers that as a separate action.
-   * A branch with no commits beyond the base skips the merge.
-   * The base branch moves as a ref, so no checkout has to be on it. A checkout
-   * that is on it fast-forwards too, so its files follow.
+   * The base branch moves as a ref, so no checkout has to be on it; a checkout on
+   * it fast-forwards too. The base is not pushed; the completion toast offers that.
    * Stops on conflicts or a diverged base without undoing anything.
    */
   const runLandStep = Effect.fn("runLandStep")(function* (
