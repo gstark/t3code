@@ -277,6 +277,7 @@ function ExcerptDiff({
 
   const options = {
     diffStyle: "unified" as const,
+    diffIndicators: "classic" as const,
     lineDiffType: "none" as const,
     overflow: "scroll" as const,
     theme: resolveDiffThemeName(resolvedTheme),
