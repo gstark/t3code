@@ -304,11 +304,9 @@ const ComposerListItemExtension = ListItem.extend({
 });
 
 /**
- * The composer draws each item's source marker, so a `1. ` in a monospace
- * font is wider than the default `ol` gutter and would hang left of the text
- * column. Size each list's gutter to its widest marker plus the trailing space.
- * A decoration, not `renderHTML`, because the list element is not redrawn when
- * only its items change.
+ * Monospace source markers are wider than the default `ol` gutter, so size each
+ * list's gutter to its widest marker. A decoration, not `renderHTML`, because the
+ * list is not redrawn when only its items change.
  */
 const orderedListGutterPlugin = new Plugin({
   props: {
