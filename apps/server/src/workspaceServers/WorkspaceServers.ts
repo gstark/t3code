@@ -1,16 +1,7 @@
 /**
- * WorkspaceServers - processes listening on a port that run in a thread's
- * workspace, with the addresses that reach them.
- *
- * A process belongs to a thread when its working directory is inside the
- * thread's directory, or when it runs in one of the thread's T3 terminals.
- * Listeners come from `lsof` on macOS and `ss` on Linux. The kind is a guess
- * from the process name and port, because a probe can crash a binary protocol
- * server. Only servers guessed as HTTP get one `GET /`, which reads the page
- * title and tells HTTP from HTTPS.
- *
- * Clients poll this while the thread details panel shows it. One short cache
- * shares each scan between all clients and threads.
+ * The kind is guessed from the process name and port, because a probe can crash a
+ * binary protocol server. Only servers guessed as HTTP get one `GET /`.
+ * Clients poll this, so one short cache shares each scan between all clients.
  */
 // @effect-diagnostics-next-line nodeBuiltinImport:off -- the probe must accept self-signed dev certificates and stop reading after the title.
 import * as NodeHttp from "node:http";
@@ -367,7 +358,7 @@ interface ProcessInfo {
   readonly name: string | null;
 }
 
-/** @public Service construction is part of the canonical Effect module API. */
+/** @public */
 export const make = Effect.gen(function* () {
   const processRunner = yield* ProcessRunner.ProcessRunner;
   const fileSystem = yield* FileSystem.FileSystem;
