@@ -1,10 +1,7 @@
 /**
- * Turns the stderr of a failed Git command into a fixed, user-facing explanation.
- *
- * Git errors never carry stderr itself, because it can contain credentials, remote
- * URLs, and arbitrary server output. Matching known failures to fixed strings tells
- * the user what went wrong without copying any of that text. Returns undefined when
- * the failure is not recognized, so callers keep their generic detail.
+ * Maps Git stderr to fixed text, because stderr can hold credentials and remote URLs.
+ * Unknown failures return undefined, so callers keep their generic detail. Push
+ * rejections other than stale info are classified in GitVcsDriverCore.
  */
 const GIT_FAILURE_DETAILS: ReadonlyArray<{
   readonly patterns: ReadonlyArray<string>;
