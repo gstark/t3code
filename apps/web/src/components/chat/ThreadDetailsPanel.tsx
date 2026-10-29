@@ -22,6 +22,7 @@ import { OpenInPicker } from "./OpenInPicker";
 import { ThreadDetailsSection } from "./ThreadDetailsSection";
 import { ThreadAutomationsPanel } from "./ThreadAutomationsPanel";
 import { ThreadRelationshipsPanel } from "./ThreadRelationshipsControl";
+import { PinnedPromptToggle } from "./PinnedPromptToggle";
 
 const GitActionsControl = memo(BaseGitActionsControl);
 
@@ -152,6 +153,10 @@ export function ThreadDetailsPanel(props: ThreadDetailsPanelProps) {
                   onUpdateScript={props.onUpdateProjectScript}
                   onDeleteScript={props.onDeleteProjectScript}
                 />
+              ) : null}
+
+              {density !== "essential" && !props.draftId ? (
+                <PinnedPromptToggle threadRef={activeThreadRef} />
               ) : null}
             </div>
           </ThreadDetailsSection>

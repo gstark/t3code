@@ -425,6 +425,26 @@ export function resolveTimelineMinimapCurrentIndex(input: {
   return precedingIndex;
 }
 
+/** The last prompt scrolled fully above the viewport, and its successor's offset below the top. */
+export function resolveTimelinePinnedPrompt(input: {
+  readonly scroll: number;
+  readonly rowIndices: ReadonlyArray<number>;
+  readonly positionAtIndex: (index: number) => number | undefined;
+  readonly sizeAtIndex: (index: number) => number | undefined;
+}): { readonly index: number; readonly nextTopOffset: number | null } | null {
+  let pinned: number | null = null;
+  for (const [index, rowIndex] of input.rowIndices.entries()) {
+    const top = input.positionAtIndex(rowIndex);
+    const size = input.sizeAtIndex(rowIndex);
+    if (top == null || size == null || !Number.isFinite(top) || !Number.isFinite(size)) break;
+    if (top + size > input.scroll) {
+      return pinned === null ? null : { index: pinned, nextTopOffset: top - input.scroll };
+    }
+    pinned = index;
+  }
+  return pinned === null ? null : { index: pinned, nextTopOffset: null };
+}
+
 function resolveTimelineSideGutter(viewportWidth: number, contentWidth: number): number {
   if (!Number.isFinite(viewportWidth) || viewportWidth <= 0 || !Number.isFinite(contentWidth)) {
     return 0;
