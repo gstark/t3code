@@ -184,6 +184,8 @@ export type SidebarListMarker =
   | "active-placeholder"
   | "settled-placeholder"
   | "pinned-divider"
+  /** The open new-thread draft, in the slot its thread takes once sent. */
+  | "new-thread"
   | "working-header"
   | "snoozed-header"
   | "settled-header";
