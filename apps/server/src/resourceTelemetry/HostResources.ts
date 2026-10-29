@@ -1,4 +1,5 @@
 import * as NodeOS from "node:os";
+import * as NodePerfHooks from "node:perf_hooks";
 import type { HostResourcesSnapshot } from "@t3tools/contracts";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as Cache from "effect/Cache";
@@ -26,6 +27,8 @@ function readCpu() {
   return { ...cpu, count: cpus.length };
 }
 
+const PREVIOUS_SAMPLE_MAX_AGE_MS = 30_000;
+
 function darwinAvailableMemory(output: string): number | null {
   const pageSize = /page size of (\d+) bytes/.exec(output)?.[1];
   const free = /^Pages free:\s+(\d+)\./m.exec(output)?.[1];
@@ -42,10 +45,34 @@ const make = Effect.fn("makeHostResources")(function* () {
   const platform = yield* HostProcess.Platform;
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
 
+  // CPU counters and event loop utilization need two readings. A recent
+  // previous sample is the first reading, so polling clients get an average
+  // over their poll interval and a fast reply. Idle servers do no polling.
+  let previous: {
+    readonly at: number;
+    readonly cpu: ReturnType<typeof readCpu>;
+    readonly elu: NodePerfHooks.EventLoopUtilization;
+  } | null = null;
+
   const sample = Effect.fn("HostResources.sample")(function* () {
-    const previousCpu = readCpu();
-    yield* Effect.sleep("200 millis");
+    const now = DateTime.toEpochMillis(yield* DateTime.now);
+    if (previous === null || now - previous.at > PREVIOUS_SAMPLE_MAX_AGE_MS) {
+      previous = {
+        at: now,
+        cpu: readCpu(),
+        elu: NodePerfHooks.performance.eventLoopUtilization(),
+      };
+      yield* Effect.sleep("200 millis");
+    }
+    const previousCpu = previous.cpu;
     const cpu = readCpu();
+    const elu = NodePerfHooks.performance.eventLoopUtilization();
+    const eventLoopUtilization = NodePerfHooks.performance.eventLoopUtilization(
+      elu,
+      previous.elu,
+    ).utilization;
+    const sampledAt = DateTime.toEpochMillis(yield* DateTime.now);
+    previous = { at: sampledAt, cpu, elu };
     const totalDelta = cpu.total - previousCpu.total;
     const idleDelta = cpu.idle - previousCpu.idle;
     const cpuUtilization =
@@ -71,11 +98,14 @@ const make = Effect.fn("makeHostResources")(function* () {
       availableMemoryBytes = darwinAvailableMemory(output) ?? availableMemoryBytes;
     }
     return {
-      sampledAt: DateTime.toEpochMillis(yield* DateTime.now),
+      sampledAt,
       cpuUtilization,
       cpuCount: cpu.count,
       availableMemoryBytes: Math.min(totalMemoryBytes, Math.max(0, availableMemoryBytes)),
       totalMemoryBytes,
+      ...(platform === "win32" ? {} : { loadAverage1m: NodeOS.loadavg()[0] ?? 0 }),
+      eventLoopUtilization: Math.min(1, Math.max(0, eventLoopUtilization)),
+      serverRssBytes: process.memoryUsage.rss(),
     };
   });
 
