@@ -2771,7 +2771,11 @@ it.layer(layerGitManagerTest)("GitManager", (it) => {
     Effect.gen(function* () {
       const { repoDir, remoteDir, worktreeDir } = yield* makeLandableWorktree();
       NodeFS.writeFileSync(NodePath.join(worktreeDir, "feature.txt"), "feature\n");
-      const remoteMainBefore = (yield* runGit(remoteDir, ["rev-parse", "main"])).stdout.trim();
+      const remoteMainBefore = (yield* runGit(remoteDir, [
+        "--git-dir=.",
+        "rev-parse",
+        "main",
+      ])).stdout.trim();
 
       const { manager } = yield* makeManager();
       const result = yield* runStackedAction(manager, { cwd: worktreeDir, action: "land" });
@@ -2785,7 +2789,7 @@ it.layer(layerGitManagerTest)("GitManager", (it) => {
         fromSha: remoteMainBefore,
         toSha: localMain,
       });
-      expect((yield* runGit(remoteDir, ["rev-parse", "main"])).stdout.trim()).toBe(
+      expect((yield* runGit(remoteDir, ["--git-dir=.", "rev-parse", "main"])).stdout.trim()).toBe(
         remoteMainBefore,
       );
       expect(result.toast.title).toBe("Landed feature/land into main");
@@ -2804,7 +2808,11 @@ it.layer(layerGitManagerTest)("GitManager", (it) => {
     Effect.gen(function* () {
       const { repoDir, remoteDir, worktreeDir } = yield* makeLandableWorktree();
       NodeFS.writeFileSync(NodePath.join(repoDir, "README.md"), "edited\n");
-      const remoteMainBefore = (yield* runGit(remoteDir, ["rev-parse", "main"])).stdout.trim();
+      const remoteMainBefore = (yield* runGit(remoteDir, [
+        "--git-dir=.",
+        "rev-parse",
+        "main",
+      ])).stdout.trim();
 
       const { manager } = yield* makeManager();
       const result = yield* runStackedAction(manager, { cwd: worktreeDir, action: "land" });
@@ -2816,7 +2824,7 @@ it.layer(layerGitManagerTest)("GitManager", (it) => {
       expect(result.toast.title).toBe("Cleaned up worktree");
       expect(NodeFS.existsSync(worktreeDir)).toBe(false);
       expect((yield* runGit(repoDir, ["branch", "--list", "feature/land"])).stdout.trim()).toBe("");
-      expect((yield* runGit(remoteDir, ["rev-parse", "main"])).stdout.trim()).toBe(
+      expect((yield* runGit(remoteDir, ["--git-dir=.", "rev-parse", "main"])).stdout.trim()).toBe(
         remoteMainBefore,
       );
     }),
