@@ -445,7 +445,9 @@ export function layerWithRegistry<Error>(
   const layerHistoryCollapseSummaryTest = Layer.succeed(
     HistoryCollapseSummaryService.HistoryCollapseSummaryService,
     HistoryCollapseSummaryService.HistoryCollapseSummaryService.of({
-      execute: () => Effect.void,
+      execute: Effect.fn("HistoryCollapseSummaryService.execute")(function () {
+        return Effect.void;
+      }),
     }),
   );
   const layerThreadTitleRegenerationTest = Layer.succeed(

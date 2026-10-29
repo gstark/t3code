@@ -121,6 +121,7 @@ export const OrchestrationEffectRequestV2 = Schema.Union([
     type: Schema.Literal("history-collapse.summarize"),
     turnItemId: TurnItemId,
   }),
+  /** Follows a Stop: sends `thread.stop` to every delegated task under the stopped thread. */
   Schema.Struct({
     type: Schema.Literal("delegated-tasks.stop"),
     reason: Schema.optional(Schema.String),
