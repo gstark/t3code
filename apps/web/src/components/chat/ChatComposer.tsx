@@ -233,7 +233,11 @@ const isEnvironmentRequestInvalidError = Schema.is(EnvironmentRequestInvalidErro
 const COMPOSER_SCROLL_COLLAPSE_THRESHOLD_PX = 24;
 const COMPOSER_SCROLL_GESTURE_RESET_MS = 120;
 import { toastManager } from "../ui/toast";
-import { PlayIcon, ShieldIcon } from "lucide-react";
+import { MicIcon, PlayIcon, ShieldIcon } from "lucide-react";
+import { Button } from "../ui/button";
+import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
+import { registerCommands } from "../../shortcuts/dispatcher";
+import { isCommandPaletteOpen } from "../../commandPaletteBus";
 import { proposedPlanTitle } from "@t3tools/shared/proposedPlanText";
 import { hasProviderSetup } from "./ProviderStatusBanner";
 import { type AppModelOption, getAppModelOptionsForInstance } from "../../modelSelection";
@@ -3303,6 +3307,33 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
         onRemoveFile={removeComposerFileFromDraft}
       />
     ) : null;
+  // Present only in the macOS desktop app; other clients have no way to start
+  // system dictation, so the button and shortcut stay inert there.
+  const startDictation = window.desktopBridge?.startDictation;
+  const dictationShortcutLabel = shortcutLabelForCommand(keybindings, "composer.dictate", {
+    context: { terminalFocus: false, terminalOpen, modelPickerOpen: false },
+  });
+  const startComposerDictation = useStableCallback(() => {
+    if (!startDictation) return;
+    focusComposer();
+    void startDictation();
+  });
+  // oxlint-disable-next-line t3code/react-effect-budget -- The dictation shortcut is a global command handler that must unregister when the composer unmounts or the bridge goes away.
+  useEffect(() => {
+    if (!startDictation) return;
+    return registerCommands(
+      {
+        "composer.dictate": (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          if (isCommandPaletteOpen()) return;
+          startComposerDictation();
+        },
+      },
+      { capture: true, context: () => ({ terminalOpen }) },
+    );
+  }, [startComposerDictation, startDictation, terminalOpen]);
+
   const composerAttachButton = showComposerAttachAction ? (
     <ComposerAttachButton
       addComposerAttachments={addComposerAttachments}
@@ -3772,6 +3803,29 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                   }
                   className="flex shrink-0 flex-nowrap items-center justify-end gap-2"
                 >
+                  {startDictation && !isComposerResting ? (
+                    <Tooltip>
+                      <TooltipTrigger
+                        render={
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon-sm"
+                            onPointerDown={(event) => event.preventDefault()}
+                            onClick={startComposerDictation}
+                            aria-label="Start dictation"
+                          />
+                        }
+                      >
+                        <MicIcon />
+                      </TooltipTrigger>
+                      <TooltipPopup>
+                        {dictationShortcutLabel
+                          ? `Start dictation (${dictationShortcutLabel})`
+                          : "Start dictation"}
+                      </TooltipPopup>
+                    </Tooltip>
+                  ) : null}
                   {composerAttachButton}
                   <ComposerFooterPrimaryActions
                     compact={isComposerResting || isComposerPrimaryActionsCompact}
