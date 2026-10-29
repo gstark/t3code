@@ -913,8 +913,10 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
     variantAction === "unsettle" &&
       !props.isActive &&
       "[&:not(:hover):not(:focus-within)_*]:text-secondary-label/70 redesign:[&:not(:hover):not(:focus-within)_*]:text-secondary-label",
+    // The rail marks the open thread in every theme, since a custom row tint
+    // can sit close to the hover and multi-select tints.
     props.isActive
-      ? "bg-sidebar-row-active text-sidebar-foreground light:shadow-xs light:ring-1 light:ring-inset light:ring-sidebar-border/70 redesign:light:shadow-none"
+      ? "bg-sidebar-row-active text-sidebar-foreground before:absolute before:inset-y-2 before:left-0 before:w-0.5 before:rounded-r-full before:bg-primary light:shadow-xs light:ring-1 light:ring-inset light:ring-sidebar-border/70 redesign:light:shadow-none"
       : isSelected || props.sweepAction !== null
         ? "bg-sidebar-row-selected text-sidebar-foreground light:ring-1 light:ring-inset light:ring-sidebar-border/70"
         : hasUnsentDraft
