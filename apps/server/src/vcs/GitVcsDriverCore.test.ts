@@ -4238,13 +4238,13 @@ it.layer(layerTest)("GitVcsDriver core integration", (it) => {
 
         yield* writeTextFile(cwd, "ours.txt", "ours\n");
         yield* driver.prepareCommitContext(cwd);
-        yield* driver.commit(cwd, "Ours", "");
+        yield* driver.commit(cwd, "Ours", "", { stage: { filePaths: ["ours.txt"] } });
 
         const error = yield* driver.pushCurrentBranch(cwd, null).pipe(Effect.flip);
         assert.instanceOf(error, GitCommandError);
         assert.equal(
           error.detail,
-          "Push rejected: the remote branch has commits that this branch does not have. Pull, then push again.",
+          "The remote has commits this branch doesn't have. Pull or rebase, then push again.",
         );
         assert.notInclude(error.message, remote);
       }),
