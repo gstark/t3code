@@ -21,6 +21,7 @@ import type {
 } from "@t3tools/contracts";
 import { useNavigate } from "@tanstack/react-router";
 import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
 import { type MouseEvent, useEffect, useEffectEvent, useRef, useState } from "react";
 import { useDeadlinePassed } from "../hooks/useDeadline";
 import { useNowSecond } from "../hooks/useNowSecond";
@@ -93,6 +94,7 @@ import { Textarea } from "~/components/ui/textarea";
 import { stackedThreadToast, toastManager } from "~/components/ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { useOpenInPreferredEditor } from "~/editorPreferences";
+import { useLocalStorage } from "~/hooks/useLocalStorage";
 import {
   useGitStackedAction,
   useSourceControlActionRunning,
@@ -246,7 +248,7 @@ function getMenuActionDisabledReason({
   const isBehind = gitStatus.behindCount > 0;
   const terminology = getSourceControlPresentation(gitStatus.sourceControlProvider).terminology;
 
-  if (item.id === "commit") {
+  if (item.id === "commit" || item.id === "commit_push" || item.id === "commit_push_pr") {
     if (!hasChanges) {
       return "Worktree is clean. Make changes before committing.";
     }
@@ -286,6 +288,8 @@ function getMenuActionDisabledReason({
   }
   return `Create ${terminology.singular} is currently unavailable.`;
 }
+
+const CommitPreferenceSchema = Schema.NullOr(Schema.Literals(["commit", "commit_push"]));
 
 const COMMIT_DIALOG_TITLE = "Commit changes";
 const COMMIT_DIALOG_DESCRIPTION =
@@ -1132,16 +1136,28 @@ export default function GitActionsControl({
 
   const isDefaultRef = gitStatusForActions?.isDefaultRef ?? false;
 
+  // Remembers, per project, whether the user wants "Commit" or "Commit & push"
+  // instead of the default "Commit, push & PR". Worktree threads share it.
+  const projectId = activeServerThread?.projectId ?? activeDraftThread?.projectId ?? null;
+  const [commitPreference, setCommitPreference] = useLocalStorage(
+    `t3code:git-commit-preference:${activeEnvironmentId ?? ""}:${projectId ?? gitCwd}`,
+    null,
+    CommitPreferenceSchema,
+  );
+
   const gitActionMenuItems = buildMenuItems(
     gitStatusForActions,
     isGitActionRunning,
     hasPrimaryRemote,
+    isDefaultRef,
+    commitPreference,
   );
   const quickAction = resolveQuickAction(
     gitStatusForActions,
     isGitActionRunning,
     isDefaultRef,
     hasPrimaryRemote,
+    commitPreference,
   );
   const quickActionDisabledReason = !canWriteSourceControl
     ? "This connection cannot change source control."
@@ -1365,6 +1381,7 @@ export default function GitActionsControl({
     const commitMessage = dialogCommitMessage.trim();
 
     setIsCommitDialogOpen(false);
+    setCommitPreference("commit");
     setDialogCommitMessage("");
     setExcludedFiles(new Set());
     setIsEditingFiles(false);
@@ -1460,6 +1477,16 @@ export default function GitActionsControl({
       void runGitActionWithToast({ action: "create_pr" });
       return;
     }
+    if (item.dialogAction === "commit_push") {
+      setCommitPreference("commit_push");
+      void runGitActionWithToast({ action: "commit_push" });
+      return;
+    }
+    if (item.dialogAction === "commit_push_pr") {
+      setCommitPreference(null);
+      void runGitActionWithToast({ action: "commit_push_pr" });
+      return;
+    }
     setExcludedFiles(new Set());
     setIsEditingFiles(false);
     setIsCommitDialogOpen(true);
@@ -1469,6 +1496,7 @@ export default function GitActionsControl({
     if (!isCommitDialogOpen) return;
     const commitMessage = dialogCommitMessage.trim();
     setIsCommitDialogOpen(false);
+    setCommitPreference("commit");
     setDialogCommitMessage("");
     setExcludedFiles(new Set());
     setIsEditingFiles(false);
