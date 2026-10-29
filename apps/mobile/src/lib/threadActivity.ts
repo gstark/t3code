@@ -14,8 +14,8 @@ import {
   turnItemNeedsDetailFetch,
 } from "@t3tools/client-runtime/work-log/item-detail";
 import {
-  commandChainLabel,
   commandDisplayText,
+  commandProgramName,
 } from "@t3tools/client-runtime/work-log/command-label";
 import {
   contextCompactionLabel,
@@ -656,8 +656,6 @@ function itemSummary(
   if (item.type === "notification") return item.summary;
   if (item.type === "system_notice") return item.message;
   if (item.type === "compaction") return contextCompactionLabel(item);
-  // The agent's stated reason for a command reads better than the command itself.
-  if (item.type === "command_execution" && item.intent) return item.intent;
   const title =
     (item.type === "dynamic_tool"
       ? dynamicToolTitle(item.toolName, item.input, item.title)
@@ -1928,7 +1926,7 @@ function liveToolActivitySummary(activity: ThreadFeedActivity, presentTense: boo
   if (presentation) return presentation.displayName;
   const command = activity.workEntry.command?.trim();
   if (command) {
-    const program = commandChainLabel(command);
+    const program = commandProgramName(command);
     const verb =
       status === "inProgress"
         ? "Running"
@@ -1939,7 +1937,7 @@ function liveToolActivitySummary(activity: ThreadFeedActivity, presentTense: boo
             : status === "stopped"
               ? "Stopped"
               : "Ran";
-    return `${verb} ${program}`;
+    return `${verb} ${program ?? "command"}`;
   }
   return activity.detail ?? activity.summary;
 }
