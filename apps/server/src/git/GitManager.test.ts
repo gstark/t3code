@@ -22,7 +22,6 @@ import { expect } from "vite-plus/test";
 import type {
   ChangeRequest,
   GitActionProgressEvent,
-  GitManagerServiceError,
   GitStackedAction,
   GitPreparePullRequestThreadInput,
   ModelSelection,
