@@ -76,6 +76,10 @@ merge-release: sync _require-mine
     git commit --no-edit
     echo "Merged $latest into mine. Typecheck passed."
 
+# Sync fork PRs on gstark/t3code from mine (only --dry-run exists so far)
+prs *args:
+    node scripts/fork-prs/main.ts {{args}}
+
 # Build the macOS app from mine, publish a GitHub release, and update the Homebrew cask
 homebrew: _require-mine
     #!/usr/bin/env bash
