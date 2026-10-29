@@ -45,7 +45,6 @@ import IconMoodPlus from "@tabler/icons-react-native/IconMoodPlus";
 import IconTag from "@tabler/icons-react-native/IconTag";
 import IconTicket from "@tabler/icons-react-native/IconTicket";
 import IconClock from "@tabler/icons-react-native/IconClock";
-import IconCommand from "@tabler/icons-react-native/IconCommand";
 import IconCode from "@tabler/icons-react-native/IconCode";
 import IconCopy from "@tabler/icons-react-native/IconCopy";
 import IconDatabase from "@tabler/icons-react-native/IconDatabase";
@@ -313,7 +312,6 @@ const ANDROID_ICON_BY_MATERIAL_NAME = {
   folder: IconFolder,
   folder_open: IconFolderOpen,
   keyboard: IconKeyboard,
-  keyboard_command_key: IconCommand,
   keyboard_arrow_down: IconChevronDown,
   keyboard_arrow_up: IconChevronUp,
   keyboard_hide: IconKeyboardHide,

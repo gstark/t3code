@@ -394,7 +394,7 @@ function workRowSymbolName(icon: ThreadFeedActivity["icon"]): WorkContentIcon {
     case "check":
       return { ios: "checkmark", android: "check" };
     case "command":
-      return { ios: "command", android: "keyboard_command_key" };
+      return { ios: "terminal", android: "terminal" };
     case "computer":
       return "computer";
     case "code":
@@ -1187,7 +1187,13 @@ const ThreadWorkLogRow = function ThreadWorkLogRow(
               </View>
             ))}
           </FilePreviewGallery>
-          <View className="pr-2">
+          <ScrollView
+            nestedScrollEnabled
+            directionalLockEnabled
+            showsVerticalScrollIndicator
+            className="max-h-60"
+            contentContainerStyle={{ paddingRight: 8 }}
+          >
             {reasoning ? (
               props.renderReasoning(reasoning.text)
             ) : call ? (
@@ -1242,7 +1248,7 @@ const ThreadWorkLogRow = function ThreadWorkLogRow(
               </Text>
             ) : null}
             {streamsOutput ? null : exitLine}
-          </View>
+          </ScrollView>
           {streamsOutput ? (
             <>
               <ThreadCommandOutput
@@ -1618,7 +1624,7 @@ function toolGroupSummarySymbolName(kind: ToolGroupSummaryKind): AppSymbolName {
     case "thread-create":
       return { ios: "bubble.left", android: "chat" };
     case "command":
-      return { ios: "command", android: "keyboard_command_key" };
+      return { ios: "terminal", android: "terminal" };
     case "device":
       return { ios: "iphone", android: "smartphone" };
     case "browser":
