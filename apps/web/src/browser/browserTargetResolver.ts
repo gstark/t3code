@@ -2,11 +2,18 @@ import type {
   BrowserNavigationTarget,
   EnvironmentId,
   PreviewUrlResolution,
+  WorkspaceServerAddress,
+  WorkspaceServerAddressScope,
 } from "@t3tools/contracts";
 import { isLoopbackHost, normalizePreviewUrl } from "@t3tools/shared/preview";
-import { isLocalLoopbackHost, isPrivateNetworkHost } from "@t3tools/shared/hostClassification";
+import {
+  isLocalLoopbackHost,
+  isPrivateNetworkHost,
+  isSharedAddressSpaceHost,
+  isTailnetHost,
+} from "@t3tools/shared/hostClassification";
 
-import type { ConnectionTarget } from "@t3tools/client-runtime/connection";
+import type { ConnectionTarget, PreparedConnection } from "@t3tools/client-runtime/connection";
 
 import { isDesktopLocalConnectionTarget } from "~/connection/desktopLocal";
 import { isElectron } from "~/env";
@@ -82,6 +89,53 @@ export function resolveBrowserNavigationTarget(
 const reachesEnvironmentLoopback = (target: ConnectionTarget): boolean =>
   isElectron &&
   (target._tag === "PrimaryConnectionTarget" || isDesktopLocalConnectionTarget(target));
+
+const ALL_SCOPES: ReadonlySet<WorkspaceServerAddressScope> = new Set([
+  "loopback",
+  "lan",
+  "tailnet",
+]);
+const NO_SCOPES: ReadonlySet<WorkspaceServerAddressScope> = new Set();
+
+const addressHost = (url: string): string | null => {
+  try {
+    return new URL(url.includes("://") ? url : `tcp://${url}`).hostname;
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * Judged by the host name the client uses for the environment (the SSH host, else
+ * the URL host): one of the host's addresses, or its short MagicDNS name, puts the
+ * client on that address's network. T3 Connect tunnels only to T3.
+ */
+export function reachableServerScopes(
+  connection: Pick<PreparedConnection, "httpBaseUrl" | "target"> | null,
+  sshHostname: string | null,
+  addresses: ReadonlyArray<WorkspaceServerAddress>,
+): ReadonlySet<WorkspaceServerAddressScope> {
+  if (connection === null) return NO_SCOPES;
+  if (reachesEnvironmentLoopback(connection.target)) return ALL_SCOPES;
+  if (connection.target._tag === "RelayConnectionTarget") return NO_SCOPES;
+  const routeHost =
+    connection.target._tag === "SshConnectionTarget"
+      ? sshHostname?.toLowerCase()
+      : addressHost(connection.httpBaseUrl);
+  if (!routeHost) return NO_SCOPES;
+  if (isLocalLoopbackHost(routeHost)) return ALL_SCOPES;
+  const matched = new Set(
+    addresses
+      .filter((address) => {
+        const host = addressHost(address.url);
+        return host === routeHost || host?.startsWith(`${routeHost}.`);
+      })
+      .map((address) => address.scope),
+  );
+  if (matched.size > 0) return matched;
+  if (isTailnetHost(routeHost) || isSharedAddressSpaceHost(routeHost)) return new Set(["tailnet"]);
+  return isPrivateNetworkHost(routeHost) ? new Set(["lan"]) : NO_SCOPES;
+}
 
 export function resolveDiscoveredServerUrl(environmentId: EnvironmentId, rawUrl: string): string {
   try {

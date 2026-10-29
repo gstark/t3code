@@ -73,6 +73,7 @@ import * as DeviceService from "./device/DeviceService.ts";
 import * as DeviceHubProxy from "./device/DeviceHubProxy.ts";
 import * as PreviewManager from "./preview/Manager.ts";
 import * as PortScanner from "./preview/PortScanner.ts";
+import * as WorkspaceServers from "./workspaceServers/WorkspaceServers.ts";
 import * as ServerBrowser from "./preview/ServerBrowser.ts";
 import * as PreviewAgentActivity from "./preview/PreviewAgentActivity.ts";
 import * as DesktopBrowserChannel from "./preview/DesktopBrowserChannel.ts";
@@ -440,6 +441,12 @@ const layerTerminal = TerminalManager.layer.pipe(
 
 const layerPreview = Layer.empty.pipe(
   Layer.provideMerge(PreviewManager.layer),
+  Layer.provideMerge(
+    WorkspaceServers.layer.pipe(
+      Layer.provide(ProcessRunner.layer),
+      Layer.provide(Layer.merge(ProjectionStoreV2.layer, ProjectStore.layer)),
+    ),
+  ),
   Layer.provideMerge(layerPortScanner),
 );
 
