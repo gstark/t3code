@@ -1,3 +1,4 @@
+import { cn } from "~/lib/utils";
 import { Button } from "../ui/button";
 import { type ContextWindowSnapshot, formatContextWindowTokens } from "~/lib/contextWindow";
 import { Popover, PopoverPopup, PopoverTrigger } from "../ui/popover";
@@ -18,14 +19,45 @@ function formatPercentage(value: number | null): string | null {
   return `${Math.round(value)}%`;
 }
 
+const USAGE_BAR_SEGMENTS = [0, 1, 2, 3];
+
+/** Splits usage into quarter cells so the gaps mark the full length and the 25% steps at any fill level. */
+function ContextWindowUsageBar(props: { percentage: number; color: string; className: string }) {
+  const segmentSize = 100 / USAGE_BAR_SEGMENTS.length;
+  return (
+    <span className={cn("flex gap-0.5", props.className)}>
+      {USAGE_BAR_SEGMENTS.map((index) => {
+        const fill = Math.max(
+          0,
+          Math.min(1, (props.percentage - index * segmentSize) / segmentSize),
+        );
+        return (
+          <span
+            key={index}
+            className="block h-full flex-1 overflow-hidden rounded-xs bg-muted-foreground/20"
+          >
+            <span
+              className="block h-full transition-[width,background-color] duration-500 ease-out motion-reduce:transition-none"
+              style={{ width: `${fill * 100}%`, backgroundColor: props.color }}
+            />
+          </span>
+        );
+      })}
+    </span>
+  );
+}
+
+/** Shows context usage as a ring, or as a bar with text when `inline` is set. Both open the same popover on hover. */
 export function ContextWindowMeter(props: {
   usage: ContextWindowSnapshot;
+  inline?: boolean;
   modelDisplayName?: string | null;
   onCompact?: (() => void) | undefined;
   compactDisabled?: boolean | undefined;
   compactDisabledReason?: string | null | undefined;
 }) {
-  const { usage, modelDisplayName, onCompact, compactDisabled, compactDisabledReason } = props;
+  const { usage, inline, modelDisplayName, onCompact, compactDisabled, compactDisabledReason } =
+    props;
   const usedPercentage = formatPercentage(usage.usedPercentage);
   const normalizedPercentage = Math.max(0, Math.min(100, usage.usedPercentage ?? 0));
   const radius = 9.75;
@@ -36,7 +68,17 @@ export function ContextWindowMeter(props: {
   const isOverloaded = normalizedPercentage > 90;
   const usageColor = isOverloaded
     ? "var(--color-error)"
-    : "color-mix(in oklab, var(--color-muted-foreground) 72%, transparent)";
+    : normalizedPercentage >= 75
+      ? "var(--color-warning)"
+      : "color-mix(in oklab, var(--color-foreground) 80%, transparent)";
+  const usageSummary =
+    usage.maxTokens !== null && usedPercentage
+      ? `${usedPercentage} · ${formatContextWindowTokens(usage.usedTokens)}/${formatContextWindowTokens(usage.maxTokens ?? null)}`
+      : formatContextWindowTokens(usage.usedTokens);
+  const ariaLabel =
+    usage.maxTokens !== null && usedPercentage
+      ? `Context window ${usedPercentage} used`
+      : `Context window ${formatContextWindowTokens(usage.usedTokens)} tokens used`;
 
   return (
     <Popover>
@@ -45,45 +87,51 @@ export function ContextWindowMeter(props: {
         delay={150}
         closeDelay={onCompact ? 150 : 0}
         render={
-          <Button
-            size="icon-sm"
-            variant="ghost-muted"
-            className="size-7"
-            aria-label={
-              usage.maxTokens !== null && usedPercentage
-                ? `Context window ${usedPercentage} used`
-                : `Context window ${formatContextWindowTokens(usage.usedTokens)} tokens used`
-            }
-          >
-            <span className="relative flex size-5 items-center justify-center">
-              <svg
-                viewBox="0 0 24 24"
-                className="-rotate-90 absolute inset-0 size-full transform-gpu mx-0!"
-                aria-hidden="true"
-              >
-                <circle
-                  cx="12"
-                  cy="12"
-                  r={radius}
-                  fill="none"
-                  className="stroke-muted-foreground/24"
-                  strokeWidth="3"
-                />
-                <circle
-                  cx="12"
-                  cy="12"
-                  r={radius}
-                  fill="none"
-                  stroke={usageColor}
-                  strokeWidth="3"
-                  strokeLinecap="round"
-                  strokeDasharray={circumference}
-                  strokeDashoffset={dashOffset}
-                  className="transition-[stroke-dashoffset,stroke] duration-500 ease-out motion-reduce:transition-none"
-                />
-              </svg>
-            </span>
-          </Button>
+          inline ? (
+            <Button size="compact" variant="ghost-muted" aria-label={ariaLabel}>
+              <span aria-hidden="true" className="flex items-center gap-2 tabular-nums">
+                {usage.maxTokens !== null ? (
+                  <ContextWindowUsageBar
+                    percentage={normalizedPercentage}
+                    color={usageColor}
+                    className="h-1.5 w-16"
+                  />
+                ) : null}
+                {usageSummary}
+              </span>
+            </Button>
+          ) : (
+            <Button size="icon-sm" variant="ghost-muted" className="size-7" aria-label={ariaLabel}>
+              <span className="relative flex size-5 items-center justify-center">
+                <svg
+                  viewBox="0 0 24 24"
+                  className="-rotate-90 absolute inset-0 size-full transform-gpu mx-0!"
+                  aria-hidden="true"
+                >
+                  <circle
+                    cx="12"
+                    cy="12"
+                    r={radius}
+                    fill="none"
+                    className="stroke-muted-foreground/24"
+                    strokeWidth="3"
+                  />
+                  <circle
+                    cx="12"
+                    cy="12"
+                    r={radius}
+                    fill="none"
+                    stroke={usageColor}
+                    strokeWidth="3"
+                    strokeLinecap="round"
+                    strokeDasharray={circumference}
+                    strokeDashoffset={dashOffset}
+                    className="transition-[stroke-dashoffset,stroke] duration-500 ease-out motion-reduce:transition-none"
+                  />
+                </svg>
+              </span>
+            </Button>
+          )
         }
       />
       <PopoverPopup
@@ -98,33 +146,20 @@ export function ContextWindowMeter(props: {
         <div className="flex flex-col gap-2 p-(--floating-content-inset)">
           <div className="flex items-center justify-between gap-3">
             <div className="font-medium text-muted-foreground text-xs">Context Window</div>
-            {usage.maxTokens !== null && usedPercentage ? (
-              <div className="text-secondary-label text-2xs tabular-nums">
-                <span>{usedPercentage}</span>
-                <span className="mx-1">·</span>
-                <span>
-                  {formatContextWindowTokens(usage.usedTokens)}/
-                  {formatContextWindowTokens(usage.maxTokens ?? null)}
-                </span>
-              </div>
-            ) : (
-              <div className="text-secondary-label text-2xs tabular-nums">
-                {formatContextWindowTokens(usage.usedTokens)}
-              </div>
-            )}
+            <div className="text-secondary-label text-2xs tabular-nums">{usageSummary}</div>
           </div>
           {usage.maxTokens !== null ? (
             <div
-              className="h-1.5 w-full overflow-hidden rounded-full bg-muted/60"
               role="progressbar"
               aria-valuemin={0}
               aria-valuemax={100}
               aria-valuenow={Math.round(normalizedPercentage)}
               aria-label="Context window usage"
             >
-              <div
-                className="h-full rounded-full transition-[width,background-color] duration-500 ease-out motion-reduce:transition-none"
-                style={{ width: `${normalizedPercentage}%`, backgroundColor: usageColor }}
+              <ContextWindowUsageBar
+                percentage={normalizedPercentage}
+                color={usageColor}
+                className="h-2 w-full"
               />
             </div>
           ) : null}
