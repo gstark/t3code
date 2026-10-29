@@ -4320,9 +4320,11 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
               SELECT payload_json FROM orchestration_v2_projection_context_transfers
               WHERE source_thread_id = ${threadId} OR target_thread_id = ${threadId} ORDER BY rowid ASC
             `.pipe(Effect.flatMap(decodeRows(decodeContextTransferPayload, threadId)));
+            // Runless git actions are notes the next run tells the agent about.
             const turnItems = yield* sql<PayloadRow>`
               SELECT payload_json FROM orchestration_v2_projection_turn_items
-              WHERE thread_id = ${threadId} AND run_id = ${runId} ORDER BY ordinal ASC, turn_item_id ASC
+              WHERE thread_id = ${threadId} AND (run_id = ${runId} OR (run_id IS NULL AND type = 'git_action'))
+              ORDER BY ordinal ASC, turn_item_id ASC
             `.pipe(Effect.flatMap(decodeRows(decodeTurnItemPayload, threadId)));
             const providerSessions = yield* sql<PayloadRow>`
               SELECT sessions.payload_json FROM orchestration_v2_projection_provider_sessions AS sessions
@@ -7571,7 +7573,9 @@ export const layerMemory: Layer.Layer<ProjectionStoreV2> = Layer.effect(
                   (message.text.trim().toLowerCase() !== "/compact" ||
                     message.attachments.length > 0),
               ) || inheritsForkConversation(projection),
-            turnItems: projection.turnItems.filter((item) => item.runId === runId),
+            turnItems: projection.turnItems.filter(
+              (item) => item.runId === runId || (item.runId === null && item.type === "git_action"),
+            ),
           })),
         ),
       getTurnStartHistory: (threadId, runIds) =>

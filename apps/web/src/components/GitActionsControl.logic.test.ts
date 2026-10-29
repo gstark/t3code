@@ -218,6 +218,18 @@ describe("resolveAutoFeatureBranchName", () => {
   });
 });
 
+describe("when: ref has diverged from upstream", () => {
+  it("resolveQuickAction rebases and pushes", () => {
+    const quick = resolveQuickAction(status({ aheadCount: 2, behindCount: 1 }), false);
+    assert.deepEqual(quick, {
+      label: "Rebase & push",
+      disabled: false,
+      kind: "run_action",
+      action: "push",
+    });
+  });
+});
+
 describe("when: the project prefers commit & push without a PR", () => {
   it("resolveQuickAction commits and pushes local changes", () => {
     const quick = resolveQuickAction(

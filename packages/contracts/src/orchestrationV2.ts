@@ -62,6 +62,7 @@ import {
   ThreadPullRequestStack,
   ThreadPullRequestWatch,
 } from "./threadPullRequest.ts";
+import { GitActionActivityPayload } from "./git.ts";
 import {
   ProviderApprovalDecision,
   ProviderApprovalFullAccessOverride,
@@ -1442,6 +1443,17 @@ const OrchestrationV2SecretRequestFields = {
   secretStatus: OrchestrationV2SecretRequestStatus,
 } as const;
 
+/**
+ * A commit, push, pull request, or land the user ran from the git controls.
+ * Recorded without a run so no turn starts; the thread's next run tells the
+ * agent about it.
+ */
+const OrchestrationV2GitActionFields = {
+  type: Schema.Literal("git_action"),
+  summary: TrimmedNonEmptyString,
+  gitAction: GitActionActivityPayload,
+} as const;
+
 export const OrchestrationV2TurnItem = Schema.Union([
   Schema.Struct({
     ...OrchestrationV2TurnItemBaseFields,
@@ -1630,6 +1642,10 @@ export const OrchestrationV2TurnItem = Schema.Union([
   Schema.Struct({
     ...OrchestrationV2TurnItemBaseFields,
     ...OrchestrationV2SecretRequestFields,
+  }),
+  Schema.Struct({
+    ...OrchestrationV2TurnItemBaseFields,
+    ...OrchestrationV2GitActionFields,
   }),
   Schema.Struct({
     ...OrchestrationV2TurnItemBaseFields,
@@ -2462,6 +2478,10 @@ export const OrchestrationV2TurnItemJson = Schema.Union([
   Schema.Struct({
     ...OrchestrationV2TurnItemJsonBaseFields,
     ...OrchestrationV2SecretRequestFields,
+  }),
+  Schema.Struct({
+    ...OrchestrationV2TurnItemJsonBaseFields,
+    ...OrchestrationV2GitActionFields,
   }),
   Schema.Struct({
     ...OrchestrationV2TurnItemJsonBaseFields,
@@ -3308,6 +3328,15 @@ const OrchestrationV2InternalCommand = Schema.Union([
     placeholder: Schema.optional(Schema.String),
     delivery: Schema.optional(OrchestrationV2SecretRequestDelivery),
     secretStatus: OrchestrationV2SecretRequestStatus,
+  }),
+  /** Records a git action the user ran beside a thread. Internal: only the git RPC writes it. */
+  Schema.Struct({
+    type: Schema.Literal("thread.git-action.record"),
+    commandId: CommandId,
+    threadId: ThreadId,
+    turnItemId: TurnItemId,
+    summary: TrimmedNonEmptyString,
+    gitAction: GitActionActivityPayload,
   }),
 ]);
 export type OrchestrationV2InternalCommand = typeof OrchestrationV2InternalCommand.Type;

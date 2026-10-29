@@ -319,7 +319,8 @@ export const VcsSwitchRefResult = Schema.Struct({
 });
 export type VcsSwitchRefResult = typeof VcsSwitchRefResult.Type;
 
-export const GitRunStackedActionResult = Schema.Struct({
+/** A stacked git action's result without its toast, as recorded in the thread. */
+export const GitActionActivityPayload = Schema.Struct({
   action: GitStackedAction,
   branch: Schema.Struct({
     status: GitBranchStepStatus,
@@ -360,6 +361,11 @@ export const GitRunStackedActionResult = Schema.Struct({
       toSha: Schema.optional(TrimmedNonEmptyStringSchema),
     }),
   ),
+});
+export type GitActionActivityPayload = typeof GitActionActivityPayload.Type;
+
+export const GitRunStackedActionResult = Schema.Struct({
+  ...GitActionActivityPayload.fields,
   toast: GitRunStackedActionToast,
 });
 export type GitRunStackedActionResult = typeof GitRunStackedActionResult.Type;
@@ -421,10 +427,20 @@ export class TextGenerationError extends Schema.TaggedError<TextGenerationError>
   }
 }
 
+/** A rebase the action started that stopped on conflicts. It is left in progress in `cwd`. */
+export const GitRebaseConflict = Schema.Struct({
+  cwd: TrimmedNonEmptyStringSchema,
+  branch: TrimmedNonEmptyStringSchema,
+  onto: TrimmedNonEmptyStringSchema,
+  files: Schema.Array(TrimmedNonEmptyStringSchema),
+});
+export type GitRebaseConflict = typeof GitRebaseConflict.Type;
+
 export class GitManagerError extends Schema.TaggedError<GitManagerError>()("GitManagerError", {
   operation: Schema.String,
   cwd: Schema.String,
   detail: Schema.String,
+  rebaseConflict: Schema.optional(GitRebaseConflict),
   cause: Schema.optional(Schema.Defect()),
 }) {
   override get message(): string {

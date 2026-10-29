@@ -521,6 +521,7 @@ function commandThreadId(command: OrchestrationV2ServerCommand): ThreadId {
     case "thread.created.record":
       return command.parentThreadId;
     case "secret_request.record":
+    case "thread.git-action.record":
       return command.threadId;
     case "thread.fork":
     case "thread.merge_back":
@@ -7858,6 +7859,51 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
     },
   );
 
+  /**
+   * Records a git action as a runless timeline row. It starts no turn: the
+   * thread's next run prepends it to the agent's prompt.
+   */
+  const dispatchGitActionRecord = Effect.fn("orchestrationV2.dispatch.gitActionRecord")(function* (
+    command: Extract<OrchestrationV2InternalCommand, { readonly type: "thread.git-action.record" }>,
+    events: Ref.Ref<Array<OrchestrationV2DomainEvent>>,
+  ) {
+    const projection = yield* projectionStore
+      .getThreadRecords(command.threadId, [])
+      .pipe(
+        Effect.mapError(
+          (cause) => new OrchestratorProjectionError({ threadId: command.threadId, cause }),
+        ),
+      );
+    const now = yield* DateTime.now;
+    yield* emit(
+      events,
+      command,
+    )({
+      type: "turn-item.updated",
+      threadId: command.threadId,
+      occurredAt: now,
+      payload: {
+        id: command.turnItemId,
+        threadId: command.threadId,
+        runId: null,
+        nodeId: null,
+        providerThreadId: null,
+        providerTurnId: null,
+        nativeItemRef: null,
+        parentItemId: null,
+        ordinal: yield* nextTurnItemOrdinal(projection),
+        status: "completed",
+        title: command.summary,
+        startedAt: now,
+        completedAt: now,
+        updatedAt: now,
+        type: "git_action",
+        summary: command.summary,
+        gitAction: command.gitAction,
+      },
+    });
+  });
+
   const dispatchRuntimeRequestRespond = Effect.fn("Orchestrator.dispatchRuntimeRequestRespond")(
     function* (
       command: Extract<OrchestrationV2Command, { readonly type: "runtime-request.respond" }>,
@@ -12087,6 +12133,9 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
         break;
       case "secret_request.record":
         yield* dispatchSecretRequestRecord(command, events);
+        break;
+      case "thread.git-action.record":
+        yield* dispatchGitActionRecord(command, events);
         break;
       default:
         return yield* dispatchUnsupported(command);

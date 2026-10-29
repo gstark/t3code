@@ -76,6 +76,7 @@ import { type ThreadFindMatch } from "./threadFind";
 import { useThreadFindNavigation } from "./useThreadFindNavigation";
 import { TooltipScrollDismissArea } from "../ui/tooltip";
 import { WorktreeSetupCard } from "./WorktreeSetupCard";
+import { GitActionCard } from "./GitActionCard";
 import { useOpenPrLink } from "~/lib/openPullRequestLink";
 import { useMediaQuery } from "~/hooks/useMediaQuery";
 import { cn } from "~/lib/utils";
@@ -1421,7 +1422,8 @@ const TimelineRowContent = memo(function TimelineRowContent({ row }: { row: Time
                 row.kind === "event" ||
                 row.kind === "attempt-fold" ||
                 row.kind === "html-render" ||
-                row.kind === "mcp-app"
+                row.kind === "mcp-app" ||
+                row.kind === "git-action"
               ? "pb-2"
               : "pb-4",
         (row.kind === "message" && row.message.role === "assistant") ||
@@ -1463,6 +1465,7 @@ const TimelineRowContent = memo(function TimelineRowContent({ row }: { row: Time
       {row.kind === "turn-fold" ? <TurnFoldTimelineRow row={row} /> : null}
       {row.kind === "attempt-fold" ? <AttemptFoldTimelineRow row={row} /> : null}
       {row.kind === "context-compaction" ? <ContextCompactionTimelineRow row={row} /> : null}
+      {row.kind === "git-action" ? <GitActionTimelineRow row={row} /> : null}
       {row.kind === "message" && row.message.role === "user" ? <UserMessageRow row={row} /> : null}
       {row.kind === "message" && row.message.role === "assistant" ? (
         <AssistantTimelineRow row={row} />
@@ -1498,6 +1501,11 @@ function WorktreeSetupTimelineRow({
       onOpenTerminal={onOpenTerminal}
     />
   );
+}
+
+function GitActionTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "git-action" }> }) {
+  const { openPullRequest } = use(TimelineRowCtx);
+  return <GitActionCard label={row.label} gitAction={row.gitAction} onOpenPr={openPullRequest} />;
 }
 
 function ContextCompactionTimelineRow({

@@ -151,14 +151,12 @@ export function buildMenuItems(
   const hasBranch = gitStatus.refName !== null;
   const hasChanges = gitStatus.hasWorkingTreeChanges;
   const hasOpenPr = gitStatus.pr?.state === "open";
-  const isBehind = gitStatus.behindCount > 0;
   const hasDefaultBranchDelta = (gitStatus.aheadOfDefaultCount ?? gitStatus.aheadCount) > 0;
   const canPushWithoutUpstream = hasPrimaryRemote && !gitStatus.hasUpstream;
   const canCommit = !isBusy && hasChanges;
   const canPush =
     !isBusy &&
     hasBranch &&
-    !isBehind &&
     gitStatus.aheadCount > 0 &&
     (gitStatus.hasUpstream || canPushWithoutUpstream);
   const canCreatePr =
@@ -166,7 +164,6 @@ export function buildMenuItems(
     hasBranch &&
     !hasOpenPr &&
     hasDefaultBranchDelta &&
-    !isBehind &&
     (gitStatus.hasUpstream || canPushWithoutUpstream);
 
   const commitItem: GitActionMenuItem = {
@@ -372,12 +369,13 @@ export function resolveQuickAction(
     };
   }
 
+  // Pushing rebases onto the upstream first; a conflict goes to the agent.
   if (isDiverged) {
     return {
-      label: "Sync ref",
-      disabled: true,
-      kind: "show_hint",
-      hint: "Branch has diverged from upstream. Rebase/merge first.",
+      label: "Rebase & push",
+      disabled: false,
+      kind: "run_action",
+      action: "push",
     };
   }
 
