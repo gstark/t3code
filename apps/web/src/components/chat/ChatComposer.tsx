@@ -3325,6 +3325,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     focusComposer();
     void startDictation();
   });
+  // oxlint-disable-next-line t3code/react-effect-budget -- The dictation shortcut is a global command handler that must unregister when the composer unmounts or the bridge goes away.
   useEffect(() => {
     if (!startDictation) return;
     return registerCommands(
