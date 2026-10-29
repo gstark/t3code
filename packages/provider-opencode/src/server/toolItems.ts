@@ -94,10 +94,13 @@ export function openCodeToolTurnItem(
   switch (openCodeToolProjectionKind(tool.name)) {
     case "command_execution": {
       const exitCode = recordNumber(tool.completedMetadata, "exit", "exitCode");
+      // OpenCode's bash tool requires a `description` of why it runs the command.
+      const intent = recordString(input, "description")?.trim();
       return {
         ...base,
         type: "command_execution",
         input: recordString(input, "command", "cmd") ?? stableJson(input),
+        ...(intent ? { intent } : {}),
         ...(output === undefined ? {} : { output }),
         ...(exitCode === undefined ? {} : { exitCode }),
       };

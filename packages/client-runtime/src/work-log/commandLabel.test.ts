@@ -138,6 +138,23 @@ describe("commandProgramName", () => {
   });
 });
 
+describe("commandChainLabel", () => {
+  it.each([
+    [
+      `cat failed.txt | tr '\\n' ' '; echo; bash control.sh > ctl.log 2>&1; grep -E "x|y" ctl.log; grep -c "z" rails.log`,
+      "cat, tr, echo, bash, grep, grep",
+    ],
+    ["cd apps/web && vp test run foo.test.ts", "vp"],
+    ["/bin/zsh -lc 'vp test run apps/web/src/session-logic.test.ts'", "vp"],
+    ["cat <<EOF > notes.txt\nhello\nEOF\nls", "cat, ls"],
+    ['while ! grep -q "done" e2e.log; do sleep 20; done; tail e2e.log', "tail"],
+    ["[[ -f a && -f b ]] && make", "command"],
+    ["for f in *.ts; do echo $f; done", "command"],
+  ])("labels %j as %j", (command, label) => {
+    expect(commandChainLabel(command)).toBe(label);
+  });
+});
+
 describe("commandDisplayText with redacted Codex commands", () => {
   // Codex replaces secrets in command text before sending it
   // (codex-rs/secrets/src/sanitizer.rs). Usually the quoting survives.
@@ -165,22 +182,5 @@ describe("commandDisplayText control characters", () => {
     ["printf 'a\\tb'\r\necho done", "printf 'a\\tb'\r\necho done"],
   ])("shows %j as %j", (input, expected) => {
     expect(commandDisplayText(input)).toBe(expected);
-  });
-});
-
-describe("commandChainLabel", () => {
-  it.each([
-    [
-      `cat failed.txt | tr '\\n' ' '; echo; bash control.sh > ctl.log 2>&1; grep -E "x|y" ctl.log; grep -c "z" rails.log`,
-      "cat, tr, echo, bash, grep, grep",
-    ],
-    ["cd apps/web && vp test run foo.test.ts", "vp"],
-    ["/bin/zsh -lc 'vp test run apps/web/src/session-logic.test.ts'", "vp"],
-    ["cat <<EOF > notes.txt\nhello\nEOF\nls", "cat, ls"],
-    ['while ! grep -q "done" e2e.log; do sleep 20; done; tail e2e.log', "tail"],
-    ["[[ -f a && -f b ]] && make", "command"],
-    ["for f in *.ts; do echo $f; done", "command"],
-  ])("labels %j as %j", (command, label) => {
-    expect(commandChainLabel(command)).toBe(label);
   });
 });
