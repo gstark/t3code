@@ -436,47 +436,45 @@ export const make = Effect.gen(function* () {
   const snapshotCache = yield* Cache.make({
     capacity: 1,
     timeToLive: "2 seconds",
-    lookup: (_key: "host") =>
-      Effect.gen(function* () {
-        // The T3 server is the host, not a server the workspace runs.
-        const found = (yield* readListeners).filter((listener) => listener.pid !== process.pid);
-        const processes = yield* readProcesses([...new Set(found.map((listener) => listener.pid))]);
-        const listeners = found.map((listener) => ({
-          ...listener,
-          processName: processes.get(listener.pid)?.name ?? listener.processName,
-        }));
-        return { listeners, processes };
-      }),
+    lookup: Effect.fn("WorkspaceServers.snapshot")(function* (_key: "host") {
+      // The T3 server is the host, not a server the workspace runs.
+      const found = (yield* readListeners).filter((listener) => listener.pid !== process.pid);
+      const processes = yield* readProcesses([...new Set(found.map((listener) => listener.pid))]);
+      const listeners = found.map((listener) => ({
+        ...listener,
+        processName: processes.get(listener.pid)?.name ?? listener.processName,
+      }));
+      return { listeners, processes };
+    }),
   });
 
   const networkCache = yield* Cache.make({
     capacity: 1,
     timeToLive: "30 seconds",
-    lookup: (_key: "host") =>
-      Effect.gen(function* () {
-        const endpoints = resolveBoundEndpoints({
-          host: "0.0.0.0",
-          port: 1,
-          interfaces: NodeOS.networkInterfaces(),
-        });
-        const hostsOf = (kind: "lan" | "tailnet") =>
-          endpoints
-            .filter((endpoint) => endpoint.kind === kind)
-            .map((endpoint) => new URL(endpoint.httpBaseUrl).hostname);
-        const tailnet = hostsOf("tailnet");
-        const magicDnsName =
-          tailnet.length === 0
-            ? null
-            : yield* readTailscaleStatus.pipe(
-                Effect.map((status) => status.magicDnsName),
-                Effect.timeoutOption(Duration.seconds(3)),
-                Effect.map(Option.getOrNull),
-                Effect.orElseSucceed(() => null),
-                Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
-                Effect.provideService(HostProcess.Platform, platform),
-              );
-        return { lan: hostsOf("lan"), tailnet, magicDnsName } satisfies HostNetwork;
-      }),
+    lookup: Effect.fn("WorkspaceServers.network")(function* (_key: "host") {
+      const endpoints = resolveBoundEndpoints({
+        host: "0.0.0.0",
+        port: 1,
+        interfaces: NodeOS.networkInterfaces(),
+      });
+      const hostsOf = (kind: "lan" | "tailnet") =>
+        endpoints
+          .filter((endpoint) => endpoint.kind === kind)
+          .map((endpoint) => new URL(endpoint.httpBaseUrl).hostname);
+      const tailnet = hostsOf("tailnet");
+      const magicDnsName =
+        tailnet.length === 0
+          ? null
+          : yield* readTailscaleStatus.pipe(
+              Effect.map((status) => status.magicDnsName),
+              Effect.timeoutOption(Duration.seconds(3)),
+              Effect.map(Option.getOrNull),
+              Effect.orElseSucceed(() => null),
+              Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
+              Effect.provideService(HostProcess.Platform, platform),
+            );
+      return { lan: hostsOf("lan"), tailnet, magicDnsName } satisfies HostNetwork;
+    }),
   });
 
   // Pages rarely change while a process runs, and every probe can show up in
