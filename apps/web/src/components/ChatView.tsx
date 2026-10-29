@@ -317,6 +317,7 @@ import { resolveThreadSyncPhase } from "../threadSync";
 import {
   hasAvailableCompactionProvider,
   hasDismissedResumeCompaction,
+  resolveCompactDisabledReason,
   shouldOfferResumeCompaction,
 } from "./chat/ContextWindowMeter.logic";
 import {
@@ -2417,32 +2418,24 @@ export default function ChatView(props: ChatViewProps) {
     pendingHandoffSelectionUsable ? pendingHandoffSelection : null,
     providerStatuses,
   );
-  const compactThreadUnavailable =
-    !canOperateThread ||
-    !activeThread ||
-    !activeThreadHasCompactableConversation ||
-    !activeProject ||
-    !isServerThread ||
-    !manualCompactionProviderAvailable ||
-    isWorking ||
-    isRevertingCheckpoint ||
-    threadDetailLoading ||
-    isPreparingWorktree ||
-    activeEnvironmentUnavailable ||
-    feedbackUploading ||
-    pendingApprovals.length > 0 ||
-    pendingUserInputs.length > 0 ||
-    showPlanFollowUpPrompt;
+  const compactDisabledReason = resolveCompactDisabledReason({
+    canOperateThread,
+    hasProject: Boolean(activeProject),
+    isServerThread: Boolean(activeThread) && isServerThread,
+    providerSupportsCompaction: manualCompactionProviderAvailable,
+    hasCompactableConversation: activeThreadHasCompactableConversation,
+    environmentUnavailable: activeEnvironmentUnavailable,
+    threadDetailLoading,
+    isPreparingWorktree,
+    isWorking,
+    isRevertingCheckpoint,
+    hasPendingApproval: pendingApprovals.length > 0,
+    hasPendingUserInput: pendingUserInputs.length > 0,
+    hasPlanFollowUp: showPlanFollowUpPrompt,
+    feedbackUploading,
+  });
+  const compactThreadUnavailable = compactDisabledReason !== null;
   const compactDisabled = compactThreadUnavailable;
-  const compactDisabledReason = compactDisabled
-    ? !canOperateThread
-      ? "This connection cannot change threads."
-      : !activeProject
-        ? "Choose a project before compacting"
-        : !manualCompactionProviderAvailable
-          ? "Compaction is unavailable for this provider"
-          : "Compacting is unavailable right now"
-    : null;
   const resumeCompactionTokens =
     activeContextWindow &&
     resolveIdleCompaction(
