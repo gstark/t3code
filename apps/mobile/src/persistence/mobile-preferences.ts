@@ -108,6 +108,7 @@ export interface Preferences {
   readonly planModeEnabled?: boolean;
   /** Device-local counterpart of web's `groupToolCalls` client setting. */
   readonly groupToolCalls?: boolean;
+  /** Device-local counterpart of web's `sidebarWorkingShelfEnabled` beta. */
   readonly workingShelfEnabled?: boolean;
   readonly modelFavorites?: ReadonlyArray<{
     readonly provider: ProviderInstanceId;
