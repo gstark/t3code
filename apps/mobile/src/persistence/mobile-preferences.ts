@@ -106,9 +106,6 @@ export interface Preferences {
   readonly projectGroupingEnabled?: boolean;
   readonly projectGroupingMode?: SidebarProjectGroupingMode;
   readonly planModeEnabled?: boolean;
-  /** Device-local counterpart of web's `groupToolCalls` client setting. */
-  readonly groupToolCalls?: boolean;
-  /** Device-local counterpart of web's `sidebarWorkingShelfEnabled` beta. */
   readonly workingShelfEnabled?: boolean;
   readonly modelFavorites?: ReadonlyArray<{
     readonly provider: ProviderInstanceId;
@@ -185,7 +182,6 @@ function sanitizePreferences(parsed: Preferences): Preferences {
     projectGroupingEnabled?: boolean;
     projectGroupingMode?: SidebarProjectGroupingMode;
     planModeEnabled?: boolean;
-    groupToolCalls?: boolean;
     workingShelfEnabled?: boolean;
     modelFavorites?: Preferences["modelFavorites"];
     threadListSettledShelfExpanded?: boolean;
@@ -303,9 +299,6 @@ function sanitizePreferences(parsed: Preferences): Preferences {
   }
   if (typeof parsed.planModeEnabled === "boolean") {
     preferences.planModeEnabled = parsed.planModeEnabled;
-  }
-  if (typeof parsed.groupToolCalls === "boolean") {
-    preferences.groupToolCalls = parsed.groupToolCalls;
   }
   if (typeof parsed.workingShelfEnabled === "boolean") {
     preferences.workingShelfEnabled = parsed.workingShelfEnabled;

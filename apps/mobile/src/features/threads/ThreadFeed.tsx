@@ -179,7 +179,6 @@ import {
 import { uuidv4 } from "../../lib/uuid";
 import { resolveNativeMarkdownTypography } from "../../lib/appearancePreferences";
 import { useAppearancePreferences } from "../settings/appearance/AppearancePreferencesProvider";
-import { useGroupToolCalls } from "./use-group-tool-calls";
 import { PierreEntryIcon } from "../../components/PierreEntryIcon";
 import {
   normalizeNativeMarkdownUrl,
@@ -1547,7 +1546,7 @@ function renderFeedEntry(
         >
           {presentation.attribution === "t3code" ? (
             <Text className="mb-1 pr-1 font-t3-medium text-2xs text-foreground-muted opacity-60">
-              Sent by G$ Code
+              Sent by T3 Code
             </Text>
           ) : null}
           {presentation.guestName !== undefined ? (
@@ -2078,7 +2077,6 @@ function useThreadFeedPresentation(
   expandedWorkGroups: Record<string, boolean>,
 ) {
   const [feedCache] = useState(createThreadFeedCache);
-  const groupToolCalls = useGroupToolCalls();
   return appendPendingThreadMessages(
     deriveThreadFeedPresentation(
       props.feed,
@@ -2092,7 +2090,6 @@ function useThreadFeedPresentation(
       props.activeWorkStartedAt,
       props.runlessWorkActive ?? false,
       feedCache,
-      groupToolCalls,
     ),
     props.feed,
     props.queuedMessages,

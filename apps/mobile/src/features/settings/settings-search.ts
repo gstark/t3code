@@ -38,8 +38,6 @@ const SETTINGS_SEARCH_TERMS = {
     "organization",
     "sidebar",
     "working section",
-    "group tool calls",
-    "conversation",
   ],
   SettingsThreads: [
     "new threads",

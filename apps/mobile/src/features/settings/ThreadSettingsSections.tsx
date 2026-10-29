@@ -17,7 +17,6 @@ import { SettingsSwitchRow } from "./components/SettingsSwitchRow";
 import { SettingsScreen } from "./components/SettingsScreen";
 import { planAutoSettleSettingsSync, type AutoSettleSettings } from "./autoSettleSettingsSync";
 import { useSettingsEnvironmentFilter } from "./settings-environment-filter";
-import { useGroupToolCalls } from "../threads/use-group-tool-calls";
 import { resolveMobileSettingsTargets, uniformMobileSetting } from "./settings-scoped-server";
 
 export function SettingsLabsRouteScreen() {
@@ -167,28 +166,6 @@ export function AutoSettleSettingsRows(props: {
           </View>
         </SettingsSection>
       ) : null}
-    </View>
-  );
-}
-
-/** Device-local conversation display, the counterpart of web's "Group tool calls". */
-export function ConversationSettingsSection() {
-  const savePreferences = useAtomSet(updateMobilePreferencesAtom);
-  const groupToolCalls = useGroupToolCalls();
-
-  return (
-    <View className="gap-3">
-      <SettingsSection title="Conversation">
-        <SettingsSwitchRow
-          icon="square.3.layers.3d"
-          label="Group tool calls"
-          value={groupToolCalls}
-          onValueChange={(value) => savePreferences({ groupToolCalls: value })}
-        />
-      </SettingsSection>
-      <Text className="px-2 text-sm text-foreground-muted">
-        Fold consecutive tool calls into one row. Turn this off to show each call as its own row.
-      </Text>
     </View>
   );
 }
