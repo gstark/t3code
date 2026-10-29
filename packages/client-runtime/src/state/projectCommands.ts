@@ -202,6 +202,13 @@ export function createProjectEnvironmentAtoms<R, E>(
       scheduler: projectScheduler,
       concurrency: { mode: "serial", key: ({ environmentId }) => environmentId },
     }),
+    // Starts a work report in the reports folder project, or returns the running one.
+    startWorkReport: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:projects:start-work-report",
+      tag: WS_METHODS.workReportStart,
+      scheduler: projectScheduler,
+      concurrency: { mode: "serial", key: ({ environmentId }) => environmentId },
+    }),
     createNew: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:projects:create-new",
       tag: WS_METHODS.projectsCreateNew,

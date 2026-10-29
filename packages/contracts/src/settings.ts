@@ -13,7 +13,9 @@ import * as SchemaTransformation from "effect/SchemaTransformation";
 import {
   ForwardCompatibleNullable,
   ForwardCompatibleOptional,
+  IsoDateTime,
   OmittedWhenNull,
+  PositiveInt,
   ProjectId,
   ThreadId,
   TrimmedNonEmptyString,
@@ -1100,6 +1102,31 @@ export const StorageCleanupSettings = Schema.Struct({
 });
 export type StorageCleanupSettings = typeof StorageCleanupSettings.Type;
 
+/** The report thread that is running, and the window of settled threads it covers. */
+export const WorkReportRun = Schema.Struct({
+  threadId: ThreadId,
+  windowStart: Schema.NullOr(IsoDateTime),
+  windowEnd: IsoDateTime,
+});
+export type WorkReportRun = typeof WorkReportRun.Type;
+
+export const DEFAULT_WORK_REPORT_NUDGE_AFTER_HOURS = 16;
+
+/**
+ * The work report analyzes threads settled since `coveredUntil` in a thread
+ * of the reports folder project. `coveredUntil` moves only when the report
+ * agent calls `complete_work_report`, so a failed run loses nothing.
+ */
+export const WorkReportSettings = Schema.Struct({
+  projectId: Schema.NullOr(ProjectId).pipe(Schema.withDecodingDefault(Effect.succeed(null))),
+  nudgeAfterHours: PositiveInt.pipe(
+    Schema.withDecodingDefault(Effect.succeed(DEFAULT_WORK_REPORT_NUDGE_AFTER_HOURS)),
+  ),
+  coveredUntil: Schema.NullOr(IsoDateTime).pipe(Schema.withDecodingDefault(Effect.succeed(null))),
+  activeRun: Schema.NullOr(WorkReportRun).pipe(Schema.withDecodingDefault(Effect.succeed(null))),
+});
+export type WorkReportSettings = typeof WorkReportSettings.Type;
+
 export const ServerSettings = Schema.Struct({
   // Null means unmigrated; empty is authoritative and must not resurrect cleared preferences.
   favorites: Schema.NullOr(ModelFavorites).pipe(Schema.withDecodingDefault(Effect.succeed(null))),
@@ -1240,6 +1267,9 @@ export const ServerSettings = Schema.Struct({
 
   pullRequestMergeMethod: Schema.NullOr(PullRequestMergeMethod).pipe(
     Schema.withDecodingDefault(Effect.succeed(null)),
+  ),
+  workReport: WorkReportSettings.pipe(
+    Schema.withDecodingDefault(Effect.succeed(Schema.decodeSync(WorkReportSettings)({}))),
   ),
 
   // Schema.Unknown preserves unknown-driver configs across versions; see providerInstance.ts.
@@ -1547,6 +1577,14 @@ export const ServerSettingsPatch = Schema.Struct({
   reviewGuideModelSelection: Schema.optionalKey(Schema.NullOr(ModelSelection)),
   reviewGuideInstructions: Schema.optionalKey(TrimmedString),
   pullRequestMergeMethod: Schema.optionalKey(Schema.NullOr(PullRequestMergeMethod)),
+  workReport: Schema.optionalKey(
+    Schema.Struct({
+      projectId: Schema.optionalKey(Schema.NullOr(ProjectId)),
+      nudgeAfterHours: Schema.optionalKey(PositiveInt),
+      coveredUntil: Schema.optionalKey(Schema.NullOr(IsoDateTime)),
+      activeRun: Schema.optionalKey(Schema.NullOr(WorkReportRun)),
+    }),
+  ),
   observability: Schema.optionalKey(
     Schema.Struct({
       otlpTracesUrl: Schema.optionalKey(TrimmedString),
