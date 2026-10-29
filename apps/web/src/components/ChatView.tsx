@@ -322,6 +322,7 @@ import {
 import {
   deriveLatestContextWindowSnapshot,
   latestProviderTurnTokenUsage,
+  tokenUsageByRunId,
 } from "../lib/contextWindow";
 import {
   MOBILE_COMPOSER_VIEW_TRANSITION_NAME,
@@ -529,6 +530,10 @@ export default function ChatView(props: ChatViewProps) {
     serverProjection?.providerTurns ?? [],
     serverProjection,
     activeProviderThread,
+  );
+  const contextUsageByRunId = tokenUsageByRunId(
+    serverProjection?.attempts ?? [],
+    serverProjection?.providerTurns ?? [],
   );
   const serverVisibleTurnItems = useQuietThreadVisibleTurnItems(routeThreadDetailRef);
   const serverThreadHistory = useThreadHistory(routeThreadDetailRef);
@@ -3300,6 +3305,7 @@ export default function ChatView(props: ChatViewProps) {
                 footer={paintOnlyDisplayedTimeline ? null : timelineFooter}
                 listRef={legendListRef}
                 runs={paintOnlyDisplayedTimeline ? [] : (serverProjection?.runs ?? [])}
+                {...(paintOnlyDisplayedTimeline ? {} : { contextUsageByRunId })}
                 latestRun={paintOnlyDisplayedTimeline ? null : activeActivityRun}
                 announcedRun={
                   paintOnlyDisplayedTimeline

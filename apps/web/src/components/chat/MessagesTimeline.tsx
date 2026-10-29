@@ -3,7 +3,10 @@ import { ThreadFindTimelineContext } from "./ThreadFindProvider";
 import { MarkdownFindContext } from "./markdownFindContext";
 import { useChatCanvas } from "./ChatCanvasContext";
 import { WorkLogBlock } from "./WorkLog";
-import type { WorktreeSetupSnapshot } from "@t3tools/contracts";
+import type {
+  OrchestrationV2ProviderTurnTokenUsage,
+  WorktreeSetupSnapshot,
+} from "@t3tools/contracts";
 import { deriveTimelineMinimapItems } from "./timelineMinimapItems";
 import {
   type AssistantCitation,
@@ -182,6 +185,8 @@ const TIMELINE_MAINTAIN_SCROLL_AT_END = {
   },
 } as const satisfies MaintainScrollAtEndOptions;
 const EMPTY_RUN_IDS: ReadonlySet<RunId> = new Set();
+const EMPTY_CONTEXT_USAGE_BY_RUN_ID: ReadonlyMap<RunId, OrchestrationV2ProviderTurnTokenUsage> =
+  new Map();
 const TIMELINE_MAINTAIN_SCROLL_AT_END_SMOOTH = {
   ...TIMELINE_MAINTAIN_SCROLL_AT_END,
   animated: true,
@@ -269,6 +274,8 @@ interface MessagesTimelineProps {
   workspaceRoot: string | undefined;
   skills?: ReadonlyArray<ServerProviderSkill>;
   runs: ReadonlyArray<HandoffTimelineRun>;
+  /** Context usage each run ended with, shown in the minimap preview. */
+  contextUsageByRunId?: ReadonlyMap<RunId, OrchestrationV2ProviderTurnTokenUsage>;
   anchorMessageId: MessageId | null;
   onAnchorReady: (messageId: MessageId, anchorIndex: number) => void;
   onAnchorSizeChanged: (messageId: MessageId, size: number) => void;
@@ -367,6 +374,7 @@ const ConversationTimeline = memo(function ConversationTimeline({
   workspaceRoot,
   skills = EMPTY_TIMELINE_SKILLS,
   runs: runsProp,
+  contextUsageByRunId = EMPTY_CONTEXT_USAGE_BY_RUN_ID,
   anchorMessageId,
   onAnchorReady,
   onAnchorSizeChanged,
@@ -1330,6 +1338,8 @@ const ConversationTimeline = memo(function ConversationTimeline({
               hasPersistentGutter={minimapHasPersistentGutter}
               hitStripWidth={minimapHitStripWidth}
               currentIndex={minimapCurrentIndex}
+              contextUsageByRunId={contextUsageByRunId}
+              timestampFormat={timestampFormat}
               stripMap={minimapStripMap}
               onWheel={forwardMinimapWheel}
               onSelect={(item) => {
