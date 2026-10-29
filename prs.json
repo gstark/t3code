@@ -52,7 +52,7 @@
         "82911d751a405e7e7690afae5bdbdcd59a21449e"
       ],
       "parent": "git-sync-before-push",
-      "parentReason": "On mine, the V2 timeline cards use recordGitAction.ts, the gitAction command and event in packages/contracts/src/orchestrationV2.ts, and dispatchGitActionRecord in orchestration-v2/Orchestrator.ts. The git-sync-before-push PR adds all of these files, so this PR must sit on top of that PR.",
+      "parentReason": "git-timeline-cards uses the V2 git-action recording from commit 29b721553b: recordGitAction.ts, the thread.git-action.record command in Orchestrator.ts, and the git-action turn item in contracts/orchestrationV2.ts. The git-sync-before-push PR (\"sync branches before push and record git actions\") adds all three files, so git-timeline-cards must stack on it.",
       "status": "open",
       "baseTag": null,
       "builtOn": null,
@@ -64,7 +64,7 @@
       "slug": "git-land-worktree",
       "number": 4,
       "title": "feat(git): land worktree changes into the base branch",
-      "body": "You had to finish a worktree thread by hand: merge, remove the worktree, then delete the branch.\n\n- \"Land\" merges the worktree branch into its base branch, then removes the worktree and its branch.\n- Land is the default Git action for worktree threads.\n- Land does not push. The completion toast has a Push button.\n- A worktree with nothing to land is cleaned up without a merge.\n- The timeline card shows each step and the merged commit range.\n\nDepends on the Git preference logic (#2) and the timeline card (#3).\n\n---\nMade with Claude Opus 5.5 (claude-opus-5-5) in Claude Code.",
+      "body": "You had to finish a worktree thread by hand: merge, remove the worktree, then delete the branch.\n\n- \"Land\" commits any changes, merges the worktree branch into its base branch in the main checkout, then removes the worktree and deletes its branch.\n- Land is the default Git action for worktree threads. If you pick another commit path from the menu, the project remembers it, and that includes \"Commit, push & PR\".\n- Land does not push. The completion toast shows the merged commit range and has a Push button.\n- A worktree with nothing to land is cleaned up without a merge.\n- Before it commits, land checks that the main checkout is clean and on the base branch. It fast-forwards the base branch from the remote first. It stops on conflicts or a diverged base and does not undo anything.\n- After a land, the thread moves to the main checkout on the base branch.\n- Progress shows the new merge and cleanup steps.\n\nStacked on pr/git-commit-preferences because land extends its per-project commit preference logic.\n\n---\nKept in sync from mine by fork-prs.",
       "commits": [
         "ab72ac756eafac279a11e25c073e0c69c19bc0df",
         "f7aed855e428c19b724c8378346be02ecfa0e3de",
@@ -72,13 +72,18 @@
         "ea5a463ec313fb9c83e7f8a89e790f100ec4439b"
       ],
       "parent": "git-commit-preferences",
-      "parentReason": "The land UI in GitActionsControl.logic.ts and GitActionsControl.tsx is built on the commit-preference code from 7bc6bd48cc (\"add a commit and push preference\") and cc78342121 (\"add a commit-only preference\"). That code comes from git-commit-preferences, and that PR changes the same files.",
+      "parentReason": "The conflicts in GitActionsControl.logic.ts and GitActionsControl.tsx come from git-commit-preferences, which the build skipped (it used v0.1.3). The conflicts in packages/contracts/src/git.ts and apps/server/src/ws.ts do not come from any candidate. They come from the GitActionActivityPayload split and the appendGitActionActivity context. Both belong to git-timeline-cards, and git-timeline-cards stacks on git-land-worktree. A parent cannot fix that cycle, so Gavin must change mine.",
       "status": "open",
-      "baseTag": null,
-      "builtOn": null,
-      "head": null,
-      "applied": [],
-      "stale": "drift: In apps/server/src/git/GitManager.test.ts, the two land tests from this PR (\"lands … into main without pushing\" and the \"Cleaned up worktree\" test) call runGit(remoteDir, [\"--git-dir=.\", \"rev-parse\", \"main\"]) on mine, but the PR has [\"rev-parse\", \"main\"]. Only the v0.1.3 merge commit 057af03e2e made that change, and no PR owns it. Should this PR take it? If yes, put the \"--git-dir=.\" change for these tests in a git-land-worktree commit on mine (for example, fold it into ea5a463ec3) so the PR picks it up."
+      "baseTag": "v0.1.3",
+      "builtOn": "6e5a6e7901a2bb8e0a03a24210b9427353d04aef",
+      "head": "62b7399a141aee607e403db3d023ba906e334595",
+      "applied": [
+        "ab72ac756eafac279a11e25c073e0c69c19bc0df",
+        "f7aed855e428c19b724c8378346be02ecfa0e3de",
+        "3202eab666f8bafaa26f6c8e8a48fe35ec6dafd5",
+        "ea5a463ec313fb9c83e7f8a89e790f100ec4439b"
+      ],
+      "stale": null
     },
     {
       "slug": "git-failure-reasons",
@@ -382,7 +387,7 @@
       "builtOn": null,
       "head": null,
       "applied": [],
-      "stale": "git-sync-before-push needs GitActionActivityPayload from git-timeline-cards (commit 82911d751a on mine), but git-timeline-cards has no PR in fork-prs. Do you want to add a fork-prs feature entry for git-timeline-cards so that git-sync-before-push can depend on it? Or do you want to change apps/server/src/ws.ts and packages/contracts/src/git.ts on mine so that git-sync-before-push no longer needs that payload?"
+      "stale": "git-sync-before-push needs GitActionActivityPayload and GIT_ACTION_ACTIVITY_KIND in packages/contracts/src/git.ts. Commit 82911d751a (git-timeline-cards) adds them on mine, but git-timeline-cards is not a tracked PR. Do you want to add git-timeline-cards as a PR so that git-sync-before-push can stack on it? Or do you want to fold commit 82911d751a into the git-sync-before-push feature on mine?"
     },
     {
       "slug": "worktree-complete-recipes",
@@ -393,13 +398,13 @@
         "ade106c6b8a94cab7afedfa6404f69c0ec32d609"
       ],
       "parent": "git-land-worktree",
-      "parentReason": "The PR uses prepareLand and removeWorktree from git-land-worktree (apps/server/src/git/GitManager.ts, ab72ac756e). It also uses WORKTREE_RECIPE from justfile-worktree-setup (apps/server/src/project/ProjectSetupScriptRunner.ts, 7ac5a8e6dd). No single candidate PR holds both features. git-land-worktree is the parent because it supplies the larger part of the code. The build still fails until WORKTREE_RECIPE is in the stack too.",
+      "parentReason": "worktree-complete-recipes changes the landing flow in apps/server/src/git/GitManager.ts and GitManager.test.ts. git-land-worktree adds that flow, so those files conflict on the upstream tag. The PR also changes the justfile worktree-recipe code in apps/server/src/project/ProjectSetupScriptRunner.ts and docs/user/project-settings.md, and justfile-worktree-setup adds that code. No single candidate holds both features. With git-land-worktree as the only parent, the ProjectSetupScriptRunner.ts conflict stays until justfile-worktree-setup is also in the PR's ancestry.",
       "status": "open",
       "baseTag": null,
       "builtOn": null,
       "head": null,
       "applied": [],
-      "stale": "Its parent git-land-worktree failed to build."
+      "stale": "The \"worktree-complete-recipes\" PR needs the justfile-recipes feature (ad59b8c49c and 7ac5a8e6dd on mine), but its base is only the land-to-main-branch PR. Can you make this PR also depend on the justfile worktree-recipe PR, so that its base has `@t3tools/shared/justfile` and `hasWorktreeRecipe`?"
     },
     {
       "slug": "history-collapse",
@@ -470,13 +475,13 @@
         "b45fdda0acf24dc4b738bc675a54e7df361e9a24"
       ],
       "parent": "git-land-worktree",
-      "parentReason": "The PR changes the land code in apps/server/src/git/GitManager.ts and GitManager.test.ts. The PR \"git-land-worktree\" adds that code, and the upstream tag does not have it.",
+      "parentReason": "Commit 49557d884e changes the land code in apps/server/src/git/GitManager.ts. Commit ab72ac756e (\"land worktree changes into the main branch\") added that code, and the git-land-worktree PR holds it.",
       "status": "open",
       "baseTag": null,
       "builtOn": null,
       "head": null,
       "applied": [],
-      "stale": "Its parent git-land-worktree failed to build."
+      "stale": "The PR \"land-without-base-checkout\" changes apps/server/src/git/GitManager.ts, and it needs the land step that rebases in the worktree (rebaseOnto plus the rebaseConflict error) from another fork feature. Must this PR stack on the PR that adds that rebase step? If not, what must you change on mine so that this commit stands alone on the upstream tag?"
     },
     {
       "slug": "sidebar-active-rail",
@@ -600,7 +605,7 @@
       "builtOn": null,
       "head": null,
       "applied": [],
-      "stale": "drift: Commit 036b8aece7 (\"fix(server): scope workspace servers to the requested thread\") is still pending classification, but most of it fixes this PR's own feature. On mine, it removes `cwd` from `WorkspaceServersInput` in packages/contracts/src/workspaceServers.ts and from apps/web/src/components/chat/WorkspaceServersSection.tsx and ThreadDetailsPanel.tsx. It adds `threadWorkspace`, the ProjectionStore/ProjectStore dependencies, and `URL.parse` for malformed redirects to apps/server/src/workspaceServers/WorkspaceServers.ts. It adds the malformed-redirect test to WorkspaceServers.test.ts and the `WorkspaceServers.layer` ProjectionStoreV2/ProjectStore provide in apps/server/src/server.ts. The PR does not have these hunks. The same commit also changes apps/server/src/process/agentScope.ts, TimelineWorkEntryRow.tsx and walkthroughs/support/environment.ts, which are not part of workspace-servers. Must the workspace-servers parts go into this PR? If yes, split 036b8aece7 on mine and keep those parts with the workspace-servers commits, so the rest can go to its own owner."
+      "stale": "drift: The PR is missing the thread-scoping fix from commit 036b8aece7 (\"scope workspace servers to the requested thread\"). That commit is still \"pending classification\". On mine, it changes these files:\n- apps/server/src/workspaceServers/WorkspaceServers.ts: it adds threadWorkspace and replaces input.cwd. It also adds URL.parse for a malformed Location.\n- WorkspaceServers.test.ts: it adds the malformed-redirect test.\n- server.ts: it gives the WorkspaceServers layer ProjectionStoreV2 and ProjectStore.\n- packages/contracts/src/workspaceServers.ts: it drops cwd.\n- WorkspaceServersSection.tsx and ThreadDetailsPanel.tsx: they drop the cwd prop.\nThe same commit also changes apps/server/src/process/agentScope.ts and TimelineWorkEntryRow.tsx, which are not part of this feature. Must this commit belong to PR workspace-servers? If yes, you must split 036b8aece7 on mine first. One commit must hold only the workspace-servers changes, and a separate commit must hold the agentScope and TimelineWorkEntryRow changes. Then I can assign the first commit to workspace-servers."
     },
     {
       "slug": "command-active-row-highlight",
@@ -767,7 +772,22 @@
       "question": "walkthroughs/support/cursor.ts and explore.ts come from fork commit b774c6ac94 'chore: add scripted feature walkthroughs', and no PR has that commit. Are the walkthroughs fork-only, or must they get a new PR?"
     }
   ],
-  "stacks": [],
+  "stacks": [
+    {
+      "number": 38,
+      "slugs": [
+        "git-commit-preferences",
+        "git-land-worktree"
+      ]
+    },
+    {
+      "number": 37,
+      "slugs": [
+        "justfile-recipes-menu",
+        "justfile-worktree-setup"
+      ]
+    }
+  ],
   "ports": {
     "tag": "v0.1.3",
     "files": [
