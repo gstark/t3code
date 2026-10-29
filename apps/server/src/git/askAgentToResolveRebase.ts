@@ -26,7 +26,7 @@ function rebaseConflictPrompt(conflict: GitRebaseConflict): string {
 export const askAgentToResolveRebase = Effect.fn("askAgentToResolveRebase")(
   function* (input: { readonly threadId: ThreadId; readonly conflict: GitRebaseConflict }) {
     const engine = yield* Orchestrator.OrchestratorV2;
-    const id = yield* (yield* Crypto.Crypto).randomUUIDv4;
+    const id = yield* (yield* Crypto.Crypto).randomUUIDv4();
     const text = rebaseConflictPrompt(input.conflict);
     yield* engine.dispatch({
       type: "message.dispatch",
