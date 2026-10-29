@@ -1393,7 +1393,7 @@ function settleSupersededReasoning(entries: ReadonlyArray<TimelineEntry>) {
  * Each history collapse hides the entries since the previous one. Its row moves
  * ahead of them, so an expanded collapse reads as a header over its history.
  */
-export function applyHistoryCollapses(
+function applyHistoryCollapses(
   entries: ReadonlyArray<TimelineEntry>,
   expandedIds: ReadonlySet<string> | undefined,
 ): ReadonlyArray<TimelineEntry> {
