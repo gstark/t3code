@@ -450,6 +450,7 @@ describe("V2 session presentation", () => {
       ...base("item-command", 2),
       type: "command_execution" as const,
       input: "sleep 1",
+      intent: "Wait for the server",
       output: "done",
       exitCode: 0,
     } satisfies OrchestrationV2TurnItem;
@@ -541,6 +542,7 @@ describe("V2 session presentation", () => {
       expect(commandEntry.entry.projectedItem).toBe(visibleTurnItems[2]);
       expect(commandEntry.entry.structuredPayload).toBe(commandItem);
       expect(commandEntry.entry.command).toBe(commandItem.input);
+      expect(commandEntry.entry.intent).toBe("Wait for the server");
       expect(commandEntry.entry.detail).toBeUndefined();
     }
     const errorEntry = entries[5];

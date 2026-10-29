@@ -16,8 +16,8 @@ import {
 import type { HandoffTimelineRun } from "@t3tools/client-runtime/handoff";
 import { renderCodexDirectivesForCopy } from "@t3tools/shared/codexMarkdownDirectives";
 import {
+  commandChainLabel,
   commandDisplayText,
-  commandProgramName,
 } from "@t3tools/client-runtime/work-log/command-label";
 import {
   liveActivityToolStatus,
@@ -142,6 +142,7 @@ export function workEntryDisplayLabel(entry: WorkLogEntry, workspaceRoot: string
   }
   const toolPresentation = resolveWorkEntryToolPresentation(entry);
   if (toolPresentation) return toolPresentation.displayName;
+  if (entry.intent) return entry.intent;
   if (entry.command?.trim()) return commandDisplayText(entry.command);
   const action = toolGroupAction(entry);
   if (action === "code-search" || action === "search") {
@@ -251,6 +252,7 @@ export function liveWorkEntryLabel(
     toolLifecycleStatus: status,
   });
   if (toolPresentation) return toolPresentation.displayName;
+  if (entry.intent) return entry.intent;
   const command = entry.command?.trim();
   if (command) {
     const verb =
@@ -263,7 +265,7 @@ export function liveWorkEntryLabel(
             : status === "stopped"
               ? "Stopped"
               : "Ran";
-    return `${verb} ${commandProgramName(command) ?? "command"}`;
+    return `${verb} ${commandChainLabel(command)}`;
   }
   return workEntryDisplayLabel(entry, workspaceRoot);
 }

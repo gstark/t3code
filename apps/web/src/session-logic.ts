@@ -75,6 +75,8 @@ export interface WorkLogEntry {
   readonly detail?: string;
   readonly command?: string;
   readonly rawCommand?: string;
+  /** The agent's own reason for running the tool; the label when present. */
+  readonly intent?: string;
   readonly changedFiles?: ReadonlyArray<string>;
   readonly tone: "thinking" | "tool" | "info" | "error";
   readonly toolTitle?: string;
@@ -435,6 +437,7 @@ function projectedWorkEntry(row: OrchestrationV2ProjectedTurnItem): WorkLogEntry
         label: title ?? "Ran command",
         command: item.input,
         rawCommand: item.input,
+        ...(item.intent ? { intent: item.intent } : {}),
         toolTitle: title ?? "Command",
         toolData: item,
       };

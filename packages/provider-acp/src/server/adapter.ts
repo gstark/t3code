@@ -3804,10 +3804,16 @@ export const makeAcpAdapterV2 = Effect.fn("makeAcpAdapterV2")(function* (
               }
               case "execute": {
                 const exitCode = acpProjectedCommandExitCode(status, rawOutput);
+                // ACP agents such as Grok put their reason for a shell command in `rawInput.description`.
+                const intent =
+                  typeof rawInputRecord?.description === "string"
+                    ? rawInputRecord.description.trim()
+                    : "";
                 turnItem = {
                   ...base,
                   type: "command_execution",
                   input: toolCall.command ?? monitorCommand ?? toolCall.title ?? "Command",
+                  ...(intent ? { intent } : {}),
                   ...(textFromUnknown(rawOutput) === undefined
                     ? {}
                     : { output: textFromUnknown(rawOutput) }),
