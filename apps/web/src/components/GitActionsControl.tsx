@@ -1,5 +1,6 @@
 import { ThreadDetailsControl } from "./chat/ThreadDetailsControl";
 import { useAtomMount, useAtomValue } from "@effect/atom-react";
+import { describeGitActionError } from "@t3tools/client-runtime/errors";
 import {
   AuthOrchestrationOperateScope,
   AuthSourceControlWriteScope,
@@ -1260,7 +1261,7 @@ export default function GitActionsControl({
         stackedThreadToast({
           type: "error",
           title: "Action failed",
-          description: error instanceof Error ? error.message : "An error occurred.",
+          description: describeGitActionError(error, "An error occurred."),
           timeout: errorToastTiming.timeout,
           ...(scopedToastData !== undefined ? { data: scopedToastData } : {}),
         }),

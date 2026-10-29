@@ -40,6 +40,7 @@ import { parseT3ProjectFile } from "@t3tools/shared/t3ProjectFile";
 import { resolveProjectFileBackedSetting } from "@t3tools/shared/projectSettings";
 import { gitCommandDuration, gitCommandsTotal, withMetrics } from "../observability/Metrics.ts";
 import * as GitVcsDriver from "./GitVcsDriver.ts";
+import { describeGitFailure } from "./gitFailureDetail.ts";
 import { removeEmptyDirectory } from "./removeEmptyDirectory.ts";
 import { explicitBareRepositoryEnv, gitConfigEnv } from "./VcsProcess.ts";
 import { removeLinkedWorktree } from "./worktreeRemoval.ts";
@@ -471,9 +472,15 @@ const GIT_FAILURE_REASON_DETAILS: Partial<Record<GitCommandFailureReason, string
     "The remote has commits this branch doesn't have. Pull or rebase, then push again.",
 };
 
-function gitFailureDetail(reason: GitCommandFailureReason | null): string {
+function gitFailureDetail(
+  reason: GitCommandFailureReason | null,
+  stderr: string,
+  fallback?: string,
+): string {
   return (
     (reason === null ? undefined : GIT_FAILURE_REASON_DETAILS[reason]) ??
+    describeGitFailure(stderr) ??
+    fallback ??
     "Git command exited with a non-zero status."
   );
 }
@@ -1035,7 +1042,7 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
           return yield* new GitCommandError({
             ...gitCommandContext(commandInput),
             ...(reason === null ? {} : { reason }),
-            detail: gitFailureDetail(reason),
+            detail: gitFailureDetail(reason, stderr.text),
             exitCode,
             stdoutLength: stdout.text.length,
             stderrLength: stderr.text.length,
@@ -1127,7 +1134,7 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
           new GitCommandError({
             ...gitCommandContext({ operation, cwd, args }),
             ...(reason === null ? {} : { reason }),
-            detail: options.fallbackErrorDetail ?? gitFailureDetail(reason),
+            detail: gitFailureDetail(reason, result.stderr, options.fallbackErrorDetail),
             ...(result.exitCode === null ? {} : { exitCode: result.exitCode }),
             stdoutLength: result.stdout.length,
             stderrLength: result.stderr.length,

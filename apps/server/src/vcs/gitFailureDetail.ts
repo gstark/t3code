@@ -1,0 +1,66 @@
+/**
+ * Maps Git stderr to fixed text, because stderr can hold credentials and remote URLs.
+ * Unknown failures return undefined, so callers keep their generic detail. Push
+ * rejections other than stale info are classified in GitVcsDriverCore.
+ */
+const GIT_FAILURE_DETAILS: ReadonlyArray<{
+  readonly patterns: ReadonlyArray<string>;
+  readonly detail: string;
+}> = [
+  {
+    patterns: ["stale info"],
+    detail: "Push rejected: the remote branch changed since the last fetch. Fetch, then try again.",
+  },
+  {
+    patterns: [
+      "authentication failed",
+      "could not read username",
+      "could not read password",
+      "permission denied (publickey)",
+      "invalid username or password",
+      "terminal prompts disabled",
+    ],
+    detail: "Git could not sign in to the remote. Check your credentials or SSH key.",
+  },
+  {
+    patterns: ["repository not found", "does not appear to be a git repository"],
+    detail: "The remote repository was not found, or you do not have access to it.",
+  },
+  {
+    patterns: [
+      "could not resolve host",
+      "connection timed out",
+      "connection refused",
+      "network is unreachable",
+      "failed to connect to",
+    ],
+    detail: "Git could not reach the remote. Check your network connection.",
+  },
+  {
+    patterns: ["would be overwritten by"],
+    detail: "Local changes would be overwritten. Commit or stash them, then try again.",
+  },
+  {
+    patterns: ["divergent branches", "not possible to fast-forward"],
+    detail: "This branch and its remote have diverged. Merge or rebase, then try again.",
+  },
+  {
+    patterns: ["conflict ("],
+    detail: "The merge stopped with conflicts. Resolve them, then try again.",
+  },
+  {
+    patterns: ["couldn't find remote ref"],
+    detail: "The remote branch does not exist.",
+  },
+  {
+    patterns: ["index.lock"],
+    detail: "Another Git process is using this repository. Wait for it to finish, then try again.",
+  },
+];
+
+export function describeGitFailure(stderr: string): string | undefined {
+  const normalized = stderr.toLowerCase();
+  return GIT_FAILURE_DETAILS.find(({ patterns }) =>
+    patterns.some((pattern) => normalized.includes(pattern)),
+  )?.detail;
+}
