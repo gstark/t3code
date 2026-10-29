@@ -1,6 +1,5 @@
 import type { EnvironmentId } from "@t3tools/contracts";
 import { parseJustfileRecipes, type JustRecipe } from "@t3tools/shared/justfile";
-import { useMemo } from "react";
 
 import { useProjectFileQuery } from "~/components/files/projectFilesQueryState";
 
@@ -24,8 +23,5 @@ export function useJustfileRecipes(
   );
   const data = lower.data ?? upper.data;
   const contents = data && !data.truncated ? data.contents : null;
-  return useMemo(
-    () => (contents === null ? NO_RECIPES : parseJustfileRecipes(contents)),
-    [contents],
-  );
+  return contents === null ? NO_RECIPES : parseJustfileRecipes(contents);
 }
