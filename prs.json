@@ -1,0 +1,1030 @@
+{
+  "version": 1,
+  "prs": [
+    {
+      "slug": "command-palette-worktrees",
+      "number": 1,
+      "title": "feat(web): open command palette threads and actions in a new worktree",
+      "body": "A new thread from the command palette always started in the main checkout.\n\n- The \"new thread in project\" rows can start the thread in a new worktree.\n- When you hold Shift, each row that supports it shows \"New worktree\". Its jump shortcut changes from ⌘1 to ⇧⌘1.\n- Shift+Enter, Shift+click, and ⇧⌘1 to ⇧⌘9 run the worktree action.\n- The palette footer shows the Shift hint when the list has rows that can open in a worktree.\n\n---\nKept in sync from mine by fork-prs.",
+      "commits": [
+        "ab78450290a1cd81ca321927523ae46f6d280a84",
+        "612dfa98e68184319f6c6e60863281cde66895af"
+      ],
+      "parent": null,
+      "parentReason": null,
+      "status": "open",
+      "baseTag": "v0.1.3",
+      "builtOn": "d2c440312e5f39d59827ed466838a623516454d6",
+      "head": "a601f40d24c9cb3f26dbde412c6f87376bb37d1a",
+      "applied": [
+        "ab78450290a1cd81ca321927523ae46f6d280a84",
+        "612dfa98e68184319f6c6e60863281cde66895af"
+      ],
+      "stale": null
+    },
+    {
+      "slug": "git-commit-preferences",
+      "number": 2,
+      "title": "feat(web): remember commit-only and commit-and-push as the default Git action",
+      "body": "The Git button always offered the full commit, push, and pull request flow.\n\n- The Git button remembers the last commit path you used: \"Commit\", \"Commit & push\", or \"Commit, push & PR\".\n- The choice is saved in local storage for each project. Worktree threads of the same project share it.\n- The Git menu shows the commit paths that the button does not use. Pick one to change the default.\n- If you choose \"Commit\" or \"Commit & push\", the button pushes ahead commits without a pull request. It also does not suggest a pull request for a synced branch.\n\nTests are in `GitActionsControl.logic.test.ts`.\n\n---\nKept in sync from mine by fork-prs.",
+      "commits": [
+        "7bc6bd48cc951809254453d20f81bd47313a8407",
+        "cc783421215c8ca7e48319dcffc7da0fddab9157"
+      ],
+      "parent": null,
+      "parentReason": null,
+      "status": "open",
+      "baseTag": "v0.1.3",
+      "builtOn": "d2c440312e5f39d59827ed466838a623516454d6",
+      "head": "6e5a6e7901a2bb8e0a03a24210b9427353d04aef",
+      "applied": [
+        "7bc6bd48cc951809254453d20f81bd47313a8407",
+        "cc783421215c8ca7e48319dcffc7da0fddab9157"
+      ],
+      "stale": null
+    },
+    {
+      "slug": "git-timeline-cards",
+      "number": 3,
+      "title": "feat(web): show Git actions in the thread timeline",
+      "body": "Commits, pushes, and pull requests that you start from a thread left no record in the thread.\n\n- After a stacked Git action completes, the server writes a `git.action.completed` thread activity with the action result. The contract is in `packages/contracts/src/git.ts`.\n- The timeline shows the activity as a card that you can expand to see the details.\n\nThis PR is stacked on #2 for a linear history. It has no code dependency on it.\n\n---\nMade with Claude Opus 5.5 (claude-opus-5-5) in Claude Code.",
+      "commits": [
+        "82911d751a405e7e7690afae5bdbdcd59a21449e"
+      ],
+      "parent": "git-sync-before-push",
+      "parentReason": "On mine, the V2 timeline cards use recordGitAction.ts, the gitAction command and event in packages/contracts/src/orchestrationV2.ts, and dispatchGitActionRecord in orchestration-v2/Orchestrator.ts. The git-sync-before-push PR adds all of these files, so this PR must sit on top of that PR.",
+      "status": "open",
+      "baseTag": null,
+      "builtOn": null,
+      "head": null,
+      "applied": [],
+      "stale": "Its parent git-sync-before-push failed to build."
+    },
+    {
+      "slug": "git-land-worktree",
+      "number": 4,
+      "title": "feat(git): land worktree changes into the base branch",
+      "body": "You had to finish a worktree thread by hand: merge, remove the worktree, then delete the branch.\n\n- \"Land\" merges the worktree branch into its base branch, then removes the worktree and its branch.\n- Land is the default Git action for worktree threads.\n- Land does not push. The completion toast has a Push button.\n- A worktree with nothing to land is cleaned up without a merge.\n- The timeline card shows each step and the merged commit range.\n\nDepends on the Git preference logic (#2) and the timeline card (#3).\n\n---\nMade with Claude Opus 5.5 (claude-opus-5-5) in Claude Code.",
+      "commits": [
+        "ab72ac756eafac279a11e25c073e0c69c19bc0df",
+        "f7aed855e428c19b724c8378346be02ecfa0e3de",
+        "3202eab666f8bafaa26f6c8e8a48fe35ec6dafd5",
+        "ea5a463ec313fb9c83e7f8a89e790f100ec4439b"
+      ],
+      "parent": "git-commit-preferences",
+      "parentReason": "The land UI in GitActionsControl.logic.ts and GitActionsControl.tsx is built on the commit-preference code from 7bc6bd48cc (\"add a commit and push preference\") and cc78342121 (\"add a commit-only preference\"). That code comes from git-commit-preferences, and that PR changes the same files.",
+      "status": "open",
+      "baseTag": null,
+      "builtOn": null,
+      "head": null,
+      "applied": [],
+      "stale": "drift: In apps/server/src/git/GitManager.test.ts, the two land tests from this PR (\"lands … into main without pushing\" and the \"Cleaned up worktree\" test) call runGit(remoteDir, [\"--git-dir=.\", \"rev-parse\", \"main\"]) on mine, but the PR has [\"rev-parse\", \"main\"]. Only the v0.1.3 merge commit 057af03e2e made that change, and no PR owns it. Should this PR take it? If yes, put the \"--git-dir=.\" change for these tests in a git-land-worktree commit on mine (for example, fold it into ea5a463ec3) so the PR picks it up."
+    },
+    {
+      "slug": "git-failure-reasons",
+      "number": 5,
+      "title": "fix(vcs): show the real reason when a Git action fails",
+      "body": "A failed Git action showed \"Git command exited with a non-zero status\" or an internal operation name. You could not tell a rejected push from a network outage.\n\n- The server matches known stderr patterns to fixed explanations and puts them in the `GitCommandError` detail. It never forwards raw stderr.\n- A matched explanation now takes priority over a caller's fallback detail. The fallback applies only when no reason or pattern matches.\n- Web and mobile show the explanation in the toast through `describeGitActionError` in `client-runtime`.\n\nTests are in `gitFailureDetail.test.ts`, `GitVcsDriverCore.test.ts`, and `gitAction.test.ts`.\n\nMade with Claude Opus 5.5 (claude-opus-5-5) in Claude Code.\n\n---\nKept in sync from mine by fork-prs.",
+      "commits": [
+        "5788b513cc5d74010acc00e1702521a1c12f8411",
+        "4799bb675c1ff435bc8ca40419619f0933f0ae0e"
+      ],
+      "parent": null,
+      "parentReason": null,
+      "status": "open",
+      "baseTag": "v0.1.3",
+      "builtOn": "d2c440312e5f39d59827ed466838a623516454d6",
+      "head": "cb48bc6e698622b1b627d1c721188f227fafa488",
+      "applied": [
+        "5788b513cc5d74010acc00e1702521a1c12f8411",
+        "4799bb675c1ff435bc8ca40419619f0933f0ae0e"
+      ],
+      "stale": null
+    },
+    {
+      "slug": "justfile-recipes-menu",
+      "number": 6,
+      "title": "feat(web): run justfile recipes from the actions menu",
+      "body": "Projects with a justfile had to copy each recipe into project actions by hand.\n\n- The thread details card's actions menu lists the public recipes from the workspace root `justfile`, or `Justfile` when `justfile` is missing. No setup is needed.\n- A recipe runs in the terminal drawer.\n- A recipe that needs arguments is typed into the terminal without being run, so you can add the arguments.\n- A recipe that is already saved as a `just <name>` action shows once, as that action.\n- The parser is `packages/shared/src/justfile.ts` and has tests.\n- `docs/user/project-settings.md` describes the feature.\n\nPorted to `base/upstream-2026-10-13`. Upstream moved the actions menu from the thread header to the thread details card, so the recipes now attach there.\n\n---\nKept in sync from mine by fork-prs.",
+      "commits": [
+        "ad59b8c49cbd2445c787e1acd79a61d3d56bcdba",
+        "7f89ffc9ce1b5032de81847533df5a2668972834"
+      ],
+      "parent": null,
+      "parentReason": null,
+      "status": "open",
+      "baseTag": "v0.1.3",
+      "builtOn": "d2c440312e5f39d59827ed466838a623516454d6",
+      "head": "cd8cd6286b3c498c34d1a1e44c030a221477c3b5",
+      "applied": [
+        "ad59b8c49cbd2445c787e1acd79a61d3d56bcdba",
+        "7f89ffc9ce1b5032de81847533df5a2668972834"
+      ],
+      "stale": null
+    },
+    {
+      "slug": "justfile-worktree-setup",
+      "number": 7,
+      "title": "feat(server): run the justfile worktree recipe in new worktrees",
+      "body": "A repository had no way to prepare a new worktree through its justfile.\n\n- If the justfile has a public `worktree` recipe that takes no arguments, a new worktree runs `just worktree`.\n- The recipe runs after the project setup action, or by itself when the project has no setup action.\n- The recipe runs only on worktree setup. It does not run when a thread settles, although upstream's runner now has both triggers.\n\nUses the parser from #6. Tests are in `ProjectSetupScriptRunner.test.ts`.\n\nStacked on pr/justfile-recipes-menu because it reads the justfile with the `parseJustfileRecipes` parser that PR adds.\n\n---\nKept in sync from mine by fork-prs.",
+      "commits": [
+        "7ac5a8e6dd1b6343bef9a498bf7280672b9c5029"
+      ],
+      "parent": "justfile-recipes-menu",
+      "parentReason": "Uses parseJustfileRecipes from packages/shared/src/justfile.ts, which justfile-recipes-menu adds. Commit 7ac5a8e6dd imports it from \"@t3tools/shared/justfile\". A second problem remains. On mine, ProjectSetupScriptRunner.ts imports hasRunnableJustRecipe from apps/server/src/project/justfileRecipe.ts. Only the later worktree-complete commit (ade106c6b8, worktree-complete-recipes) creates that file. worktree-complete-recipes also changes ProjectSetupScriptRunner.ts, so it cannot be this PR's parent. Gavin must move the creation of justfileRecipe.ts (hasRunnableJustRecipe) into the justfile-worktree-setup commit on mine.",
+      "status": "open",
+      "baseTag": "v0.1.3",
+      "builtOn": "cd8cd6286b3c498c34d1a1e44c030a221477c3b5",
+      "head": "b13d151babf11b328bee1c644fcf8bb4dd34cd26",
+      "applied": [
+        "7ac5a8e6dd1b6343bef9a498bf7280672b9c5029"
+      ],
+      "stale": null
+    },
+    {
+      "slug": "command-labels",
+      "number": 8,
+      "title": "feat: label commands with the agent's stated intent and the full program chain",
+      "body": "The live work header named only the first program, so `cat f | tr ...; bash x.sh` showed as \"Running cat\".\n\n- The label names every top-level program in the chain, on web and mobile.\n- Claude's Bash tool sends a short description of why it runs a command. The adapter dropped it. It is now a typed `intent` field on `command_execution` turn items and on tool lifecycle payloads.\n- Web uses the intent as the label for the live header, group rows, and single rows. Mobile uses it as the activity row summary. The full command stays in the expanded row.\n\nPer provider: Claude shows the intent. The other adapters do not set it yet, so they keep the program chain label.\n\nMade with Claude Opus 5.5 (claude-opus-5-5) in Claude Code.\n\n---\nKept in sync from mine by fork-prs.",
+      "commits": [
+        "df00d0b1ea9e626cd27f30f58a04a87e6a12ef98",
+        "996e6a64e75412dda8060686662bbef44cb1f7a4"
+      ],
+      "parent": null,
+      "parentReason": null,
+      "status": "open",
+      "baseTag": "v0.1.3",
+      "builtOn": "d2c440312e5f39d59827ed466838a623516454d6",
+      "head": "a53128e8afa31d947c6401b21a3c7e8a409c749e",
+      "applied": [
+        "df00d0b1ea9e626cd27f30f58a04a87e6a12ef98",
+        "996e6a64e75412dda8060686662bbef44cb1f7a4"
+      ],
+      "stale": null
+    },
+    {
+      "slug": "tool-call-rows-setting",
+      "number": 9,
+      "title": "feat: add a setting to show each tool call as its own row",
+      "body": "Consecutive tool calls always folded into one summary row, which hid the steps.\n\n- A new \"Group tool calls\" setting is on by default and is saved for each device.\n- On web and desktop it is in Settings → Chat. On mobile it is in Settings → General, in the Conversation section.\n- When the setting is off, each call has its own row, and only a running call shows as live.\n\n---\nMade with Claude Opus 5.5 (claude-opus-5-5) in Claude Code.\n\n---\nKept in sync from mine by fork-prs.",
+      "commits": [
+        "f9f2fa06760e59d48d606bf9cff12802e3c9307a"
+      ],
+      "parent": null,
+      "parentReason": null,
+      "status": "open",
+      "baseTag": "v0.1.3",
+      "builtOn": "d2c440312e5f39d59827ed466838a623516454d6",
+      "head": "cab7afad9a8e4ff1a6ad5445d9569cd10015989d",
+      "applied": [
+        "f9f2fa06760e59d48d606bf9cff12802e3c9307a"
+      ],
+      "stale": null
+    },
+    {
+      "slug": "expanded-work-details",
+      "number": 10,
+      "title": "fix(timeline): show full expanded tool details and scroll them into view",
+      "body": "Expanded tool call details had a height limit on web and a nested scroller on mobile, so long output was hard to read.\n\n- The height limit is removed on web. On mobile, the details render inline instead of in a nested scroller.\n- When you expand a row or a group whose details open below the fold, the details scroll into view. This also works inside an expanded group.\n- An expanded group with only one entry shows that entry's details directly. The group header already names the entry, so there is no second row to expand.\n- Command rows use the command icon instead of the terminal icon on web and mobile.\n\n---\nKept in sync from mine by fork-prs.",
+      "commits": [
+        "477d8bfd725a7cfe3336ee8d8b5cd88876b9e6ad",
+        "3a366349af099566b4e9dc50e61c899176d0330c"
+      ],
+      "parent": null,
+      "parentReason": null,
+      "status": "open",
+      "baseTag": "v0.1.3",
+      "builtOn": "d2c440312e5f39d59827ed466838a623516454d6",
+      "head": "da9ad68dce586845308f493eb7689a7eb70f7ca9",
+      "applied": [
+        "477d8bfd725a7cfe3336ee8d8b5cd88876b9e6ad",
+        "3a366349af099566b4e9dc50e61c899176d0330c"
+      ],
+      "stale": null
+    },
+    {
+      "slug": "copy-inline-code",
+      "number": 11,
+      "title": "feat(web): copy inline code by clicking it",
+      "body": "Copying a path or command from a chat message meant selecting it by hand.\n\n- When you click inline code, its text goes to the clipboard and a copy toast shows next to it.\n- A tooltip says \"Click to copy\".\n- A drag that selects text does not copy.\n- Inline code inside a link still works as a link.\n\nMade with Claude Opus 5.5 (claude-opus-5-5) in Claude Code.\n\n---\nKept in sync from mine by fork-prs.",
+      "commits": [
+        "39f66acb1926fb31efd163a4d28019e93b372cc7"
+      ],
+      "parent": null,
+      "parentReason": null,
+      "status": "open",
+      "baseTag": "v0.1.3",
+      "builtOn": "d2c440312e5f39d59827ed466838a623516454d6",
+      "head": "78277501dc28c9a6b7b8c2cbbf8c4c6556523e32",
+      "applied": [
+        "39f66acb1926fb31efd163a4d28019e93b372cc7"
+      ],
+      "stale": null
+    },
+    {
+      "slug": "macos-dictation",
+      "number": 12,
+      "title": "feat(desktop): start macOS Dictation from the composer",
+      "body": "There was no way to dictate into the composer without the system menu.\n\n- In the macOS desktop app, the composer shows a microphone button. It focuses the composer and starts macOS Dictation. A new IPC method sends `startDictation:` to the first responder of the main window.\n- A new `composer.dictate` command can be bound in Settings → Keybindings. It has no default key.\n- `docs/user/composer.md` has a short section.\n\nThis is macOS desktop only. Web and mobile do not change.\n\nMade with Claude Opus 5.5 (claude-opus-5-5) in Claude Code.\n\n---\nKept in sync from mine by fork-prs.",
+      "commits": [
+        "b2c7b53b6574cdc7e7b179111f49950707b9b016",
+        "b33a7aa7bd4d882d883c97e80f585087d0410fe1"
+      ],
+      "parent": null,
+      "parentReason": null,
+      "status": "open",
+      "baseTag": "v0.1.3",
+      "builtOn": "d2c440312e5f39d59827ed466838a623516454d6",
+      "head": "603909613bb02bdb164dcfec7664c65cd293f583",
+      "applied": [
+        "b2c7b53b6574cdc7e7b179111f49950707b9b016",
+        "b33a7aa7bd4d882d883c97e80f585087d0410fe1"
+      ],
+      "stale": null
+    },
+    {
+      "slug": "sidebar-new-thread-slot",
+      "number": 13,
+      "title": "fix(web): keep the new-thread row in its Active slot",
+      "body": "The open new-thread draft row moved around while the sidebar list sorted or dragged.\n\n- A new `new-thread` list marker holds the open draft in the slot its thread takes after you send it, at the top of Active. The drag sorting strategy keeps the marker there.\n- The open draft now renders as `SidebarNewThreadRow` inside the sortable list. It shows \"New thread\" until the prompt has content. It reads the composer store itself, so typing re-renders only this row.\n- The draft block above the pinned threads no longer shows the open draft, and it no longer keeps a frozen copy of it. The empty-sidebar state stays hidden while the new-thread row shows.\n- `SidebarDraftRow` no longer renders its own `<li>`. Most of the `SidebarDraftBlock.tsx` diff comes from this re-indent.\n\nTests are in `Sidebar.drag.test.ts`.\n\nMade with Claude Opus 5.5 (claude-opus-5-5) in Claude Code.\n\n---\nKept in sync from mine by fork-prs.",
+      "commits": [
+        "a96469e75e9a68037cbce21fc04427013bc623ab"
+      ],
+      "parent": null,
+      "parentReason": null,
+      "status": "open",
+      "baseTag": "v0.1.3",
+      "builtOn": "d2c440312e5f39d59827ed466838a623516454d6",
+      "head": "32a96ca108d828ee9a387d750b45a1d4dd5ca1a7",
+      "applied": [
+        "a96469e75e9a68037cbce21fc04427013bc623ab"
+      ],
+      "stale": null
+    },
+    {
+      "slug": "work-report",
+      "number": 14,
+      "title": "feat(work-report): generate reports from settled threads",
+      "body": "There was no way to look back over a period of agent work.\n\n- A work report runs in its own thread. The agent uses three new MCP tools: `list_settled_threads`, `get_thread_digest`, and `complete_work_report`.\n- The agent reads the threads that settled since the last report and writes report files to a folder you choose. Each report starts where the previous one ended.\n- Suggestions focus on where agents struggled.\n- You can start a report from the command palette or from a sidebar row. The sidebar row shows while a report runs, or when threads settled and the set hours passed since the last report. Settings sets the reports folder and the hours between reports. The settings schema is in `packages/contracts/src/settings.ts`.\n\nWeb and desktop only. Mobile has no entry point. Tests are in `WorkReport.test.ts` and `workReport.logic.test.ts`.\n\nMade with Claude Opus 5.5 (claude-opus-5-5) in Claude Code.\n\n---\nKept in sync from mine by fork-prs.",
+      "commits": [
+        "84c90eaa57c0fec4f374c4094372edf54440ab76",
+        "9a8b80129b0d7a5d6d34c94a23157eb441e525a5",
+        "ea02394c2a92668cf786c2fd3cc8c96190a40688"
+      ],
+      "parent": null,
+      "parentReason": null,
+      "status": "open",
+      "baseTag": "v0.1.3",
+      "builtOn": "d2c440312e5f39d59827ed466838a623516454d6",
+      "head": "12ccfc2b14e8f81328b0674e21a549a28ba530ae",
+      "applied": [
+        "84c90eaa57c0fec4f374c4094372edf54440ab76",
+        "9a8b80129b0d7a5d6d34c94a23157eb441e525a5",
+        "ea02394c2a92668cf786c2fd3cc8c96190a40688"
+      ],
+      "stale": null
+    },
+    {
+      "slug": "effect-cleanups",
+      "number": 15,
+      "title": "docs(agents): explain where to look up Effect APIs",
+      "body": "Agents that need an Effect API often look in the root `node_modules/effect`. That directory does not exist, because pnpm nests the package under `node_modules/.pnpm/` with a hashed name.\n\nAGENTS.md now tells agents to grep `.repos/effect-smol/packages/effect/src/` for Effect APIs. It also says why the root `node_modules/effect` path does not exist.\n\n---\nKept in sync from mine by fork-prs.",
+      "commits": [
+        "f7791be1d5cee5204a913b00c54d87fd7e13c194",
+        "16be1e36076437b8aa0f366f350a48b5160a86ad"
+      ],
+      "parent": null,
+      "parentReason": null,
+      "status": "open",
+      "baseTag": "v0.1.3",
+      "builtOn": "d2c440312e5f39d59827ed466838a623516454d6",
+      "head": "1823d8eb4dc21555cb588a2a5c13771bd5551c08",
+      "applied": [
+        "f7791be1d5cee5204a913b00c54d87fd7e13c194",
+        "16be1e36076437b8aa0f366f350a48b5160a86ad"
+      ],
+      "stale": null
+    },
+    {
+      "slug": "composer-context-meter",
+      "number": 16,
+      "title": "feat(web): show context usage as a segmented bar in the active composer",
+      "body": "The context window ring is small, and you had to hover it to see how full the context is. In the active composer there is room to show the number.\n\n- When the composer is active and not compact, the meter is a bar followed by the percent and the token count, for example `12% · 117k/1m`. When the model has no known context limit, the meter shows only the token count. The resting and compact composers keep the ring.\n- The bar has four quarter cells. The gaps mark the full length and each 25% step, so a small fill still reads as a length and not as a dot. Empty cells use `muted-foreground/20`, so the track is visible. The hover popover uses the same segmented bar.\n- The fill uses the foreground color in the bar and the ring. It turns amber from 75% and red above 90%.\n- The runtime mode control shows only its icon now, to make room for the meter. Its tooltip and `aria-label` now name the mode.\n\n---\nKept in sync from mine by fork-prs.",
+      "commits": [
+        "d6bd55040f6841cacbb671e4cc712846b2fc0fbd",
+        "7cc35581028f48b4b7452d0795026b79a5977ac3"
+      ],
+      "parent": null,
+      "parentReason": null,
+      "status": "open",
+      "baseTag": "v0.1.3",
+      "builtOn": "d2c440312e5f39d59827ed466838a623516454d6",
+      "head": "250bbad5aac475de5bc1f4a6ca3ff2b392f0a838",
+      "applied": [
+        "d6bd55040f6841cacbb671e4cc712846b2fc0fbd",
+        "7cc35581028f48b4b7452d0795026b79a5977ac3"
+      ],
+      "stale": null
+    },
+    {
+      "slug": "compaction-unavailable-reason",
+      "number": 17,
+      "title": "feat(web): explain why compaction is unavailable",
+      "body": "When manual compaction was blocked, the popover often said only \"Compacting is unavailable right now\". You could not tell what to fix.\n\n- `resolveCompactDisabledReason` checks the blocking conditions in order and returns the first one, for example \"Wait for the agent to finish before compacting\" or \"Answer the pending approval before compacting\". `ChatView` gets both the disabled state and the reason from this one function.\n- The composer adds reasons for its own states: no provider, connecting, and a message that is still sending.\n\nTests are in `ContextWindowMeter.logic.test.ts`.\n\nMade with Claude Opus 5.5 (claude-opus-5-5) in Claude Code.\n\n---\nKept in sync from mine by fork-prs.",
+      "commits": [
+        "1d665d1c1a23140551ee5a56d2417118bcc6d2f0"
+      ],
+      "parent": null,
+      "parentReason": null,
+      "status": "open",
+      "baseTag": "v0.1.3",
+      "builtOn": "d2c440312e5f39d59827ed466838a623516454d6",
+      "head": "543d6e07cb7cd2016dd41af2cd8e112c93692dc1",
+      "applied": [
+        "1d665d1c1a23140551ee5a56d2417118bcc6d2f0"
+      ],
+      "stale": null
+    },
+    {
+      "slug": "project-default-environment",
+      "number": 18,
+      "title": "feat(web): set a default environment for each project",
+      "body": "A project with checkouts in several environments had no stored choice of where new threads start. The command palette followed the current thread's environment, and you could not change it.\n\n- Project settings has a default environment for each project. The command palette and the new-thread project picker start new threads there, even when the current thread is on another environment.\n- If the default environment is offline or has no checkout, the palette marks the project row. Enter opens a list of the connected checkouts. The new-thread project picker uses another checkout instead, and the draft's environment picker shows where the thread starts. Nothing falls back silently.\n- The setting is saved on this device only. It lists every checkout of the project, across all environment scopes.\n\nTests are in `environmentGrouping.test.ts`.\n\nPorted from `mine` (`c9b0c4bdb1`, `347007454c`) onto `base/upstream-2026-10-13`. On `mine`, the palette entries also have the worktree actions from #1. This branch leaves those out.\n\n---\nKept in sync from mine by fork-prs.",
+      "commits": [
+        "c9b0c4bdb14dedfead2dd7a1afa8c30a3f8459eb",
+        "347007454c50fd4a6afde74db160b5db717fd60c"
+      ],
+      "parent": null,
+      "parentReason": null,
+      "status": "open",
+      "baseTag": "v0.1.3",
+      "builtOn": "d2c440312e5f39d59827ed466838a623516454d6",
+      "head": "b8c3732dc9e947cab67e78206ef73449c2ea8952",
+      "applied": [
+        "c9b0c4bdb14dedfead2dd7a1afa8c30a3f8459eb",
+        "347007454c50fd4a6afde74db160b5db717fd60c"
+      ],
+      "stale": null
+    },
+    {
+      "slug": "git-sync-before-push",
+      "number": 19,
+      "title": "feat(git): sync branches before push and record git actions",
+      "body": "A push or pull request from the Git controls could fail or open a stale PR when the remote branch or the default branch had moved. The agent also did not know about Git actions the user ran from the controls.\n\n- Before a push or PR, the server fetches the remote. It rebases the branch onto its upstream and onto the default branch when either has new commits. A rebase that rewrites pushed commits pushes with `--force-with-lease`.\n- **Land worktree** rebases onto the base branch in the worktree before it merges.\n- If a rebase stops on conflicts, the rebase stays in progress. `askAgentToResolveRebase` queues a message that asks the thread's agent to finish it. The action fails, and its message says the agent is resolving it.\n- Each Git action is recorded in the thread (`recordGitAction`, `GitActionNote`). The agent sees the actions at the start of its next turn.\n- Generated commit and PR text reads the thread's conversation, so it can explain why the change was made.\n\nTests are in `GitManager.test.ts`, `GitActionNote.test.ts`, `Orchestrator.control-reads.test.ts`, and `textGenerationPrompts.test.ts`.\n\nThe base is `base/mine-a83e8fd`, the parent of this commit on `mine`. This work depends on #2, #3, and #4, and they could not be ported to an orchestration-v2 base without a rewrite.\n",
+      "commits": [
+        "29b721553bc8d2d617bed7bcef50c8b9851ff053",
+        "a6a311b85b16b753506532aab3d8118df5047f16"
+      ],
+      "parent": "git-land-worktree",
+      "parentReason": "git-sync-before-push uses the \"land\" result that git-land-worktree adds (ab72ac756e: GitManager.ts, ws.ts, packages/contracts/src/git.ts). It also uses GitActionActivityPayload from the \"show git actions in the thread timeline\" commit (82911d751a). No candidate PR has that commit on its own. git-land-worktree changes apps/web/src/components/chat/GitActionCard.tsx, and the timeline commit creates that file. So the git-land-worktree PR must already include the timeline commit or stack on it. Stacking on git-land-worktree therefore supplies both dependencies.",
+      "status": "open",
+      "baseTag": null,
+      "builtOn": null,
+      "head": null,
+      "applied": [],
+      "stale": "git-sync-before-push needs GitActionActivityPayload from git-timeline-cards (commit 82911d751a on mine), but git-timeline-cards has no PR in fork-prs. Do you want to add a fork-prs feature entry for git-timeline-cards so that git-sync-before-push can depend on it? Or do you want to change apps/server/src/ws.ts and packages/contracts/src/git.ts on mine so that git-sync-before-push no longer needs that payload?"
+    },
+    {
+      "slug": "worktree-complete-recipes",
+      "number": 20,
+      "title": "feat(git): run worktree-complete recipes when landing",
+      "body": "A repository could prepare a new worktree with `just worktree` (#7), but it could not clean up when the worktree landed.\n\n- Landing a worktree runs `just worktree-complete` in it after the merge and before the worktree is removed, if the justfile has that recipe.\n- The recipe output shows as hook progress in the Git action.\n- If the recipe fails, the worktree stays. You can fix the problem and land again.\n- `hasRunnableJustRecipe` moves to `justfileRecipe.ts` so the setup runner and `GitManager` share it.\n\nTests are in `GitManager.test.ts`.\n\nThe base is `base/mine-7ac5a8e`, the parent of this commit on `mine`. This work needs landing (#4) and the justfile recipe runner (#7), which are on different bases.\n",
+      "commits": [
+        "ade106c6b8a94cab7afedfa6404f69c0ec32d609"
+      ],
+      "parent": "git-land-worktree",
+      "parentReason": "The PR uses prepareLand and removeWorktree from git-land-worktree (apps/server/src/git/GitManager.ts, ab72ac756e). It also uses WORKTREE_RECIPE from justfile-worktree-setup (apps/server/src/project/ProjectSetupScriptRunner.ts, 7ac5a8e6dd). No single candidate PR holds both features. git-land-worktree is the parent because it supplies the larger part of the code. The build still fails until WORKTREE_RECIPE is in the stack too.",
+      "status": "open",
+      "baseTag": null,
+      "builtOn": null,
+      "head": null,
+      "applied": [],
+      "stale": "Its parent git-land-worktree failed to build."
+    },
+    {
+      "slug": "history-collapse",
+      "number": 21,
+      "title": "feat(web): collapse chat history into summaries",
+      "body": "A long thread gets busy, and there was no way to tidy the history you have already read.\n\n- **Collapse history** in the chat header menu folds everything since the previous collapse into one row. The row shows \"Collapsed (summarizing)\" at once.\n- The server asks the text generation model for a one-line summary and replaces the placeholder with it. If that fails, the row shows \"Collapsed\".\n- You can collapse many times. Each collapse covers only what came after the previous one.\n- Click a row to look inside it for the current visit. Its **×** uncollapses it for good.\n- Collapses are saved with the thread. They change only the display, not what the provider sees. An agent that reads the thread through MCP sees one line that marks the collapse and gives its summary.\n- The server rejects a collapse while a turn runs or when nothing new needs collapsing.\n\nHow it works:\n\n- A collapse is a runless `history_collapse` timeline item, stored like the git-action item, so there is no migration. Its status is `running` while it summarizes, `completed` after, and `cancelled` when you uncollapse it.\n- New commands: `thread.history.collapse`, `thread.history.uncollapse`, and the internal `thread.history-collapse.complete`.\n- `HistoryCollapseSummaryService` runs from a `history-collapse.summarize` effect. That effect shares the per-thread lane with title generation, so it never delays provider effects.\n- `generateHistorySummary` is a new text generation operation for every provider, Muse included. ACP Registry and FX do not support it.\n- Clients show the menu item only when the server reports the `threadHistoryCollapse` capability.\n- The thread sidebar user guide describes the feature.\n\nNot included: mobile shows a \"Collapsed: summary\" row but does not hide the history. There is no keybinding, command palette entry, or MCP tool, and find-in-thread does not open a collapse.\n\nTests are in `HistoryCollapse.test.ts` and `MessagesTimeline.logic.test.ts`. I did not check it in a running app.\n\nThe base is `base/mine-4869a6f`, the parent of this commit on `mine`.\n\nClaude Opus 5.5 (claude-opus-5-5) in Claude Code, run through T3 Code.\n\n---\nKept in sync from mine by fork-prs.",
+      "commits": [
+        "56d7d3636bbecb67f5e894d613c4039b06d1c879",
+        "196df31d823fabfacdea4e6e23435500912b6990"
+      ],
+      "parent": null,
+      "parentReason": null,
+      "status": "open",
+      "baseTag": "v0.1.3",
+      "builtOn": "d2c440312e5f39d59827ed466838a623516454d6",
+      "head": "83e627d72ce6e28dda7894d25cc8da614723a941",
+      "applied": [
+        "56d7d3636bbecb67f5e894d613c4039b06d1c879",
+        "196df31d823fabfacdea4e6e23435500912b6990"
+      ],
+      "stale": null
+    },
+    {
+      "slug": "justfile-recipes-docs",
+      "number": 22,
+      "title": "docs(user): justfile recipes are in the thread details card menu",
+      "body": "The project settings guide said justfile recipes appear in the thread header's actions menu. They moved to the actions menu in the thread details card.\n\nThis changes one sentence in `docs/user/project-settings.md` to name the thread details card.\n\nThe base is `base/mine-3470074`, the parent of this commit on `mine`.\n\nClaude Opus 5.5 (claude-opus-5-5) in Claude Code, run through T3 Code.\n",
+      "commits": [
+        "47a9f19e1bc3527bbf88110eeebf57b7f354ca93"
+      ],
+      "parent": "justfile-recipes-menu",
+      "parentReason": "Commit 47a9f19e1b changes one sentence in docs/user/project-settings.md: \"Public recipes from the project's `justfile` appear in the thread header's actions menu…\". The justfile-recipes-menu PR adds that sentence, and the upstream tag does not have it. The nearby `just worktree` and `just worktree-complete` lines are only diff context, not the changed line.",
+      "status": "retired",
+      "baseTag": "v0.1.3",
+      "builtOn": "cd8cd6286b3c498c34d1a1e44c030a221477c3b5",
+      "head": "cd8cd6286b3c498c34d1a1e44c030a221477c3b5",
+      "applied": [
+        "47a9f19e1bc3527bbf88110eeebf57b7f354ca93"
+      ],
+      "stale": null
+    },
+    {
+      "slug": "vscode-diffs",
+      "number": 23,
+      "title": "fix(web): make diffs look more like VS Code",
+      "body": "Diffs used the Pierre change markers and pale change backgrounds, so changed lines were hard to pick out. People who come from VS Code expect its `+`/`-` markers and stronger change colors.\n\n- Every diff view uses the classic `+`/`-` indicators: the diff panel, the pull request code tab, and the review guide excerpts and file diffs.\n- In dark mode, added and deleted line backgrounds and their line-number backgrounds are stronger.\n- Word-level highlights inside a changed line are much stronger in both light and dark mode.\n\nNo before/after screenshots yet.\n\nThe base is `base/mine-47a9f19`, the parent of this commit on `mine`.\n\nClaude Opus 5.5 (claude-opus-5-5) in Claude Code, run through T3 Code.\n\n---\nKept in sync from mine by fork-prs.",
+      "commits": [
+        "5d04115c336cf64c58d8c7c0ff3a32024fab7c26"
+      ],
+      "parent": null,
+      "parentReason": null,
+      "status": "open",
+      "baseTag": "v0.1.3",
+      "builtOn": "d2c440312e5f39d59827ed466838a623516454d6",
+      "head": "c507058ac182ac191ac2dacc5b9a5371a23f18c2",
+      "applied": [
+        "5d04115c336cf64c58d8c7c0ff3a32024fab7c26"
+      ],
+      "stale": null
+    },
+    {
+      "slug": "land-without-base-checkout",
+      "number": 24,
+      "title": "fix(git): land branches without requiring main checkout",
+      "body": "Landing a worktree failed unless the main checkout was on the base branch: \"The main checkout at … is on other. Switch it to main, then land again.\" You had to switch branches in a checkout you were not using.\n\nLanding now finds the worktree that has the base branch checked out, if one does:\n\n- **No checkout has the base branch.** Landing moves the base branch ref forward. No working tree changes.\n- **A checkout has the base branch.** Landing updates that checkout, as before. It refuses if that checkout has uncommitted changes, and the error names its path.\n- The main checkout keeps its current branch and stays clean.\n- A rebase conflict stays in the worktree being landed, as before.\n- When the main checkout is not on the base branch, the success toast does not offer to push. A push from there would push the wrong branch.\n\nTests in `GitManager.test.ts` cover these cases: landing while main is on another branch, updating a separate checkout of main, refusing when that checkout is dirty, and keeping a conflict in the worktree.\n\nThe base is `base/mine-5d04115`, the parent of this commit on `mine`.\n\nClaude Opus 5.5 (claude-opus-5-5) in Claude Code, run through T3 Code.\n",
+      "commits": [
+        "49557d884ea8d048e0628622a61b86b875a25586",
+        "b45fdda0acf24dc4b738bc675a54e7df361e9a24"
+      ],
+      "parent": "git-land-worktree",
+      "parentReason": "The PR changes the land code in apps/server/src/git/GitManager.ts and GitManager.test.ts. The PR \"git-land-worktree\" adds that code, and the upstream tag does not have it.",
+      "status": "open",
+      "baseTag": null,
+      "builtOn": null,
+      "head": null,
+      "applied": [],
+      "stale": "Its parent git-land-worktree failed to build."
+    },
+    {
+      "slug": "sidebar-active-rail",
+      "number": 25,
+      "title": "fix(web): mark the active sidebar thread with an accent rail",
+      "body": "A custom theme's row tints can be close to the hover and multi-select tints, so the open thread was hard to find in the sidebar.\n\nThe active thread row now has a thin rail in the theme's primary color. This applies to the sidebar and the legacy sidebar.\n\nNo before/after screenshots yet.\n\nThe base is `base/mine-49557d8`, the parent of this commit on `mine`.\n\nClaude Opus 5.5 (claude-opus-5-5) in Claude Code, run through T3 Code.\n\n---\nKept in sync from mine by fork-prs.",
+      "commits": [
+        "be8254d47d60daa96a1272b3301e93e816898b21"
+      ],
+      "parent": null,
+      "parentReason": null,
+      "status": "open",
+      "baseTag": "v0.1.3",
+      "builtOn": "d2c440312e5f39d59827ed466838a623516454d6",
+      "head": "dcda5c25460018f280066084d953bf54ff96e1d0",
+      "applied": [
+        "be8254d47d60daa96a1272b3301e93e816898b21"
+      ],
+      "stale": null
+    },
+    {
+      "slug": "ordered-list-gutters",
+      "number": 26,
+      "title": "fix(web): size ordered list gutters to fit markers",
+      "body": "In the composer, ordered list markers such as `10. ` are drawn as source text. In a monospace font a marker can be wider than the default list gutter, so it hangs to the left of the text column. In chat messages, the default `1.25rem` gutter is also too narrow for `1. ` in a monospace chat font, so a collapsed message's overflow can clip the marker.\n\nThe default `ol` gutter for chat and the composer is now `3ch`. That width fits a one-digit marker, its period, and the trailing space in any font. ChatMarkdown still widens the gutter for lists with longer markers.\n\nA small ProseMirror plugin sets `--list-gutter` on each composer ordered list to the width of its widest marker plus one space, in `ch`. It is a decoration and not `renderHTML`, because the list element is not redrawn when only its items change.\n\nNo before/after screenshots yet.\n\nThe base is `base/mine-be8254d`, the parent of this commit on `mine`.\n\nClaude Opus 5.5 (claude-opus-5-5) in Claude Code, run through T3 Code.\n\n---\nKept in sync from mine by fork-prs.",
+      "commits": [
+        "4869a6f194938ea66d450f610a954f4a71913aee",
+        "9fb8a235ac959c5c4641d06dee3e91c5837f42cf",
+        "b245c8060ee318927e78f912be9334b101133aeb"
+      ],
+      "parent": null,
+      "parentReason": null,
+      "status": "open",
+      "baseTag": "v0.1.3",
+      "builtOn": "d2c440312e5f39d59827ed466838a623516454d6",
+      "head": "7190bc9c128d5aceaa5a0658ce05556991adda83",
+      "applied": [
+        "4869a6f194938ea66d450f610a954f4a71913aee",
+        "9fb8a235ac959c5c4641d06dee3e91c5837f42cf",
+        "b245c8060ee318927e78f912be9334b101133aeb"
+      ],
+      "stale": null
+    },
+    {
+      "slug": "command-runtime",
+      "number": 27,
+      "title": "feat(web): show item runtime in work logs",
+      "body": "A row in the work log did not show how long its item ran. You had to compare timestamps to find a slow command or tool call.\n\n- A completed work log row shows its runtime to the left of the disclosure chevron, for example `850ms`, `4.2s`, or `1m 3s`. It uses the same `formatDuration` as the rest of the app.\n- The runtime comes from the item's `startedAt` and `completedAt`. Any item type with both values gets the label, not only commands.\n- The hover timestamp still appears, to the left of the runtime, and the chevron does not move.\n- Some rows show no runtime:\n  - A running item. A live timer would redraw the row all the time.\n  - An interrupted item. Cleanup closes it long after it stopped, so the duration is wrong.\n  - A question or an approval request. Its duration is the wait for the user, not work.\n  - An item that starts and completes at the same time.\n\nMobile is not changed.\n\nNo before/after screenshots yet.\n\nThe base is `base/mine-56d7d36`, the parent of this commit on `mine`.\n\nClaude Opus 5.5 (claude-opus-5-5) in Claude Code, run through T3 Code.\n\n---\nKept in sync from mine by fork-prs.",
+      "commits": [
+        "16579e2e669e56f7b2543cb5fa90a428417fbbf4",
+        "90dcb0f5ce91c0594feca80e7de567b3b540c3e2"
+      ],
+      "parent": null,
+      "parentReason": null,
+      "status": "open",
+      "baseTag": "v0.1.3",
+      "builtOn": "d2c440312e5f39d59827ed466838a623516454d6",
+      "head": "8ce411808bb2aee77d0b4be5b2ce61f2eda9415e",
+      "applied": [
+        "16579e2e669e56f7b2543cb5fa90a428417fbbf4",
+        "90dcb0f5ce91c0594feca80e7de567b3b540c3e2"
+      ],
+      "stale": null
+    },
+    {
+      "slug": "server-health",
+      "number": 28,
+      "title": "feat(web): show remote server health in thread details",
+      "body": "When a remote server felt slow, there was no way to tell from the client if the cause was the network or the server.\n\nThe thread details card now has a **Server** section for threads on a remote environment. The section does not show at the essential density. It starts collapsed. The header shows a summary such as `42 ms · CPU 37% · Mem 61%`, colored by the worst value. The open or closed state is saved in local storage.\n\nThe expanded rows, and when each turns amber / red:\n\n| Row | Shows | Amber / red |\n|---|---|---|\n| Latency | Round trip from the client to the server | 150 ms / 400 ms |\n| CPU | Host CPU %, with core count | 70% / 90% |\n| Load (1 min) | Host load average (not on Windows) | 1× / 2× cores |\n| Memory | Used of total | 80% / 92% |\n| Server busy | Event loop utilization of the T3 server | 50% / 80% |\n| Server memory | RSS of the T3 server | none |\n\nHow it works:\n\n- No new RPC. `HostResourcesSnapshot` gets three optional fields: `loadAverage1m`, `eventLoopUtilization`, and `serverRssBytes`. A client still decodes snapshots from older servers, and it leaves out the rows for missing fields.\n- `HostResources` slept 200 ms on every read to measure CPU, so a timed request measured that sleep and not the network. It now uses the previous sample as the first reading when that sample is less than 30 seconds old. CPU and event loop use become averages over the poll interval. `useLoadBalancedEnvironment` reads the same snapshot, so it gets that average too.\n- A new `hostHealth` query in `client-runtime` polls every 10 seconds while the section is mounted and times each request for latency.\n- The second commit stops the summary from widening the card. The card's scroll area sizes to its content, so the summary now has zero width, grows into the free space, and truncates.\n\nNot included: mobile. On a macOS host, each poll still starts `vm_stat`, which adds a few milliseconds to latency. No server test for the sampler change.\n\nNo before/after screenshots yet.\n\nThe base is `base/mine-16579e2`, the parent of the first commit on `mine`.\n\nClaude Opus 5.5 (claude-opus-5-5) in Claude Code, run through T3 Code.\n\n---\nKept in sync from mine by fork-prs.",
+      "commits": [
+        "98c47ee3f7987e8bdf42c245e5308a2277374122",
+        "9a51b593c70575e30afcd7a0344d09e43d1748c7"
+      ],
+      "parent": null,
+      "parentReason": null,
+      "status": "open",
+      "baseTag": "v0.1.3",
+      "builtOn": "d2c440312e5f39d59827ed466838a623516454d6",
+      "head": "42840572015aaf8bb478cf9ccbf685b3f5b28e2c",
+      "applied": [
+        "98c47ee3f7987e8bdf42c245e5308a2277374122",
+        "9a51b593c70575e30afcd7a0344d09e43d1748c7"
+      ],
+      "stale": null
+    },
+    {
+      "slug": "runless-item-order",
+      "number": 29,
+      "title": "fix(server): place runless items after thread history",
+      "body": "On a remote server, **Collapse history** added a \"Collapsed\" row at the top of the thread. It hid nothing and never got a summary.\n\n`TurnItemPositionStore` puts each turn item's ordinal in its run's range, run ordinal × 1,000,000. A runless item has no run, so it went into range 0 and sorted before every turn. On dds-dev the marker got ordinal 1, and the thread's turns used 1,000,001 to 3,000,011. The timeline hides what comes before a marker, and nothing did. The summary uses the same messages, so it was empty.\n\nA runless item now goes into the range of the thread's latest run, after everything already in the thread. Git action rows are also runless, so this fix moves them to the correct place as well. An item with a run, or with a run ordinal from the same event batch, keeps its old placement.\n\nThis was not caught because `HistoryCollapse.test.ts` applies items straight to the projection and skips position allocation. The new `TurnItemPositionStore.test.ts` allocates positions before and after a run, and it fails without this fix.\n\nA marker that already has a wrong ordinal keeps it. Uncollapse that marker, then collapse again.\n\nThe base is `base/mine-9a51b59`, the parent of this commit on `mine`.\n\nClaude Opus 5.5 (claude-opus-5-5) in Claude Code, run through T3 Code.\n\n---\nKept in sync from mine by fork-prs.",
+      "commits": [
+        "abcf48afcd65b90c40920e6cbf4b8c072a0cac07"
+      ],
+      "parent": null,
+      "parentReason": null,
+      "status": "open",
+      "baseTag": "v0.1.3",
+      "builtOn": "d2c440312e5f39d59827ed466838a623516454d6",
+      "head": "1a76b84f11ca5b831750c911f03cc59887b47c4b",
+      "applied": [
+        "abcf48afcd65b90c40920e6cbf4b8c072a0cac07"
+      ],
+      "stale": null
+    },
+    {
+      "slug": "workspace-servers",
+      "number": null,
+      "title": "feat(web): show servers running in a thread workspace",
+      "body": "",
+      "commits": [
+        "84433e0b69744ceba31d3d027d2ca6c35998c5bd",
+        "4a344cafce4c9bf3c57275a230220ec0d8b1bfcc",
+        "6c20386d7a8883db097f1af039ee1d1be8494d0f",
+        "77fae34a507ade6ea47511de8243ecc6cc9d688c",
+        "3df1740ea3c2a3d161def437dacbc7609e550755"
+      ],
+      "parent": null,
+      "parentReason": null,
+      "status": "open",
+      "baseTag": null,
+      "builtOn": null,
+      "head": null,
+      "applied": [],
+      "stale": "drift: Commit 036b8aece7 (\"fix(server): scope workspace servers to the requested thread\") is still pending classification, but most of it fixes this PR's own feature. On mine, it removes `cwd` from `WorkspaceServersInput` in packages/contracts/src/workspaceServers.ts and from apps/web/src/components/chat/WorkspaceServersSection.tsx and ThreadDetailsPanel.tsx. It adds `threadWorkspace`, the ProjectionStore/ProjectStore dependencies, and `URL.parse` for malformed redirects to apps/server/src/workspaceServers/WorkspaceServers.ts. It adds the malformed-redirect test to WorkspaceServers.test.ts and the `WorkspaceServers.layer` ProjectionStoreV2/ProjectStore provide in apps/server/src/server.ts. The PR does not have these hunks. The same commit also changes apps/server/src/process/agentScope.ts, TimelineWorkEntryRow.tsx and walkthroughs/support/environment.ts, which are not part of workspace-servers. Must the workspace-servers parts go into this PR? If yes, split 036b8aece7 on mine and keep those parts with the workspace-servers commits, so the rest can go to its own owner."
+    },
+    {
+      "slug": "command-active-row-highlight",
+      "number": 33,
+      "title": "fix(web): make the active command row easier to see",
+      "body": "The active row in command lists used the faint accent background, so it was hard to tell which row was active.\n\nThe active row now has a primary-tinted background, which is stronger in dark mode, and a thin primary bar on its left edge. Its text uses the foreground color.\n\n---\nKept in sync from mine by fork-prs.",
+      "commits": [
+        "e325cc79dbef322ae4515f6c172a4dbedb2c9550"
+      ],
+      "parent": null,
+      "parentReason": null,
+      "status": "open",
+      "baseTag": "v0.1.3",
+      "builtOn": "d2c440312e5f39d59827ed466838a623516454d6",
+      "head": "ec846e6ee5246f1fc03ffab46febf167cfa2faa0",
+      "applied": [
+        "e325cc79dbef322ae4515f6c172a4dbedb2c9550"
+      ],
+      "stale": null
+    },
+    {
+      "slug": "activity-shimmer-visibility",
+      "number": 34,
+      "title": "fix(web): make the activity shimmer easier to see",
+      "body": "In some themes, the base color of the live activity label is already close to the foreground color. The shimmer sweep then barely changes the label, so it is hard to see.\n\nThis change adds a soft drop-shadow halo to `live-activity-focus-aligned`. The halo uses `--contrast-foreground` at 70% opacity, so the sweep stands out against the label in every theme. The label content does not change, so the browser paints the filter once.\n\n---\nKept in sync from mine by fork-prs.",
+      "commits": [
+        "06c5c3a65bf5dee0d46054171e403fa8c13d8041"
+      ],
+      "parent": null,
+      "parentReason": null,
+      "status": "open",
+      "baseTag": "v0.1.3",
+      "builtOn": "d2c440312e5f39d59827ed466838a623516454d6",
+      "head": "93a70c1128860b01713c3bef7a253e01d7f5346f",
+      "applied": [
+        "06c5c3a65bf5dee0d46054171e403fa8c13d8041"
+      ],
+      "stale": null
+    },
+    {
+      "slug": "minimap-preview-details",
+      "number": 35,
+      "title": "feat(web): show timestamps and context usage in minimap previews",
+      "body": "The timeline minimap preview showed only the message text. You could not see when a turn happened or how full the context window was at that point.\n\nThe preview now has a footer with two details:\n\n- The time the user message was sent, in the user's timestamp format, plus its age, such as \"3 minutes ago\" or \"4 weeks ago\".\n- The context usage that the turn's run ended with, as a percentage and token count, such as \"Context 12% · 120k/1M\". If the provider does not report a maximum, only the token count shows. If the run has no usage report, the line does not show.\n\n`tokenUsageByRunId` in `lib/contextWindow.ts` maps each run to the newest token usage report across its attempts' provider turns. `ChatView` computes this map and passes it through `MessagesTimeline` to `TimelineMinimap`. `formatApproximateAge` in `timestampFormat.ts` makes the age text. Both functions have tests.\n\n---\nKept in sync from mine by fork-prs.",
+      "commits": [
+        "8af608511b56858a53f3f3954ec63e2cd6af39ad"
+      ],
+      "parent": null,
+      "parentReason": null,
+      "status": "open",
+      "baseTag": "v0.1.3",
+      "builtOn": "d2c440312e5f39d59827ed466838a623516454d6",
+      "head": "86aa6c77cc3211f09e2f3f57c5020c2b199f6e97",
+      "applied": [
+        "8af608511b56858a53f3f3954ec63e2cd6af39ad"
+      ],
+      "stale": null
+    },
+    {
+      "slug": "pinned-prompt",
+      "number": 36,
+      "title": "feat(web): pin the current prompt in the timeline",
+      "body": "In a long turn, the prompt scrolls out of view. You then lose track of which request the agent's output answers.\n\nWhen a prompt scrolls fully above the viewport, a compact copy of it now stays pinned at the top of the timeline. The copy shows at most two lines. Click it to scroll back to the prompt. As the next prompt reaches the top, it pushes the pinned copy up and then takes its place. The scroll handler sets this offset directly on the DOM, so scrolling does not re-render the timeline on each frame. The pinned prompt is hidden while find is open.\n\nThe pin is on by default. A \"Pin current prompt\" switch in the thread details panel turns it off for one thread. Opt-outs persist in local storage. The switch does not show for drafts or in the essential density.\n\n`resolveTimelinePinnedPrompt` picks the pinned prompt from the list layout, and focused tests cover it.\n\n---\nKept in sync from mine by fork-prs.",
+      "commits": [
+        "b98b326a02921bd03d84aeb213e3464f4a0e3fe1"
+      ],
+      "parent": null,
+      "parentReason": null,
+      "status": "open",
+      "baseTag": "v0.1.3",
+      "builtOn": "d2c440312e5f39d59827ed466838a623516454d6",
+      "head": "b8f26943a8b7751b4897e3543ab2f1593325691c",
+      "applied": [
+        "b98b326a02921bd03d84aeb213e3464f4a0e3fe1"
+      ],
+      "stale": null
+    }
+  ],
+  "forkOnly": [
+    {
+      "sha": "850f2bc5081fedf1bdd8715c81016a3b8b104785",
+      "reason": "Adds the fork maintenance justfile."
+    },
+    {
+      "sha": "7c33619598394c1e367808c254905ba59f42a77a",
+      "reason": "Signs fork release builds with the personal Developer ID."
+    },
+    {
+      "sha": "968fc4af833d6ac959e7ddbd5bb89baf3e79adbd",
+      "reason": "Changes only the fork justfile merge-release recipe."
+    },
+    {
+      "sha": "fb5f93e557e4225ff4d02dc6c680ab81ef58641f",
+      "reason": "Changes only the fork justfile."
+    },
+    {
+      "sha": "fc849f0f7fcc35ed247dfd0309f92fa406d648a8",
+      "reason": "Builds CLI archives for mine releases and points SSH runtime downloads at the fork."
+    },
+    {
+      "sha": "80bcdcf2224209b7d02ec8cb5384aec3f7aa5f11",
+      "reason": "G$ Code branding and icons."
+    },
+    {
+      "sha": "79c016341bf3756470aad11639108786993b759f",
+      "reason": "G$ Code macOS icons."
+    },
+    {
+      "sha": "657aee1af01eeaece5a0428ae7ef0545a0bb38e9",
+      "reason": "Changes only the fork release recipes in the justfile."
+    },
+    {
+      "sha": "b774c6ac94c4066352323cd7da2255ea60e42679",
+      "reason": "Walkthroughs record videos of fork features and are fork tooling."
+    },
+    {
+      "sha": "f2d882adbd83fa0c1c587ee830cd6c23a9509ffb",
+      "reason": "Extends the fork-only walkthrough tooling."
+    },
+    {
+      "sha": "85505c26d5b3b7baa0db81470221893e8c654199",
+      "reason": "Renames the fork Homebrew release recipe."
+    },
+    {
+      "sha": "ef253955cbb01efc3881008fd39dc0ce374c89a6",
+      "reason": "Changes the fork justfile and mine CLI archive workflow."
+    },
+    {
+      "sha": "2481600c42e2a1887b53708b540464da85890718",
+      "reason": "Changes only the mine CLI archive workflow."
+    },
+    {
+      "sha": "81c3d573dcd3ba1f054c3ff0090d66d41c98dd8c",
+      "reason": "It adds the fork-prs tool, its justfile recipe, and its knip entry, which are all fork tooling."
+    }
+  ],
+  "pending": [
+    {
+      "sha": "e6de58bf99ede06d486d402ea9f953fcf141d25f",
+      "question": "Should the node-pty pin go upstream as its own PR, or is it only for fork release installs?"
+    },
+    {
+      "sha": "72fbac687979b1629f8e33c20b1798fcadb05cd6",
+      "question": "This commit mixes per-thread temp directories with a live elapsed timer for running work rows; should the timer go with command-runtime and the temp directories become a new PR?"
+    },
+    {
+      "sha": "036b8aece7a0008a42b24fe816d4faa92ef8b9e9",
+      "question": "This commit mixes workspace server scoping, the thread temp directory fix, an interrupted-runtime fix, and a walkthrough guard; which PR should each part go to?"
+    },
+    {
+      "sha": "1d172a8d75fc94324280450e3ead4d0802e6896c",
+      "question": "This commit changes code from two PRs. Part 1 shortens the prepareLand comment in apps/server/src/git/GitManager.ts, which mentions baseCheckoutPath from land-without-base-checkout. Part 2 removes a stray comment in apps/server/src/ws.ts that git-land-worktree (ab72ac756e) added. Must the whole commit go to land-without-base-checkout? Or must you split it on mine so that the ws.ts part goes to git-land-worktree?"
+    },
+    {
+      "sha": "a6d1c868f6d0941459d5eb7c04c8bc5ef95e4a76",
+      "question": "In apps/web/src/lib/contextWindow.ts, upstream v0.1.3 has no comment above deriveLatestContextWindowSnapshot. The v0.1.3 merge kept the old upstream comment with '(#8144)', and this commit only removes '(#8144)'. Must this commit go to minimap-preview-details, the only fork PR that changes this file? Or must you remove the whole comment on mine so that the file matches upstream?"
+    },
+    {
+      "sha": "16b9d119c5404847942ad5627f7d8ada74513188",
+      "question": "apps/server/src/threadTempDirs.ts comes from fork commit 72fbac6879 'fix(server): isolate thread temp files from agent memory', and no PR has that commit. Must this commit and 72fbac6879 start a new PR, or are they fork-only?"
+    },
+    {
+      "sha": "83820bf0421bdbf33d11ba0a8cd085ff3cbdeb73",
+      "question": "walkthroughs/support/cursor.ts and explore.ts come from fork commit b774c6ac94 'chore: add scripted feature walkthroughs', and no PR has that commit. Are the walkthroughs fork-only, or must they get a new PR?"
+    }
+  ],
+  "stacks": [],
+  "ports": {
+    "tag": "v0.1.3",
+    "files": [
+      {
+        "file": "apps/desktop/resources/linux/com.t3tools.t3code.metainfo.xml",
+        "owners": [
+          "forkOnly"
+        ]
+      },
+      {
+        "file": "apps/desktop/src/app/DesktopCliShim.ts",
+        "owners": [
+          "forkOnly"
+        ]
+      },
+      {
+        "file": "apps/mobile/src/components/ui/AppSymbol.tsx",
+        "owners": [
+          "expanded-work-details"
+        ]
+      },
+      {
+        "file": "apps/mobile/src/features/home/ThreadListToolbar.tsx",
+        "owners": [
+          "forkOnly"
+        ]
+      },
+      {
+        "file": "apps/mobile/src/features/pull-requests/PullRequestToolbar.android.tsx",
+        "owners": [
+          "forkOnly"
+        ]
+      },
+      {
+        "file": "apps/mobile/src/features/settings/OutdatedServerUpdateSection.tsx",
+        "owners": [
+          "forkOnly"
+        ]
+      },
+      {
+        "file": "apps/mobile/src/features/settings/SettingsMicrophoneRouteScreen.tsx",
+        "owners": [
+          "forkOnly"
+        ]
+      },
+      {
+        "file": "apps/mobile/src/features/settings/SettingsProjectGroupingRouteScreen.tsx",
+        "owners": [
+          "tool-call-rows-setting"
+        ]
+      },
+      {
+        "file": "apps/mobile/src/features/settings/ThreadSettingsSections.tsx",
+        "owners": [
+          "tool-call-rows-setting"
+        ]
+      },
+      {
+        "file": "apps/mobile/src/features/settings/settings-search.ts",
+        "owners": [
+          "tool-call-rows-setting"
+        ]
+      },
+      {
+        "file": "apps/mobile/src/features/workspace/WorkspaceRootScreen.tsx",
+        "owners": [
+          "forkOnly"
+        ]
+      },
+      {
+        "file": "apps/server/src/orchestration-v2/Adapters/ClaudeAdapterV2.test.ts",
+        "owners": [
+          "command-labels"
+        ]
+      },
+      {
+        "file": "apps/server/src/orchestration-v2/Adapters/ClaudeAdapterV2.ts",
+        "owners": [
+          "command-labels"
+        ]
+      },
+      {
+        "file": "apps/server/src/orchestration-v2/ProviderTurnStartService.testkit.ts",
+        "owners": [
+          "worktree-complete-recipes"
+        ]
+      },
+      {
+        "file": "apps/server/src/orchestration-v2/RunFinalizationQueue.test.ts",
+        "owners": [
+          "history-collapse"
+        ]
+      },
+      {
+        "file": "apps/server/src/ws.test.ts",
+        "owners": [
+          "workspace-servers",
+          "work-report"
+        ]
+      },
+      {
+        "file": "apps/web/src/components/CommandPaletteLookups.ts",
+        "owners": [
+          "project-default-environment"
+        ]
+      },
+      {
+        "file": "apps/web/src/components/CommandPaletteProjectItems.tsx",
+        "owners": [
+          "command-palette-worktrees"
+        ]
+      },
+      {
+        "file": "apps/web/src/components/chat/ComposerFooterControls.tsx",
+        "owners": [
+          "composer-context-meter"
+        ]
+      },
+      {
+        "file": "apps/web/src/components/chat/RightPanelSurfaceContent.tsx",
+        "owners": [
+          "forkOnly"
+        ]
+      },
+      {
+        "file": "apps/web/src/components/chat/TimelineAssistantRows.tsx",
+        "owners": [
+          "forkOnly"
+        ]
+      },
+      {
+        "file": "apps/web/src/components/chat/TimelineMinimap.tsx",
+        "owners": [
+          "minimap-preview-details"
+        ]
+      },
+      {
+        "file": "apps/web/src/components/chat/TimelineToolActivityIcon.tsx",
+        "owners": [
+          "expanded-work-details"
+        ]
+      },
+      {
+        "file": "apps/web/src/components/chat/TimelineUserMessageRow.tsx",
+        "owners": [
+          "forkOnly"
+        ]
+      },
+      {
+        "file": "apps/web/src/components/chat/TimelineWorkGroupRows.tsx",
+        "owners": [
+          "expanded-work-details",
+          "command-runtime"
+        ]
+      },
+      {
+        "file": "apps/web/src/components/chat/timelineRowContext.ts",
+        "owners": [
+          "history-collapse"
+        ]
+      },
+      {
+        "file": "apps/web/src/components/chat/useChatTerminalActions.ts",
+        "owners": [
+          "justfile-recipes-menu"
+        ]
+      },
+      {
+        "file": "apps/web/src/components/preview/PreviewView.tsx",
+        "owners": [
+          "forkOnly"
+        ]
+      },
+      {
+        "file": "apps/web/src/components/promptLinks/HostedPromptLinkLanding.tsx",
+        "owners": [
+          "forkOnly"
+        ]
+      },
+      {
+        "file": "apps/web/src/components/promptLinks/NewThreadLinkView.tsx",
+        "owners": [
+          "forkOnly"
+        ]
+      },
+      {
+        "file": "apps/web/src/components/promptLinks/linkedPrompt.ts",
+        "owners": [
+          "forkOnly"
+        ]
+      },
+      {
+        "file": "apps/web/src/components/settings/CliCommandSettingsRow.tsx",
+        "owners": [
+          "forkOnly"
+        ]
+      },
+      {
+        "file": "apps/web/src/components/sidebar/SidebarDraftBlock.tsx",
+        "owners": [
+          "sidebar-new-thread-slot"
+        ]
+      },
+      {
+        "file": "apps/web/src/components/sidebar/SidebarListMarkers.tsx",
+        "owners": [
+          "sidebar-new-thread-slot"
+        ]
+      },
+      {
+        "file": "apps/web/src/components/sidebar/SidebarThreadRow.tsx",
+        "owners": [
+          "sidebar-active-rail"
+        ]
+      },
+      {
+        "file": "packages/client-runtime/src/connection/outdatedHostUpdate.ts",
+        "owners": [
+          "forkOnly"
+        ]
+      },
+      {
+        "file": "packages/client-runtime/src/connection/resolver.test.ts",
+        "owners": [
+          "forkOnly"
+        ]
+      },
+      {
+        "file": "packages/client-runtime/src/relay/errorPresentation.ts",
+        "owners": [
+          "forkOnly"
+        ]
+      },
+      {
+        "file": "packages/provider-acp/src/server/adapter.ts",
+        "owners": [
+          "command-labels"
+        ]
+      },
+      {
+        "file": "packages/provider-fx/src/server/driver.ts",
+        "owners": [
+          "history-collapse"
+        ]
+      },
+      {
+        "file": "packages/provider-opencode/src/server/toolItems.test.ts",
+        "owners": [
+          "command-labels"
+        ]
+      },
+      {
+        "file": "packages/provider-opencode/src/server/toolItems.ts",
+        "owners": [
+          "command-labels"
+        ]
+      }
+    ]
+  }
+}
