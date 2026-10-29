@@ -37,12 +37,14 @@ const make = Effect.gen(function* () {
   const remove = (name: string) =>
     fs.remove(path.join(root, name), { recursive: true, force: true });
 
-  const keeps = (name: string) =>
-    Effect.gen(function* () {
+  const keeps = Effect.fn("ThreadTempDirs.keeps")(
+    function* (name: string) {
       const threadId = yield* Effect.try(() => decodeURIComponent(name));
       const thread = yield* projections.getThreadShell(ThreadId.make(threadId));
       return thread !== null && thread.archivedAt === null;
-    }).pipe(Effect.orElseSucceed(() => false));
+    },
+    Effect.orElseSucceed(() => false),
+  );
 
   const sweep = Effect.gen(function* () {
     const names = yield* fs.readDirectory(root).pipe(Effect.orElseSucceed(() => []));
