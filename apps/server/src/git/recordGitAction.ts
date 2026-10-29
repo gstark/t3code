@@ -15,7 +15,7 @@ import * as Orchestrator from "../orchestration-v2/Orchestrator.ts";
  * What a stacked git action leaves in its thread, or null when it changed
  * nothing worth telling the user or agent about (an up-to-date push, say).
  */
-export function gitActionRecord(
+function gitActionRecord(
   result: GitRunStackedActionResult,
 ): { readonly summary: string; readonly gitAction: GitActionActivityPayload } | null {
   const { toast, ...gitAction } = result;
@@ -34,11 +34,8 @@ export function gitActionRecord(
  * Records a git action in the thread it ran beside. Never fails: the action
  * already succeeded, so a lost record is only logged.
  */
-export const recordGitAction = (input: {
-  readonly threadId: ThreadId;
-  readonly result: GitRunStackedActionResult;
-}): Effect.Effect<void, never, Orchestrator.OrchestratorV2 | Crypto.Crypto> =>
-  Effect.gen(function* () {
+export const recordGitAction = Effect.fn("recordGitAction")(
+  function* (input: { readonly threadId: ThreadId; readonly result: GitRunStackedActionResult }) {
     const record = gitActionRecord(input.result);
     if (record === null) return;
     const engine = yield* Orchestrator.OrchestratorV2;
@@ -50,14 +47,16 @@ export const recordGitAction = (input: {
       turnItemId: TurnItemId.make(`git-action:${id}`),
       ...record,
     });
-  }).pipe(
-    Effect.withSpan("recordGitAction"),
-    Effect.catchCause((cause) =>
-      Cause.hasInterruptsOnly(cause)
-        ? Effect.failCause(cause as Cause.Cause<never>)
-        : Effect.logWarning("failed to record git action in thread", {
-            threadId: input.threadId,
-            cause,
-          }),
+  },
+  (effect, input) =>
+    effect.pipe(
+      Effect.catchCause((cause) =>
+        Cause.hasInterruptsOnly(cause)
+          ? Effect.failCause(cause as Cause.Cause<never>)
+          : Effect.logWarning("failed to record git action in thread", {
+              threadId: input.threadId,
+              cause,
+            }),
+      ),
     ),
-  );
+);

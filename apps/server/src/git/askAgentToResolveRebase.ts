@@ -5,7 +5,7 @@ import * as Effect from "effect/Effect";
 import * as Orchestrator from "../orchestration-v2/Orchestrator.ts";
 
 /** The prompt that hands a stopped rebase to the thread's agent. */
-export function rebaseConflictPrompt(conflict: GitRebaseConflict): string {
+function rebaseConflictPrompt(conflict: GitRebaseConflict): string {
   return [
     `The user's git action stopped because rebasing ${conflict.branch} onto ${conflict.onto} hit conflicts in:`,
     ...conflict.files.map((file) => `- ${file}`),
@@ -23,11 +23,8 @@ export function rebaseConflictPrompt(conflict: GitRebaseConflict): string {
  * Asks the thread's agent to finish a rebase that stopped on conflicts. The
  * turn queues behind any active run. Returns whether the agent was asked.
  */
-export const askAgentToResolveRebase = (input: {
-  readonly threadId: ThreadId;
-  readonly conflict: GitRebaseConflict;
-}): Effect.Effect<boolean, never, Orchestrator.OrchestratorV2 | Crypto.Crypto> =>
-  Effect.gen(function* () {
+export const askAgentToResolveRebase = Effect.fn("askAgentToResolveRebase")(
+  function* (input: { readonly threadId: ThreadId; readonly conflict: GitRebaseConflict }) {
     const engine = yield* Orchestrator.OrchestratorV2;
     const id = yield* (yield* Crypto.Crypto).randomUUIDv4();
     const text = rebaseConflictPrompt(input.conflict);
@@ -49,12 +46,14 @@ export const askAgentToResolveRebase = (input: {
       creationSource: "server",
     });
     return true;
-  }).pipe(
-    Effect.withSpan("askAgentToResolveRebase"),
-    Effect.catch((error) =>
-      Effect.logWarning("failed to ask the agent to resolve a rebase", {
-        threadId: input.threadId,
-        error: error.message,
-      }).pipe(Effect.as(false)),
+  },
+  (effect, input) =>
+    effect.pipe(
+      Effect.catch((error) =>
+        Effect.logWarning("failed to ask the agent to resolve a rebase", {
+          threadId: input.threadId,
+          error: error.message,
+        }).pipe(Effect.as(false)),
+      ),
     ),
-  );
+);
