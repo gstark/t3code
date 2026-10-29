@@ -15,7 +15,7 @@ const remotePr = (number: number, slug: string, base: string, head: string): Rem
 });
 
 describe("planActions", () => {
-  it("moves built PRs to the release base and keeps old bases a stale PR still uses", () => {
+  it("moves built PRs to the release base, and labels a stale PR that keeps its old base", () => {
     const ledger: Ledger = {
       ...emptyLedger(),
       prs: [
@@ -47,6 +47,7 @@ describe("planActions", () => {
       { kind: "push", branch: "upstream-base/v0.1.3", sha: "t" },
       { kind: "push", branch: "pr/built", sha: "h1" },
       { kind: "retarget", number: 1, base: "upstream-base/v0.1.3" },
+      { kind: "label", number: 2, label: "stale", add: true },
       { kind: "push", branch: "pr/brand-new", sha: "h3" },
       {
         kind: "create",
@@ -59,11 +60,19 @@ describe("planActions", () => {
     ]);
   });
 
-  it("closes retired PRs and rebuilds a stack whose layers changed", () => {
+  it("closes retired PRs, rebuilds a changed stack, and keeps a stale PR on its base", () => {
     const ledger: Ledger = {
       ...emptyLedger(),
       prs: [
         { ...newPr("prefs", "prefs"), number: 2, head: "h2", baseTag: "v0.1.3" },
+        {
+          ...newPr("menu", "menu"),
+          number: 5,
+          head: "h5",
+          baseTag: "v0.1.3",
+          parent: "prefs",
+          stale: "drift",
+        },
         { ...newPr("cards", "cards"), number: 3, head: "h3", baseTag: "v0.1.3", parent: "prefs" },
         {
           ...newPr("land", "land"),
@@ -81,12 +90,14 @@ describe("planActions", () => {
         remotePr(2, "prefs", "upstream-base/v0.1.3", "h2"),
         remotePr(3, "cards", "pr/prefs", "h3"),
         remotePr(4, "land", "pr/cards", "h4"),
+        { ...remotePr(5, "menu", "upstream-base/v0.1.3", "h5"), labels: ["stale"] },
       ],
       branches: new Map([
         ["upstream-base/v0.1.3", "t"],
         ["pr/prefs", "h2"],
         ["pr/cards", "h3"],
         ["pr/land", "h4"],
+        ["pr/menu", "h5"],
       ]),
     };
 

@@ -2,17 +2,17 @@
 // Keeps one PR on gstark/t3code per fork feature, built from the branch mine.
 // Design: ~/dev/personal/plans/t3code-fork-pr-sync.md
 //
+//   just prs              build every PR, push it, and update the PRs and the status issue
 //   just prs --dry-run    build every PR locally and write the plan; push nothing
 //
-// Work happens in ../t3code-prs. State, the lock, and dry-run output live in
-// ../t3code-prs-state. Delete that folder to start the next dry run from scratch.
-import * as NodeCrypto from "node:crypto";
+// Work happens in ../t3code-prs. State, the lock, and the report live in
+// ../t3code-prs-state. The ledger also goes to origin/fork-prs on live runs.
 import * as NodeFS from "node:fs";
 import * as NodePath from "node:path";
 
 import { classifyCommits, classifyPorts } from "./agent.ts";
 import { buildAll, clip } from "./build.ts";
-import { createGit, gh, run, type Git } from "./exec.ts";
+import { createGit, gh, type Git } from "./exec.ts";
 import {
   applyDecisions,
   emptyLedger,
@@ -22,19 +22,15 @@ import {
   type Ledger,
 } from "./ledger.ts";
 import { describeAction, planActions, type Remote, type RemotePr } from "./plan.ts";
+import { publish, saveLedger, writeStatusIssue } from "./publish.ts";
 
 const root = NodePath.resolve(import.meta.dirname, "../..");
 const worktree = NodePath.resolve(root, "../t3code-prs");
 const stateDir = NodePath.resolve(root, "../t3code-prs-state");
 const ledgerFile = NodePath.join(stateDir, "ledger.json");
-const logDir = NodePath.join(stateDir, "logs");
 
-if (!process.argv.includes("--dry-run")) {
-  console.error("fork-prs: only --dry-run exists so far. Live runs come in phase 3.");
-  process.exit(2);
-}
+const dryRun = process.argv.includes("--dry-run");
 
-NodeFS.mkdirSync(logDir, { recursive: true });
 const lockFile = NodePath.join(stateDir, "lock");
 const lockHolder = NodeFS.existsSync(lockFile) ? Number(NodeFS.readFileSync(lockFile, "utf8")) : 0;
 if (lockHolder && isAlive(lockHolder)) {
@@ -80,30 +76,6 @@ if (!NodeFS.existsSync(worktree)) {
   repo.git(["worktree", "add", "-q", "--detach", worktree, tagSha]);
 }
 const git = createGit(worktree);
-
-const installMarker = NodePath.join(stateDir, "installed-lockfile");
-const ensureInstalled = () => {
-  const lockfile = NodePath.join(worktree, "pnpm-lock.yaml");
-  const hash = NodeCrypto.createHash("sha256").update(NodeFS.readFileSync(lockfile)).digest("hex");
-  const marker = `${hash} with playwright chromium`;
-  if (NodeFS.existsSync(installMarker) && NodeFS.readFileSync(installMarker, "utf8") === marker)
-    return;
-  console.log("    vp i");
-  const install = run("vp", ["i", "--frozen-lockfile"], { cwd: worktree });
-  if (!install.ok) throw new Error(`vp i failed in ${worktree}:\n${install.output.slice(-3000)}`);
-  // Browser tests need the Chromium build that this lockfile's Playwright pins.
-  console.log("    playwright install chromium");
-  const web = NodePath.join(worktree, "apps/web");
-  const browsers = run(
-    NodePath.join(web, "node_modules/.bin/playwright"),
-    ["install", "chromium"],
-    {
-      cwd: web,
-    },
-  );
-  if (!browsers.ok) throw new Error(`playwright install failed:\n${browsers.output.slice(-3000)}`);
-  NodeFS.writeFileSync(installMarker, marker);
-};
 
 const remotePrs = JSON.parse(
   gh(root, [
@@ -260,8 +232,6 @@ try {
     questions,
     changed,
     needsEvidence,
-    ensureInstalled,
-    logDir,
   });
 } catch (error) {
   questions.push(`The run crashed, so later PRs did not build: ${String(error).slice(0, 2000)}`);
@@ -273,11 +243,16 @@ for (const entry of ledger.pending) {
   );
 }
 const actions = planActions(ledger, remote, { tag, tagSha, needsEvidence });
+let failures: Array<string> = [];
+if (!dryRun) {
+  console.log("fork-prs: publishing to gstark/t3code");
+  failures = publish(repo, ledger, remote, actions);
+}
 
 const section = (title: string, items: ReadonlyArray<string>) =>
   `## ${title}\n\n${items.length ? items.map((item) => `- ${item}`).join("\n") : "None."}\n`;
 const report = [
-  "# PR sync status (dry run)\n",
+  `# PR sync status${dryRun ? " (dry run)" : ""}\n`,
   `Run at ${new Date().toISOString()} on mine \`${mineSha.slice(0, 10)}\`, base ${tag}.\n`,
   section(
     "Changed PRs",
@@ -302,7 +277,8 @@ const report = [
     (ledger.ports?.files ?? []).map((entry) => `\`${entry.file}\` ${entry.owners.join(", ")}`),
   ),
   `## Questions\n\n${questions.length ? questions.map((question, index) => `${index + 1}. ${question}`).join("\n\n") : "None."}\n`,
-  section("Planned GitHub actions", actions.map(describeAction)),
+  section(dryRun ? "Planned GitHub actions" : "GitHub actions", actions.map(describeAction)),
+  ...(dryRun ? [] : [section("Failed GitHub actions", failures)]),
 ].join("\n");
 
 NodeFS.writeFileSync(ledgerFile, `${JSON.stringify(ledger, null, 2)}\n`);
@@ -311,4 +287,12 @@ NodeFS.writeFileSync(
   NodePath.join(stateDir, "actions.json"),
   `${JSON.stringify(actions, null, 2)}\n`,
 );
-console.log(`fork-prs: dry run done. Read ${NodePath.join(stateDir, "report.md")}`);
+if (dryRun) {
+  console.log(`fork-prs: dry run done. Read ${NodePath.join(stateDir, "report.md")}`);
+} else {
+  saveLedger(repo, ledger, remote, `fork-prs: sync mine ${mineSha.slice(0, 10)}`);
+  const issue = writeStatusIssue(repo, report);
+  console.log(
+    `fork-prs: done with ${failures.length} failed action(s). ${issue ? `Status: issue #${issue}` : "Issues are off, so the report is only in report.md"}`,
+  );
+}

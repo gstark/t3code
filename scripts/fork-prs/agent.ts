@@ -11,7 +11,7 @@ const READ_TOOLS = [
 ];
 const EDIT_TOOLS = [...READ_TOOLS, "Edit", "Write", "Bash(git status:*)", "Bash(git add:*)"];
 
-const CONTEXT = `You work for fork-prs, a tool that keeps one pull request on gstark/t3code for each feature of Gavin's fork of T3 Code. The branch "mine" is the fork. It merges upstream releases and holds every fork feature. Each PR branch holds one feature on top of the upstream release tag, or on top of the PR it depends on. mine is the source of truth: a PR must contain exactly its feature's change as it is on mine. Never commit, push, rebase, reset, check out, or abort anything. Never change the branch mine. You cannot change mine and you cannot run checks, installs, or tests, so never ask for permission to do them. When a fix is needed, write the question as a request to Gavin: name the file and say what Gavin must change on mine.`;
+const CONTEXT = `You work for fork-prs, a tool that keeps one pull request on gstark/t3code for each feature of Gavin's fork of T3 Code. The branch "mine" is the fork. It merges upstream releases and holds every fork feature. Each PR branch holds one feature on top of the upstream release tag, or on top of the PR it depends on. mine is the source of truth: a PR must contain exactly its feature's change as it is on mine. Never commit, push, rebase, reset, check out, or abort anything. Never change the branch mine. You cannot change mine and you cannot run checks, installs, or tests, so never ask for permission to do them. When a fix is needed, write the question as a request to Gavin: name the file and say what Gavin must change on mine. fork-prs makes the commits on PR branches itself, such as "chore: port merge resolutions", so never ask Gavin to change one of them.`;
 
 const ask = <T>(cwd: string, prompt: string, schema: object, tools: ReadonlyArray<string>): T => {
   const result = run(
@@ -133,23 +133,29 @@ ${JSON.stringify(input.candidates, null, 2)}`,
     READ_TOOLS,
   );
 
-export const explainDrift = (
+export const adoptDrift = (
   cwd: string,
   input: { slug: string; title: string; diff: string; owners: Array<object> },
 ) =>
-  ask<{ explained: boolean; question?: string }>(
+  ask<{ explained: boolean; summary: string; question?: string }>(
     cwd,
-    `PR "${input.slug}" (${input.title}) is built. The diff below goes from the PR branch to mine, for the files the PR changes. Each hunk must come from one of these sources: another PR, a fork-only commit, or formatting. The owners list shows which fork commits touch each file.
+    `PR "${input.slug}" (${input.title}) is built in this worktree. The diff below goes from the PR to mine, for the files the PR changes. Sort each hunk by its source:
 
-If every hunk has such a source, set explained to true. If a hunk looks like part of this PR's own feature that the PR is missing or has wrong, set explained to false and ask one short question for Gavin that names the file and the hunk.
+- Another PR, a fork-only commit, or formatting: leave the hunk as it is. The owners list shows which fork commits touch each file.
+- This PR's own feature: the PR must match mine here. This often happens when a merge on mine resolved a conflict in this feature's code, because cherry-picks never carry merge resolutions. Use "git log mine -- <file>" and "git show" on the merges to check. Edit the file so that only this hunk takes its version from mine, then run "git add" on the file.
+
+If you cannot tell whether a hunk belongs to this PR or to another source, set explained to false and ask one short question for Gavin that names the file and the hunk. Otherwise set explained to true and summarize what you took from mine in one sentence, or say "nothing".
 
 Owners:
 ${JSON.stringify(input.owners, null, 2)}
 
 Diff from the PR to mine:
 ${input.diff}`,
-    object({ explained: { type: "boolean" }, question: string }, ["explained"]),
-    READ_TOOLS,
+    object({ explained: { type: "boolean" }, summary: string, question: string }, [
+      "explained",
+      "summary",
+    ]),
+    EDIT_TOOLS,
   );
 
 export const classifyPorts = (

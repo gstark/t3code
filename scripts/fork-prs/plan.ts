@@ -28,7 +28,7 @@ export type Action =
   | { kind: "stack"; base: string; slugs: Array<string> }
   | { kind: "deleteBranch"; branch: string };
 
-export const baseBranchOf = (ledger: Ledger, pr: Pr) => {
+const baseBranchOf = (ledger: Ledger, pr: Pr) => {
   const parent = liveParent(ledger, pr);
   return parent ? `pr/${parent.slug}` : `upstream-base/${pr.baseTag}`;
 };
@@ -62,21 +62,24 @@ export const planActions = (
       continue;
     }
     if (!pr.head) {
-      if (live) targetedBases.add(live.baseRefName);
-      continue;
-    }
-
-    const base = baseBranchOf(ledger, pr);
-    targetedBases.add(base);
-    if (remote.branches.get(branch) !== pr.head) {
-      actions.push({ kind: "push", branch, sha: pr.head });
-    }
-    if (!live) {
-      actions.push({ kind: "create", slug: pr.slug, base, title: pr.title, body: pr.body });
+      // A PR that never built keeps its old content and base, but still gets its labels.
+      if (!live) continue;
+      targetedBases.add(live.baseRefName);
     } else {
-      if (live.baseRefName !== base) actions.push({ kind: "retarget", number: live.number, base });
-      if (live.title !== pr.title || live.body !== pr.body) {
-        actions.push({ kind: "edit", number: live.number, title: pr.title, body: pr.body });
+      // A stale PR still holds its last good build, so it keeps the base that build sits on.
+      const base = pr.stale && live ? live.baseRefName : baseBranchOf(ledger, pr);
+      targetedBases.add(base);
+      if (remote.branches.get(branch) !== pr.head) {
+        actions.push({ kind: "push", branch, sha: pr.head });
+      }
+      if (!live) {
+        actions.push({ kind: "create", slug: pr.slug, base, title: pr.title, body: pr.body });
+      } else {
+        if (live.baseRefName !== base)
+          actions.push({ kind: "retarget", number: live.number, base });
+        if (live.title !== pr.title || live.body !== pr.body) {
+          actions.push({ kind: "edit", number: live.number, title: pr.title, body: pr.body });
+        }
       }
     }
 

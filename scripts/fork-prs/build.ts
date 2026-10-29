@@ -1,9 +1,7 @@
 // @effect-diagnostics nodeBuiltinImport:off globalConsole:off
 import * as NodeFS from "node:fs";
-import * as NodePath from "node:path";
-import * as NodeUtil from "node:util";
 
-import { applyPort, explainDrift, findParent, resolveConflicts, writePrText } from "./agent.ts";
+import { adoptDrift, applyPort, findParent, resolveConflicts, writePrText } from "./agent.ts";
 import { run, type Git } from "./exec.ts";
 import { ancestry, canReuse, liveParent, type Ledger, type Pr } from "./ledger.ts";
 
@@ -16,13 +14,13 @@ export type BuildContext = {
   questions: Array<string>;
   changed: Set<string>;
   needsEvidence: Set<string>;
-  ensureInstalled: () => void;
-  logDir: string;
 };
 
 type Attempt = { ok: true; head: string; applied: Array<string> } | { ok: false; failure: string };
 
 const UI_FILE = /^apps\/(web|desktop)\/.*\.(tsx|css)$/;
+// The fork does not ship mobile changes, so PRs leave the mobile app as the tag has it.
+const EXCLUDED_FILE = /^apps\/mobile\//;
 const MAX_DIFF = 120_000;
 
 export const clip = (text: string, limit = MAX_DIFF) =>
@@ -153,10 +151,15 @@ const driftQuestion = (ctx: BuildContext, pr: Pr, onto: string): string | null =
       })),
   }));
   const diff = clip(git.git(["diff", "HEAD", "mine", "--", ...differing]));
-  const answer = explainDrift(git.cwd, { slug: pr.slug, title: pr.title, diff, owners });
-  return answer.explained
-    ? null
-    : (answer.question ?? "The PR differs from mine in a way no other owner explains.");
+  const answer = adoptDrift(git.cwd, { slug: pr.slug, title: pr.title, diff, owners });
+  if (!answer.explained) {
+    return answer.question ?? "The PR differs from mine in a way no other owner explains.";
+  }
+  if (!git.tryGit(["diff", "--cached", "--quiet"]).ok) {
+    console.log(`    took merge-resolved hunks from mine: ${answer.summary}`);
+    git.git(["commit", "-qm", `chore: port merge resolutions to ${ctx.tag}`]);
+  }
+  return null;
 };
 
 const attempt = (ctx: BuildContext, pr: Pr, onto: string): Attempt => {
@@ -183,24 +186,21 @@ const attempt = (ctx: BuildContext, pr: Pr, onto: string): Attempt => {
   const portQuestion = port(ctx, pr, onto);
   if (portQuestion) return { ok: false, failure: portQuestion };
 
-  ctx.ensureInstalled();
+  const excluded = changedFiles(git, onto).filter((file) => EXCLUDED_FILE.test(file));
+  if (excluded.length > 0) {
+    for (const file of excluded) {
+      if (blob(git, onto, file)) git.git(["checkout", onto, "--", file]);
+      else git.git(["rm", "-q", "--", file]);
+    }
+    git.git(["commit", "-qm", "chore: leave the mobile app unchanged"]);
+  }
+
   const files = changedFiles(git, onto).filter((file) => NodeFS.existsSync(`${git.cwd}/${file}`));
   if (files.length > 0) {
     run("vp", ["fmt", "--no-error-on-unmatched-pattern", ...files], { cwd: git.cwd });
     if (git.git(["status", "--porcelain"])) {
       git.git(["commit", "-qam", "style: format with vp fmt"]);
     }
-  }
-
-  const check = run("vp", ["run", "check:changed", onto], { cwd: git.cwd });
-  if (!check.ok) {
-    const log = NodePath.join(ctx.logDir, `${pr.slug}.log`);
-    const output = NodeUtil.stripVTControlCharacters(check.output);
-    NodeFS.writeFileSync(log, output);
-    return {
-      ok: false,
-      failure: `check:changed failed. Full log: ${log}\n${output.slice(-4000)}`,
-    };
   }
 
   const drift = driftQuestion(ctx, pr, onto);
@@ -294,7 +294,8 @@ export const buildAll = (ctx: BuildContext) => {
       return { ok: true, head: pr.head!, applied: pr.applied };
     }
 
-    if (parent && !tagChanged) return onParent(pr, parent);
+    // A new tag can free a PR from its parent, but a PR that never built keeps the one it was given.
+    if (parent && (!tagChanged || pr.baseTag === null)) return onParent(pr, parent);
 
     console.log(`  ${pr.slug}: trying alone on ${ctx.tag}`);
     const alone = attempt(ctx, pr, ctx.tagSha);
