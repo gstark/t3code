@@ -106,12 +106,9 @@ const addressHost = (url: string): string | null => {
 };
 
 /**
- * The networks this client can use to reach other servers on the
- * environment's host, judged by the host name the client uses to reach the
- * environment itself: the SSH host for SSH, else the connection URL host.
- * When that name is one of the host's own addresses, or the short form of
- * its MagicDNS name, the client is on that address's network. T3 Connect
- * tunnels only to T3, so it reaches nothing else.
+ * Judged by the host name the client uses for the environment (the SSH host, else
+ * the URL host): one of the host's addresses, or its short MagicDNS name, puts the
+ * client on that address's network. T3 Connect tunnels only to T3.
  */
 export function reachableServerScopes(
   connection: Pick<PreparedConnection, "httpBaseUrl" | "target"> | null,
