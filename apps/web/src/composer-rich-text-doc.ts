@@ -31,6 +31,7 @@ import {
   TextSelection,
   type Transaction,
 } from "@tiptap/pm/state";
+import { Decoration, DecorationSet } from "@tiptap/pm/view";
 
 import { splitPromptIntoComposerSegments } from "~/composer-editor-mentions";
 import { nextOrderedMarkerText } from "~/composer-list-continuation";
@@ -302,6 +303,33 @@ const ComposerListItemExtension = ListItem.extend({
   },
 });
 
+/**
+ * Monospace source markers are wider than the default `ol` gutter, so size each
+ * list's gutter to its widest marker. A decoration, not `renderHTML`, because the
+ * list is not redrawn when only its items change.
+ */
+const orderedListGutterPlugin = new Plugin({
+  props: {
+    decorations(state) {
+      const decorations: Decoration[] = [];
+      state.doc.descendants((node, pos) => {
+        if (node.type.name !== "orderedList") return !node.isTextblock;
+        let widest = 0;
+        node.forEach((item) => {
+          widest = Math.max(widest, String(item.attrs.marker ?? "").length);
+        });
+        decorations.push(
+          Decoration.node(pos, pos + node.nodeSize, {
+            style: `--list-gutter: ${widest + 1}ch`,
+          }),
+        );
+        return true;
+      });
+      return DecorationSet.create(state.doc, decorations);
+    },
+  },
+});
+
 export const ComposerListExtensions = [
   BulletList.extend({
     addKeyboardShortcuts() {
@@ -311,6 +339,9 @@ export const ComposerListExtensions = [
   OrderedList.extend({
     addKeyboardShortcuts() {
       return withoutBlockChords(this.parent?.(), ["Mod-Shift-7"]);
+    },
+    addProseMirrorPlugins() {
+      return [orderedListGutterPlugin];
     },
   }),
   ComposerListItemExtension,
