@@ -1396,7 +1396,10 @@ export function deriveMessagesTimelineRows(input: {
   availableRevertTurnCounts?: ReadonlySet<number> | undefined;
   liveAgentTaskIds?: ReadonlySet<string> | undefined;
   worktreeSetup?: WorktreeSetupSnapshot | null;
+  /** False shows every tool call as its own row instead of folding consecutive calls. */
+  groupToolCalls?: boolean;
 }): MessagesTimelineRow[] {
+  const groupToolCalls = input.groupToolCalls ?? true;
   const timelineEntries = timelineRowEntries(input.timelineEntries);
   const turnDiffSummaryByAssistantMessageId = new Map<MessageId, TurnDiffSummary>();
   for (const summary of input.turnDiffSummaries) {
@@ -1475,7 +1478,8 @@ export function deriveMessagesTimelineRows(input: {
     : timelineEntries.length;
 
   const activeToolEntries: Array<Extract<TimelineEntry, { kind: "work" }>> = [];
-  if (input.isWorking && (unsettledRunId !== null || runlessWorkActive)) {
+  // Ungrouped, each running call is its own live row, so there is no shared activity row.
+  if (groupToolCalls && input.isWorking && (unsettledRunId !== null || runlessWorkActive)) {
     let tailAttemptId: string | null | undefined;
     for (let index = timelineEntries.length - 1; index >= activeTurnHeaderIndex; index -= 1) {
       const entry = timelineEntries[index]!;
@@ -1775,6 +1779,7 @@ export function deriveMessagesTimelineRows(input: {
       while (cursor < timelineEntries.length) {
         const nextEntry = timelineEntries[cursor];
         if (
+          !groupToolCalls ||
           !nextEntry ||
           nextEntry.kind !== "work" ||
           nextEntry.entry.sourceActivityKind === "context-compaction" ||

@@ -76,6 +76,7 @@ import { type ThreadFindMatch } from "./threadFind";
 import { useThreadFindNavigation } from "./useThreadFindNavigation";
 import { TooltipScrollDismissArea } from "../ui/tooltip";
 import { WorktreeSetupCard } from "./WorktreeSetupCard";
+import { useClientSettings } from "~/hooks/useSettings";
 import { useOpenPrLink } from "~/lib/openPullRequestLink";
 import { useMediaQuery } from "~/hooks/useMediaQuery";
 import { cn } from "~/lib/utils";
@@ -656,6 +657,7 @@ const ConversationTimeline = memo(function ConversationTimeline({
       ? new Set(paintedExpandedAttemptIds).add(activeFindAttemptId)
       : paintedExpandedAttemptIds;
 
+  const groupToolCalls = useClientSettings((settings) => settings.groupToolCalls);
   const rawRows = useIncrementalTimelineRows(`${listIdentityKey}\0${workspaceRoot ?? ""}`, {
     timelineEntries,
     latestRun,
@@ -671,6 +673,7 @@ const ConversationTimeline = memo(function ConversationTimeline({
     threadStartCheckpointReady,
     availableRevertTurnCounts,
     worktreeSetup,
+    groupToolCalls,
   });
   const rows = useStableRows(rawRows, listIdentityKey);
   // Run status/timestamps change per stream event; keep them out of shared row context.
