@@ -6,7 +6,7 @@ import {
 } from "@t3tools/client-runtime/state/runtime";
 import { useNavigate } from "@tanstack/react-router";
 import { Atom } from "effect/reactivity";
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { create } from "zustand";
 
 import { toastManager } from "~/components/ui/toast";
@@ -55,40 +55,37 @@ export function useWorkReport() {
   const setFolderDialogOpen = useWorkReportFolderDialog((state) => state.setOpen);
 
   /** Resolves true once the report thread is open. */
-  const start = useCallback(
-    async (folder?: string): Promise<boolean> => {
-      if (environmentId === null) return false;
-      const result = await startWorkReport({
-        environmentId,
-        input: folder === undefined ? {} : { folder },
-      });
-      if (result._tag === "Failure") {
-        if (!isAtomCommandInterrupted(result)) {
-          const error = squashAtomCommandFailure(result);
-          toastManager.add({
-            type: "error",
-            title: "Could not start the work report",
-            description: error instanceof Error ? error.message : "An error occurred.",
-          });
-        }
-        return false;
+  const start = async (folder?: string): Promise<boolean> => {
+    if (environmentId === null) return false;
+    const result = await startWorkReport({
+      environmentId,
+      input: folder === undefined ? {} : { folder },
+    });
+    if (result._tag === "Failure") {
+      if (!isAtomCommandInterrupted(result)) {
+        const error = squashAtomCommandFailure(result);
+        toastManager.add({
+          type: "error",
+          title: "Could not start the work report",
+          description: error instanceof Error ? error.message : "An error occurred.",
+        });
       }
-      await navigate({
-        to: "/$environmentId/$threadId",
-        params: buildThreadRouteParams(scopeThreadRef(environmentId, result.value.threadId)),
-      });
-      return true;
-    },
-    [environmentId, navigate, startWorkReport],
-  );
+      return false;
+    }
+    await navigate({
+      to: "/$environmentId/$threadId",
+      params: buildThreadRouteParams(scopeThreadRef(environmentId, result.value.threadId)),
+    });
+    return true;
+  };
 
-  const run = useCallback(() => {
+  const run = () => {
     if (settings.projectId === null) {
       setFolderDialogOpen(true);
       return;
     }
     void start();
-  }, [setFolderDialogOpen, settings.projectId, start]);
+  };
 
   return { run, start, available: environmentId !== null };
 }
@@ -107,7 +104,7 @@ export function useWorkReportNudge(): {
   const since = workReportCountSince(settings, nowMs);
   const pending = useAtomValue(pendingCountAtom(`${since}|${settings.projectId ?? ""}`));
 
-  // One timer to the moment the nudge becomes due; nothing repaints until then.
+  // oxlint-disable-next-line t3code/react-effect-budget -- One timer to the moment the nudge becomes due, so nothing repaints until then.
   useEffect(() => {
     if (nowMs >= dueAtMs) return;
     const timer = window.setTimeout(
