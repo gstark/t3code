@@ -67,6 +67,13 @@ export const TerminalWriteInput = Schema.Struct({
 });
 export type TerminalWriteInput = Schema.Codec.Encoded<typeof TerminalWriteInput>;
 
+export const TerminalReadInput = Schema.Struct({
+  ...TerminalSessionInput.fields,
+  maxChars: Schema.optional(Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 65_536 }))),
+  afterCursor: Schema.optional(Schema.String.check(Schema.isMaxLength(128))),
+});
+export type TerminalReadInput = typeof TerminalReadInput.Type;
+
 export const TerminalResizeInput = Schema.Struct({
   ...TerminalSessionInput.fields,
   cols: TerminalColsSchema,
@@ -128,6 +135,15 @@ export const TerminalSummary = Schema.Struct({
   updatedAt: Schema.String,
 });
 export type TerminalSummary = typeof TerminalSummary.Type;
+
+export const TerminalReadResult = Schema.Struct({
+  terminal: TerminalSummary,
+  output: Schema.String,
+  cursor: Schema.String,
+  unchanged: Schema.Boolean,
+  truncated: Schema.Boolean,
+});
+export type TerminalReadResult = typeof TerminalReadResult.Type;
 
 const TerminalMetadataSnapshotEvent = Schema.Struct({
   type: Schema.Literal("snapshot"),

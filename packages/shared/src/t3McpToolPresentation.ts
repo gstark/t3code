@@ -50,6 +50,7 @@ export type T3McpToolSummaryAction =
   | "project-update"
   | "project-delete"
   | "project-clone"
+  | "terminal"
   | "environment-read"
   | "environment-update"
   | "attachment-prepare"
@@ -121,6 +122,9 @@ const T3_MCP_TOOLS: Readonly<Record<string, T3McpToolDefinition>> = {
     "read-pr-guide",
     "pull-request",
   ),
+  terminal_list: tool(["List", "Listing", "Listed", "thread terminals"], "terminal"),
+  terminal_read: tool(["Read", "Reading", "Read", "terminal output"], "terminal"),
+  terminal_write: tool(["Send", "Sending", "Sent", "terminal input"], "terminal"),
   orchestrator_capabilities: tool(
     ["Get", "Getting", "Got", "orchestration capabilities"],
     "capabilities",

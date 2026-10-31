@@ -1125,6 +1125,10 @@ export const ServerSettings = Schema.Struct({
   ),
 
   enableAgentBrowserAccess: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
+  /** Threads whose agent can use the thread's terminals; absent means denied. */
+  threadAgentTerminalAccess: Schema.Record(ThreadId, Schema.Literal(true)).pipe(
+    Schema.withDecodingDefault(Effect.succeed({})),
+  ),
   projectAgentBrowserAccessOverrides: Schema.Record(ProjectId, Schema.Boolean).pipe(
     Schema.withDecodingDefault(Effect.succeed({})),
   ),
@@ -1499,6 +1503,10 @@ export const ServerSettingsPatch = Schema.Struct({
         }),
       ),
     ),
+  ),
+  /** `null` revokes the thread's grant. */
+  threadAgentTerminalAccess: Schema.optionalKey(
+    Schema.Record(ThreadId, Schema.NullOr(Schema.Literal(true))),
   ),
   enableAgentDeviceAccess: Schema.optionalKey(Schema.Boolean),
   enableDeviceSupport: Schema.optionalKey(Schema.Boolean),

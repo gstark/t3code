@@ -32,6 +32,8 @@ import {
   type TerminalSessionStatus,
   type TerminalSummary,
   type TerminalWriteInput,
+  type TerminalReadInput,
+  type TerminalReadResult,
   ClaudeSettings,
   CodexSettings,
   ProviderInstanceId,
@@ -183,7 +185,14 @@ export class TerminalManager extends Context.Service<
       registerCleanup?: (stop: () => void) => void,
     ) => Effect.Effect<() => void, TerminalError>;
 
-    readonly write: (input: TerminalWriteInput) => Effect.Effect<void, TerminalError>;
+    /** Read existing sessions without spawning, resizing, or attaching a client. */
+    readonly list: (threadId: string) => Effect.Effect<ReadonlyArray<TerminalSummary>>;
+    readonly read: (input: TerminalReadInput) => Effect.Effect<TerminalReadResult, TerminalError>;
+
+    readonly write: (
+      input: TerminalWriteInput,
+      options?: { readonly requireRunning: boolean },
+    ) => Effect.Effect<void, TerminalError>;
 
     readonly resize: (input: TerminalResizeInput) => Effect.Effect<void, TerminalError>;
 
@@ -3123,29 +3132,59 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
     );
   };
 
-  const write: TerminalManager["Service"]["write"] = Effect.fn("terminal.write")(function* (input) {
-    const terminalId = input.terminalId;
-    const session = yield* requireSession(input.threadId, terminalId);
-    const process = session.process;
-    if (!process || session.status !== "running") {
-      if (session.status === "exited") return;
-      return yield* new TerminalNotRunningError({
-        threadId: input.threadId,
-        terminalId,
-      });
-    }
-    session.inputCount += 1;
-    yield* Effect.try({
-      try: () => process.write(input.data),
-      catch: (cause) =>
-        new TerminalWriteError({
+  const list: TerminalManager["Service"]["list"] = (threadId) =>
+    readManagerState.pipe(
+      Effect.map((state) =>
+        [...state.sessions.values()]
+          .filter((session) => session.threadId === threadId)
+          .map(summary),
+      ),
+    );
+
+  const read: TerminalManager["Service"]["read"] = (input) =>
+    withThreadLock(
+      input.threadId,
+      Effect.gen(function* () {
+        const session = yield* requireSession(input.threadId, input.terminalId);
+        const cursor = `${session.pid}:${session.updatedAt}:${session.eventSequence}`;
+        const unchanged = input.afterCursor === cursor;
+        const history = unchanged ? "" : session.history.value();
+        const maxChars = input.maxChars ?? 16_000;
+        return {
+          terminal: summary(session),
+          output: history.slice(-maxChars),
+          cursor,
+          unchanged,
+          truncated: history.length > maxChars,
+        };
+      }),
+    );
+
+  const write: TerminalManager["Service"]["write"] = Effect.fn("terminal.write")(
+    function* (input, options) {
+      const terminalId = input.terminalId;
+      const session = yield* requireSession(input.threadId, terminalId);
+      const process = session.process;
+      if (!process || session.status !== "running") {
+        if (session.status === "exited" && !options?.requireRunning) return;
+        return yield* new TerminalNotRunningError({
           threadId: input.threadId,
           terminalId,
-          terminalPid: process.pid,
-          cause,
-        }),
-    });
-  });
+        });
+      }
+      session.inputCount += 1;
+      yield* Effect.try({
+        try: () => process.write(input.data),
+        catch: (cause) =>
+          new TerminalWriteError({
+            threadId: input.threadId,
+            terminalId,
+            terminalPid: process.pid,
+            cause,
+          }),
+      });
+    },
+  );
 
   const resizeLocked = Effect.fn("terminal.resize")(function* (input: TerminalResizeInput) {
     const session = yield* getSession(input.threadId, input.terminalId);
@@ -3342,6 +3381,8 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
     );
 
   return TerminalManager.of({
+    list,
+    read,
     open,
     attachStream,
     observeStream,

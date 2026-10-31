@@ -1,6 +1,7 @@
 import {
   DEFAULT_SERVER_SETTINGS,
   ProjectId,
+  ThreadId,
   ProviderDriverKind,
   ProviderInstanceId,
   UsageLimitSourceId,
@@ -61,6 +62,20 @@ describe("serverSettings helpers", () => {
     expect(stillOff.idleCompaction).toBe("off");
     const on = applyServerSettingsPatch(off, { compactIdleThreads: true });
     expect([on.idleCompaction, on.compactIdleThreads]).toEqual(["beforeCacheExpires", true]);
+  });
+
+  it("defaults terminal sharing off and revokes grants independently per thread", () => {
+    const first = ThreadId.make("first");
+    const second = ThreadId.make("second");
+    expect(DEFAULT_SERVER_SETTINGS.threadAgentTerminalAccess).toEqual({});
+    const enabled = applyServerSettingsPatch(DEFAULT_SERVER_SETTINGS, {
+      threadAgentTerminalAccess: { [first]: true, [second]: true },
+    });
+    expect(
+      applyServerSettingsPatch(enabled, {
+        threadAgentTerminalAccess: { [first]: null },
+      }).threadAgentTerminalAccess,
+    ).toEqual({ [second]: true });
   });
 
   it("changes a cleanup rule without replacing the machine's other rules", () => {
