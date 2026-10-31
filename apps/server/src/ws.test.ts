@@ -89,12 +89,15 @@ import * as DatabaseStorage from "./persistence/DatabaseStorage.ts";
 import * as TerminalManager from "./terminal/Manager.ts";
 import * as ThreadLaunchService from "./orchestration-v2/ThreadLaunchService.ts";
 import * as ThreadSearch from "./orchestration-v2/ThreadSearch.ts";
+import * as ThreadReplySuggestionService from "./orchestration-v2/ThreadReplySuggestionService.ts";
 import * as UsageLimitSources from "./usage/UsageLimitSources.ts";
 import * as UsageService from "./usage/UsageService.ts";
 import * as VcsProvisioningService from "./vcs/VcsProvisioningService.ts";
 import * as VcsStatusBroadcaster from "./vcs/VcsStatusBroadcaster.ts";
 import * as WorkspaceEntries from "./workspace/WorkspaceEntries.ts";
 import * as WorkspaceFileSystem from "./workspace/WorkspaceFileSystem.ts";
+import * as WorkspaceServers from "./workspaceServers/WorkspaceServers.ts";
+import * as WorkReport from "./workReport/WorkReport.ts";
 import * as WorktreeSetupTracker from "./project/WorktreeSetupTracker.ts";
 import * as ProjectFaviconResolver from "./project/ProjectFaviconResolver.ts";
 import * as TraceDiagnostics from "./diagnostics/TraceDiagnostics.ts";
@@ -454,11 +457,14 @@ const layerUnusedConfigRpcServices = Layer.mergeAll(
   Layer.mock(ThreadLaunchService.ThreadLaunchService)({}),
   Layer.mock(ThreadManagement.ThreadManagementService)({}),
   Layer.mock(ThreadSearch.ThreadSearch)({}),
+  Layer.mock(ThreadReplySuggestionService.ThreadReplySuggestionService)({}),
   Layer.mock(UsageService.UsageService)({}),
   Layer.mock(VcsProvisioningService.VcsProvisioningService)({}),
   Layer.mock(VcsStatusBroadcaster.VcsStatusBroadcaster)({}),
   Layer.mock(WorkspaceEntries.WorkspaceEntries)({}),
   Layer.mock(WorkspaceFileSystem.WorkspaceFileSystem)({}),
+  Layer.mock(WorkspaceServers.WorkspaceServers)({}),
+  Layer.mock(WorkReport.WorkReport)({}),
   Layer.mock(WorktreeSetupTracker.WorktreeSetupTracker)({}),
 );
 

@@ -115,6 +115,22 @@ describe("command permissions", () => {
     ),
   );
 
+  it.effect("requires permission on the destination environment for reply generation", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const registry = yield* setup;
+        const replyPermission = createCommandPermissions(runtime, WS_METHODS.threadSuggestReply);
+        registry.set(sessions(env), AsyncResult.success(grant(true)));
+        registry.set(sessions(other), AsyncResult.success(grant(false)));
+        expect(registry.get(replyPermission.permissionAtom(env))).toBe(true);
+        expect(registry.get(replyPermission.permissionAtom(other))).toBe(false);
+        const denied = yield* replyPermission.authorize(registry, other).pipe(Effect.result);
+        expect(denied._tag).toBe("Failure");
+        yield* replyPermission.authorize(registry, env);
+      }),
+    ),
+  );
+
   it.effect("uses the target grant for both availability and execution", () =>
     Effect.scoped(
       Effect.gen(function* () {

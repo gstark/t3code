@@ -54,6 +54,12 @@ export function sanitizePrTitle(raw: string): string {
 
 const MAX_THREAD_TITLE_CHARS = 120;
 
+/** One line of at most 160 characters; anything longer becomes no suggestion. */
+export function sanitizeReplySuggestion(raw: string): string {
+  const reply = raw.trim().replace(/\s+/g, " ");
+  return reply.length <= 160 ? reply : "";
+}
+
 export function sanitizeThreadTitle(raw: string): string {
   // Unwrap a JSON-formatted title before truncation can cut off the closing brace.
   const decoded = decodeJsonThreadTitle(raw);

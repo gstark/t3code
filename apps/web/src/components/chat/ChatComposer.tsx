@@ -1,4 +1,8 @@
 import { useComposerTypingGuard } from "./useComposerTypingGuard";
+import { useAtomValue } from "@effect/atom-react";
+import { threadEnvironment } from "../../state/threads";
+import { useAtomCommand } from "../../state/use-atom-command";
+import { useReplySuggestion, replySuggestionKeyAction } from "./useReplySuggestion";
 import { insertAttachmentReferencesForDraft } from "./composerAttachmentReferences";
 import { DESKTOP_PASTE_AS_TEXT_EVENT } from "../../lib/desktopPasteAsText";
 import { runtimeModeConfig, runtimeModeOptions as runtimeModes } from "./runtimeModeConfig";
@@ -1653,6 +1657,62 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
 
   const retainedContextPayloads = useRetainedContextPayloads(composerDraftTargetKey);
 
+  const canSuggestReply = useAtomValue(
+    threadEnvironment.suggestReply.permissionAtom(environmentId),
+  );
+  const requestReplySuggestion = useAtomCommand(threadEnvironment.suggestReply, {
+    reportFailure: false,
+    reportDefect: false,
+  });
+  const lastReplyMessage = promptHistoryMessages.at(-1);
+  const replyMessageId =
+    lastReplyMessage?.role === "assistant" && !lastReplyMessage.streaming
+      ? lastReplyMessage.id
+      : null;
+  const replySuggestion = useReplySuggestion({
+    revision: props.activeThreadShell?.source.replySuggestion?.reply ?? "",
+    key:
+      activeThreadId && replyMessageId
+        ? JSON.stringify([
+            environmentId,
+            activeThreadId,
+            replyMessageId,
+            lastReplyMessage?.updatedAt,
+          ])
+        : null,
+    enabled:
+      settings.replySuggestionsEnabled &&
+      canSuggestReply &&
+      canOperateThread &&
+      props.activeThreadShell?.latestRun?.status === "completed" &&
+      props.activeThreadShell?.latestRun?.runId === lastReplyMessage?.runId &&
+      !props.activeThreadShell?.runtime?.activeRunId &&
+      phase === "ready" &&
+      !isConnecting &&
+      !isSendBusy &&
+      !isPreparingWorktree &&
+      !isRevertingCheckpoint &&
+      !prompt &&
+      !isComposerApprovalState &&
+      pendingUserInputs.length === 0 &&
+      !showPlanFollowUpPrompt &&
+      !projectSelectionRequired &&
+      !showProviderUnavailable &&
+      composerImages.length === 0 &&
+      composerFiles.length === 0 &&
+      composerTerminalContexts.length === 0 &&
+      composerPreviewAnnotations.length === 0 &&
+      composerReviewComments.length === 0,
+    request: async () => {
+      if (!activeThreadId || !replyMessageId) return "";
+      const result = await requestReplySuggestion({
+        environmentId,
+        input: { threadId: activeThreadId, messageId: replyMessageId },
+      });
+      return result._tag === "Success" ? result.value.reply : "";
+    },
+  });
+
   const onPromptChange = (
     nextPrompt: string,
     nextCursor: number,
@@ -1660,6 +1720,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     cursorAdjacentToMention: boolean,
     contextIds: string[],
   ) => {
+    if (nextPrompt !== promptRef.current && nextPrompt.length > 0) replySuggestion.dismiss();
     expandComposerForEditorChange();
     refreshWorkspaceSnapshotOnTyping();
     if (activePendingProgress?.activeQuestion && pendingUserInputs.length > 0) {
@@ -2212,8 +2273,24 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   };
   const expandMobileComposerStable = useStableCallback(expandMobileComposer);
 
-  const onComposerCommandKey = (key: string, event: KeyboardEvent, isTaskItem?: boolean) =>
-    composerCommandKeyHandler({
+  const onComposerCommandKey = (key: string, event: KeyboardEvent, isTaskItem?: boolean) => {
+    const replyAction = replySuggestionKeyAction(
+      key,
+      event,
+      replySuggestion.reply,
+      promptRef.current,
+    );
+    if (replyAction) {
+      if (replyAction === "accept") {
+        const reply = replySuggestion.reply;
+        promptRef.current = reply;
+        setComposerDraftPrompt(composerDraftTarget, reply);
+        setComposerCursor(collapseExpandedComposerCursor(reply, reply.length));
+      }
+      replySuggestion.dismiss();
+      return true;
+    }
+    return composerCommandKeyHandler({
       keybindings,
       sendShortcut: settings.sendShortcut,
       routeKind,
@@ -2250,6 +2327,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       applyPromptReplacement,
       submitComposer,
     })(key, event, isTaskItem);
+  };
 
   const {
     stashQueue,
@@ -3688,7 +3766,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                               ? "Choose a project above to start a thread"
                               : showProviderUnavailable
                                 ? "Enable a provider in Settings to send a message"
-                                : DEFAULT_COMPOSER_PLACEHOLDER
+                                : replySuggestion.reply || DEFAULT_COMPOSER_PLACEHOLDER
                     }
                     disabled={
                       isConnecting ||

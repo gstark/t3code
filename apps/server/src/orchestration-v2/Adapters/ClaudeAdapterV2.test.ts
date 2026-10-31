@@ -248,6 +248,7 @@ describe("ClaudeAdapterV2 runtime query policy", () => {
     });
     assert.equal(options.permissionMode, expected);
     assert.isUndefined(options.extraArgs?.["permission-mode"]);
+    assert.isTrue(options.promptSuggestions);
     assert.isUndefined(options.extraArgs?.["dangerously-skip-permissions"]);
   });
 
@@ -2870,6 +2871,52 @@ describe("ClaudeAdapterV2 background wake turns", () => {
       };
     });
   const makeWakeHarness = makeWakeHarnessWithOptions();
+
+  it.effect("receives native suggestions after result without starting another turn", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const harness = yield* makeWakeHarness;
+        const turn = makeClaudeTestTurnInput({
+          threadId: harness.threadId,
+          providerThread: harness.providerThread,
+          now: yield* DateTime.now,
+          attemptId: RunAttemptId.make("native-suggestion"),
+          text: "Fix the bug",
+          attachments: [],
+        });
+        yield* harness.runtime.startTurn(turn);
+        yield* harness.offerAndWait(turnOneResult);
+        yield* Queue.take(harness.terminalReceipts);
+        const lastSuggestion = () => {
+          const event = harness.events.findLast(
+            (event) => event.type === "provider_thread.updated",
+          );
+          return event?.type === "provider_thread.updated"
+            ? event.providerThread.nativeMetadata?.replySuggestion
+            : undefined;
+        };
+        yield* harness.until(() => lastSuggestion() !== undefined);
+        assert.deepEqual(lastSuggestion(), { runId: turn.runId, reply: "" });
+        yield* harness.offerAndWait(
+          claudeSdkFrame({
+            type: "prompt_suggestion",
+            suggestion: "  Yes,  do that.  ",
+            uuid: "00000000-0000-4000-8000-000000000999",
+            session_id: WAKE_NATIVE_SESSION,
+          }),
+        );
+        yield* harness.until(() => lastSuggestion()?.reply !== "");
+        assert.deepEqual(lastSuggestion(), { runId: turn.runId, reply: "Yes, do that." });
+        assert.lengthOf(harness.offeredMessages, 1);
+        assert.lengthOf(harness.terminalEvents(), 1);
+        assert.isFalse(yield* harness.hasPendingBackgroundWork);
+      }).pipe(
+        Effect.provide(
+          Layer.mergeAll(IdAllocator.layer, McpProviderSessions.layer, NodeServices.layer),
+        ),
+      ),
+    ),
+  );
 
   it.effect.each(["release-after", "cancel-after", "release-before", "resume-pending"] as const)(
     "keeps attachment reservations across compaction: %s boundary",
@@ -8348,7 +8395,7 @@ describe("ClaudeAdapterV2 background wake turns", () => {
       ),
   );
 
-  it.effect("stores a Bash result's stdout and stderr as command output", () =>
+  it.effect("stores a Bash result's output, and its description as the command's intent", () =>
     Effect.scoped(
       Effect.gen(function* () {
         const harness = yield* makeWakeHarness;
@@ -8380,7 +8427,7 @@ describe("ClaudeAdapterV2 background wake turns", () => {
                   type: "tool_use",
                   id: bashToolUseId,
                   name: "Bash",
-                  input: { command: "git status" },
+                  input: { command: "git status", description: " Show working tree status " },
                 },
               ],
             },
@@ -8426,6 +8473,13 @@ describe("ClaudeAdapterV2 background wake turns", () => {
             ? bash.turnItem.output
             : undefined,
           "On branch main\nwarning: dirty",
+        );
+        // The Bash tool's description is the agent's stated intent for the command.
+        assert.equal(
+          bash?.type === "turn_item.updated" && bash.turnItem.type === "command_execution"
+            ? bash.turnItem.intent
+            : undefined,
+          "Show working tree status",
         );
       }).pipe(
         Effect.provide(
