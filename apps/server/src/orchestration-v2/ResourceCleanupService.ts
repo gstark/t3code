@@ -10,6 +10,7 @@ import { parseAttachmentFileExtension, resolveAttachmentPathById } from "../atta
 import * as ServerConfig from "../config.ts";
 import * as PreviewManager from "../preview/Manager.ts";
 import * as ScheduledTaskService from "../scheduledTasks/ScheduledTaskService.ts";
+import * as ServerSettings from "../serverSettings.ts";
 import * as TerminalManager from "../terminal/Manager.ts";
 
 export class ResourceCleanupError extends Schema.TaggedError<ResourceCleanupError>()(
@@ -46,6 +47,16 @@ export const layer = Layer.effect(
     const fileSystem = yield* FileSystem.FileSystem;
     const config = yield* ServerConfig.ServerConfig;
     const scheduledTasks = yield* ScheduledTaskService.ScheduledTaskService;
+    const settings = yield* ServerSettings.ServerSettingsService;
+    // Skips the write so cleanup of a thread without a grant does not touch settings.
+    const revokeAgentTerminalAccess = (threadId: string) =>
+      settings.getSettings.pipe(
+        Effect.flatMap((current) =>
+          current.threadAgentTerminalAccess[ThreadId.make(threadId)] === true
+            ? settings.updateSettings({ threadAgentTerminalAccess: { [threadId]: null } })
+            : Effect.void,
+        ),
+      );
     return {
       cleanupScheduledTasks: Effect.fn("ResourceCleanupService.cleanupScheduledTasks")(function (
         threadId: ThreadId,
@@ -62,13 +73,12 @@ export const layer = Layer.effect(
       cleanupTerminals: Effect.fn("ResourceCleanupService.cleanupTerminals")(function (
         threadId: string,
       ) {
-        return terminals
-          .close({ threadId, deleteHistory: true })
-          .pipe(
-            Effect.mapError(
-              (cause) => new ResourceCleanupError({ operation: "terminal", threadId, cause }),
-            ),
-          );
+        return terminals.close({ threadId, deleteHistory: true }).pipe(
+          Effect.andThen(revokeAgentTerminalAccess(threadId)),
+          Effect.mapError(
+            (cause) => new ResourceCleanupError({ operation: "terminal", threadId, cause }),
+          ),
+        );
       }),
       cleanupPreviews: Effect.fn("ResourceCleanupService.cleanupPreviews")(function (
         threadId: string,

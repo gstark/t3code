@@ -330,6 +330,9 @@ export function summarizeT3ToolCalls(
         quantity(countEntities(entityIds("cwd")), "repository", "repositories"),
       );
       break;
+    case "terminal":
+      label = phrase("Used", "use", `thread terminals ${times}`);
+      break;
     case "environment-read":
       label = phrase("Checked", "check", `environment preferences ${times}`);
       break;

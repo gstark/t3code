@@ -17,6 +17,19 @@ then copy. Cmd+A on macOS and Ctrl+Shift+A elsewhere select the same output.
 Ctrl+A still moves to the beginning of shell input on Windows and Linux.
 Jump to latest in the context menu returns to the current output.
 
+## Share terminals with an agent
+
+Turn on **Agent terminal access** in a thread's terminal panel. It starts off
+for every thread and lets that thread's agent read retained output and send
+input to the same sessions you use. Sending input also requires Full access outside Plan mode. Changing this permission requires
+permission to edit the environment's settings.
+
+Turn it off to block further reads and input immediately. Commands already
+running continue, and output already read stays in the conversation. You and the
+agent share the keyboard, so avoid typing into a session while the agent uses it.
+Terminal output can include secrets; enable sharing only for output you want the
+agent to receive.
+
 ## fish
 
 T3 Code starts fish with `no-query-term`, avoiding startup waits for terminal
