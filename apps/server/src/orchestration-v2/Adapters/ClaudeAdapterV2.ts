@@ -142,6 +142,7 @@ import * as ServerSettings from "../../serverSettings.ts";
 import { expandHomePath } from "@t3tools/provider-core/server/pathExpansion";
 import { spawnAndCollect } from "@t3tools/provider-core/server/snapshotProbe";
 import { signalProcessGroup } from "@t3tools/provider-core/server/processGroup";
+import { sanitizeReplySuggestion } from "@t3tools/provider-core/server/textGenerationUtils";
 import {
   claudeSignedOutMessage,
   makeClaudeEnvironment,
@@ -1484,6 +1485,7 @@ export function makeClaudeQueryOptions(input: {
         ? "bypassPermissions"
         : (input.permissionMode ?? "default")),
     includePartialMessages: true,
+    promptSuggestions: true,
     ...(compiledSelection.effort === undefined
       ? {}
       : {
@@ -7286,6 +7288,10 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
                 const providerThread: OrchestrationV2ProviderThread = {
                   ...input.context.input.providerThread,
                   providerSessionId: session.id,
+                  nativeMetadata: {
+                    ...input.context.input.providerThread.nativeMetadata,
+                    replySuggestion: { runId: input.context.input.runId, reply: "" },
+                  },
                   ...(clearConversationHead ? { nativeConversationHeadRef: null } : {}),
                   ...(nativeThreadId !== null && goalsByNativeThread.has(nativeThreadId)
                     ? { goal: goalsByNativeThread.get(nativeThreadId) ?? null }
@@ -7852,6 +7858,37 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
           }
 
           const message = input.message;
+          if (message.type === "prompt_suggestion") {
+            // Suggestions arrive after result, when the root turn is already settled.
+            // A newer active turn makes the old suggestion ineligible.
+            if (
+              (yield* Ref.get(activeTurn)) !== null ||
+              message.session_id !== liveQuery.nativeThreadId
+            )
+              return;
+            const prior = (yield* Ref.get(lastProviderThreadByNativeThread)).get(
+              liveQuery.nativeThreadId,
+            );
+            const suggestion = prior?.nativeMetadata?.replySuggestion;
+            if (!prior || !suggestion) return;
+            const reply = sanitizeReplySuggestion(message.suggestion);
+            if (!reply) return;
+            const providerThread = {
+              ...prior,
+              nativeMetadata: {
+                ...prior.nativeMetadata,
+                replySuggestion: { ...suggestion, reply },
+              },
+              updatedAt: yield* DateTime.now,
+            };
+            yield* rememberProviderThread(providerThread);
+            yield* emitProviderEvent({
+              type: "provider_thread.updated",
+              driver: CLAUDE_PROVIDER,
+              providerThread,
+            });
+            return;
+          }
           // Track before routing: idle-wake Monitors report tasks before replaying their tool calls.
           yield* trackClaudeMonitorCalls(message);
           // Update before routing because the idle wake gate reads this.

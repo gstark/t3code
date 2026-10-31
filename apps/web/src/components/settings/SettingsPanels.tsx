@@ -477,6 +477,9 @@ export function useSettingsRestore(onRestored?: () => void) {
     ...(settings.composerCollapseOnScroll !== DEFAULT_UNIFIED_SETTINGS.composerCollapseOnScroll
       ? ["Collapse composer on scroll"]
       : []),
+    ...(settings.replySuggestionsEnabled !== DEFAULT_UNIFIED_SETTINGS.replySuggestionsEnabled
+      ? ["Suggest replies"]
+      : []),
     ...(settings.composerRichTextEnabled !== DEFAULT_UNIFIED_SETTINGS.composerRichTextEnabled
       ? ["Rich text composer"]
       : []),
@@ -596,6 +599,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       proactivePanelsEnabled: DEFAULT_UNIFIED_SETTINGS.proactivePanelsEnabled,
       showSkillsInSlashMenu: DEFAULT_UNIFIED_SETTINGS.showSkillsInSlashMenu,
       composerCollapseOnScroll: DEFAULT_UNIFIED_SETTINGS.composerCollapseOnScroll,
+      replySuggestionsEnabled: DEFAULT_UNIFIED_SETTINGS.replySuggestionsEnabled,
       composerRichTextEnabled: DEFAULT_UNIFIED_SETTINGS.composerRichTextEnabled,
       sendShortcut: DEFAULT_UNIFIED_SETTINGS.sendShortcut,
       followUpBehavior: DEFAULT_UNIFIED_SETTINGS.followUpBehavior,
@@ -1150,6 +1154,32 @@ export function ChatSettingsPanel() {
                 updateSettings({ composerCollapseOnScroll: Boolean(checked) })
               }
               aria-label="Collapse composer on scroll"
+            />
+          }
+        />
+        <SettingsRow
+          {...searchableSetting("reply-suggestions")}
+          description="Suggest a reply in the empty composer when the agent finishes. Press Tab to accept it. Providers without built-in suggestions use your text generation model, which makes one extra request per turn."
+          resetAction={
+            settings.replySuggestionsEnabled !==
+            DEFAULT_UNIFIED_SETTINGS.replySuggestionsEnabled ? (
+              <SettingResetButton
+                label="suggest replies"
+                onClick={() =>
+                  updateSettings({
+                    replySuggestionsEnabled: DEFAULT_UNIFIED_SETTINGS.replySuggestionsEnabled,
+                  })
+                }
+              />
+            ) : null
+          }
+          control={
+            <Switch
+              checked={settings.replySuggestionsEnabled}
+              onCheckedChange={(checked) =>
+                updateSettings({ replySuggestionsEnabled: Boolean(checked) })
+              }
+              aria-label="Suggest replies"
             />
           }
         />

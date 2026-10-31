@@ -193,6 +193,10 @@ export function createThreadEnvironmentAtoms<R, E>(
   });
 
   const commands = {
+    suggestReply: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:commands:thread:suggest-reply",
+      tag: WS_METHODS.threadSuggestReply,
+    }),
     create: createEnvironmentCommand(runtime, {
       label: "environment-data:commands:thread:create",
       execute: (input: CreateThreadInput) => createThread(input),

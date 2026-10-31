@@ -280,6 +280,8 @@ export const makeManagedCodexProvider = Effect.fn("makeManagedCodexProvider")(fu
       protect("generatePrContent", nativeGeneration.generatePrContent(value)),
     generateBranchName: (value) =>
       protect("generateBranchName", nativeGeneration.generateBranchName(value)),
+    generateReplySuggestion: (value) =>
+      protect("generateReplySuggestion", nativeGeneration.generateReplySuggestion(value)),
     generateThreadTitle: (value) =>
       protect("generateThreadTitle", nativeGeneration.generateThreadTitle(value)),
     generateReviewGuide: (value) =>
