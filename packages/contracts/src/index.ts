@@ -70,3 +70,5 @@ export * from "./worktreeSetup.ts";
 export * from "./workReport.ts";
 export * from "./secretRequest.ts";
 export * from "./clientRpcPermissions.ts";
+
+export * from "./replySuggestion.ts";

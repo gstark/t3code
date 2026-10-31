@@ -338,6 +338,7 @@ function createTextGeneration(
       Effect.succeed({
         branch: "update-workflow",
       }),
+    generateReplySuggestion: () => Effect.succeed({ reply: "" }),
     generateThreadTitle: () =>
       Effect.succeed({
         title: "Update workflow",
@@ -381,6 +382,7 @@ function createTextGeneration(
             }),
         ),
       ),
+    generateReplySuggestion: (input) => implementation.generateReplySuggestion(input),
     generateThreadTitle: (input) =>
       implementation.generateThreadTitle(input).pipe(
         Effect.mapError(

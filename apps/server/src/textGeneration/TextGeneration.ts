@@ -19,6 +19,8 @@ export type {
   HistorySummaryGenerationResult,
   PrContentGenerationInput,
   PrContentGenerationResult,
+  ReplySuggestionGenerationInput,
+  ReplySuggestionGenerationResult,
   ReviewGuideGenerationInput,
   ReviewGuideGenerationResult,
   ThreadTitleGenerationInput,
@@ -35,7 +37,8 @@ type TextGenerationOp =
   | "generateBranchName"
   | "generateThreadTitle"
   | "generateHistorySummary"
-  | "generateReviewGuide";
+  | "generateReviewGuide"
+  | "generateReplySuggestion";
 
 const resolveInstance = (
   registry: ProviderInstanceRegistry.ProviderInstanceRegistry["Service"],
@@ -88,6 +91,13 @@ export const make = Effect.gen(function* () {
       return resolveInstance(registry, "generateReviewGuide", input.modelSelection.instanceId).pipe(
         Effect.flatMap((textGeneration) => textGeneration.generateReviewGuide(input)),
       );
+    }),
+    generateReplySuggestion: Effect.fn("TextGeneration.generateReplySuggestion")(function (input) {
+      return resolveInstance(
+        registry,
+        "generateReplySuggestion",
+        input.modelSelection.instanceId,
+      ).pipe(Effect.flatMap((textGeneration) => textGeneration.generateReplySuggestion(input)));
     }),
     generateThreadTitle: Effect.fn("TextGeneration.generateThreadTitle")(function (input) {
       return resolveInstance(registry, "generateThreadTitle", input.modelSelection.instanceId).pipe(

@@ -23,12 +23,14 @@ import {
   buildCommitMessagePrompt,
   buildPrContentPrompt,
   buildHistorySummaryPrompt,
+  buildReplySuggestionPrompt,
   buildThreadTitlePrompt,
 } from "@t3tools/provider-core/server/textGenerationPrompts";
 import {
   sanitizeCommitSubject,
   sanitizePrTitle,
   sanitizeHistorySummary,
+  sanitizeReplySuggestion,
   sanitizeThreadTitle,
   toJsonSchemaObject,
 } from "@t3tools/provider-core/server/textGenerationUtils";
@@ -342,6 +344,16 @@ export const makeMuseTextGeneration = Effect.fn("makeMuseTextGeneration")(functi
     });
     return { title: sanitizeThreadTitle(generated.title) };
   });
+  const generateReplySuggestion: ProviderTextGeneration["generateReplySuggestion"] = Effect.fn(
+    "MuseTextGeneration.generateReplySuggestion",
+  )(function* (input) {
+    const generated = yield* runMuseJson({
+      operation: "generateReplySuggestion",
+      ...buildReplySuggestionPrompt(input.message),
+      modelSelection: input.modelSelection,
+    });
+    return { reply: sanitizeReplySuggestion(generated.reply) };
+  });
   const generateHistorySummary: ProviderTextGeneration["generateHistorySummary"] = Effect.fn(
     "MuseTextGeneration.generateHistorySummary",
   )(function* (input) {
@@ -360,6 +372,7 @@ export const makeMuseTextGeneration = Effect.fn("makeMuseTextGeneration")(functi
     generatePrContent,
     generateBranchName,
     generateThreadTitle,
+    generateReplySuggestion,
     generateHistorySummary,
     generateReviewGuide,
   } satisfies ProviderTextGeneration;

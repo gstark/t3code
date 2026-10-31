@@ -74,6 +74,16 @@ export interface ThreadTitleGenerationResult {
   needsRefinement?: boolean | undefined;
 }
 
+export interface ReplySuggestionGenerationInput {
+  cwd: string;
+  message: string;
+  modelSelection: ModelSelection;
+}
+
+export interface ReplySuggestionGenerationResult {
+  reply: string;
+}
+
 export interface HistorySummaryGenerationInput {
   cwd: string;
   /** The collapsed part of the conversation, formatted as role-labelled messages. */
@@ -127,6 +137,10 @@ export interface ProviderTextGeneration {
   readonly generateThreadTitle: (
     input: ThreadTitleGenerationInput,
   ) => Effect.Effect<ThreadTitleGenerationResult, TextGenerationError>;
+
+  readonly generateReplySuggestion: (
+    input: ReplySuggestionGenerationInput,
+  ) => Effect.Effect<ReplySuggestionGenerationResult, TextGenerationError>;
 
   /** Summarize a collapsed part of a thread in one line. */
   readonly generateHistorySummary: (

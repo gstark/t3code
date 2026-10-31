@@ -5,6 +5,8 @@ import {
   OrchestrationV2SearchThreadsInput,
   OrchestrationV2SearchThreadsResult,
 } from "./orchestrationV2.ts";
+import { ReplySuggestionInput, ReplySuggestionResult } from "./replySuggestion.ts";
+import { TextGenerationError } from "./git.ts";
 import { OrchestrationDispatchCommandError } from "./orchestrationDispatch.ts";
 import {
   McpAppCallToolInput,
@@ -384,6 +386,7 @@ import { VcsError } from "./vcs.ts";
 import { Project, ProjectMutation, ProjectMutationError } from "./project.ts";
 
 export const WS_METHODS = {
+  threadSuggestReply: "thread.suggestReply",
   projectsList: "projects.list",
   projectsAdd: "projects.add",
   projectsRemove: "projects.remove",
@@ -1754,6 +1757,12 @@ const WsOrchestrationV2GetTurnItemRpc = Rpc.make(ORCHESTRATION_V2_WS_METHODS.get
   error: Schema.Union([OrchestrationV2GetThreadProjectionError, EnvironmentAuthorizationError]),
 });
 
+const WsThreadSuggestReplyRpc = Rpc.make(WS_METHODS.threadSuggestReply, {
+  payload: ReplySuggestionInput,
+  success: ReplySuggestionResult,
+  error: Schema.Union([TextGenerationError, EnvironmentAuthorizationError]),
+});
+
 const WsOrchestrationV2LaunchThreadRpc = Rpc.make(ORCHESTRATION_V2_WS_METHODS.launchThread, {
   payload: OrchestrationV2RpcSchemas.launchThread.input,
   success: OrchestrationV2RpcSchemas.launchThread.output,
@@ -2133,6 +2142,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsOrchestrationV2GetOlderSettledThreadsRpc,
   WsOrchestrationV2GetThreadProjectionRpc,
   WsOrchestrationV2LaunchThreadRpc,
+  WsThreadSuggestReplyRpc,
   WsOrchestrationV2SubscribeArchivedShellRpc,
   WsOrchestrationV2SubscribeShellRpc,
   WsOrchestrationV2SubscribeThreadRpc,

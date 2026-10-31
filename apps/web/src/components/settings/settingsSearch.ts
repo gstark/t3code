@@ -531,6 +531,12 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["composer rest resting scroll wheel conversation timeline shrink minimize"],
   },
   {
+    id: "reply-suggestions",
+    title: "Suggest replies",
+    to: "/settings/chat",
+    searchTerms: ["composer suggestion suggested reply autocomplete tab complete next prompt"],
+  },
+  {
     id: "group-tool-calls",
     title: "Group tool calls",
     to: "/settings/chat",

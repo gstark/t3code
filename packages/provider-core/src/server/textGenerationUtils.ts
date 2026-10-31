@@ -57,6 +57,12 @@ const MAX_THREAD_TITLE_CHARS = 120;
 const MAX_HISTORY_SUMMARY_CHARS = 160;
 
 /** One line, no wrapping quotes, capped so a chatty model cannot grow the row. */
+/** One line of at most 160 characters; anything longer becomes no suggestion. */
+export function sanitizeReplySuggestion(raw: string): string {
+  const reply = raw.trim().replace(/\s+/g, " ");
+  return reply.length <= 160 ? reply : "";
+}
+
 export function sanitizeHistorySummary(raw: string): string {
   const line =
     raw

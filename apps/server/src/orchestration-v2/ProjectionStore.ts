@@ -1629,6 +1629,9 @@ export function threadShellFromProjection(
     runs,
     pullRequests: projection.thread.pullRequests,
   });
+  const nativeReplySuggestion = projection.providerThreads.find(
+    (thread) => thread.id === latestRun?.providerThreadId,
+  )?.nativeMetadata?.replySuggestion;
   return {
     createdBy: projection.thread.createdBy,
     creationSource: projection.thread.creationSource,
@@ -1657,6 +1660,9 @@ export function threadShellFromProjection(
     ...(projection.thread.historyOrigin === undefined
       ? {}
       : { historyOrigin: projection.thread.historyOrigin }),
+    ...(nativeReplySuggestion !== undefined && nativeReplySuggestion.runId === latestRun?.id
+      ? { replySuggestion: nativeReplySuggestion }
+      : {}),
     latestRunId: latestRun?.id ?? null,
     latestRunRequestedAt: latestRun?.requestedAt ?? null,
     latestRunStartedAt: latestRun?.startedAt ?? null,
