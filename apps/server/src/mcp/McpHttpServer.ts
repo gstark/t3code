@@ -41,6 +41,9 @@ import * as McpToolAccess from "./McpToolAccess.ts";
 import * as OrchestratorMcpService from "./OrchestratorMcpService.ts";
 import { PreviewControlsToolkit } from "./toolkits/previewControls/tools.ts";
 import * as PreviewControlsHandlers from "./toolkits/previewControls/handlers.ts";
+import { TerminalToolkit } from "./toolkits/terminal/tools.ts";
+import * as TerminalHandlers from "./toolkits/terminal/handlers.ts";
+import * as TerminalMcpService from "./TerminalMcpService.ts";
 import { EnvironmentToolkit } from "./toolkits/environment/tools.ts";
 import * as EnvironmentHandlers from "./toolkits/environment/handlers.ts";
 import { ProjectToolkit } from "./toolkits/project/tools.ts";
@@ -1015,6 +1018,11 @@ const layerPreviewControlsRegistration = toolkitRegistration(
   PreviewControlsHandlers.layer,
 );
 
+const layerTerminalToolkit = toolkitRegistration(TerminalToolkit, TerminalHandlers.layer).pipe(
+  Layer.provide(TerminalMcpService.layer),
+  Layer.provide(ThreadCommandExecutor.layer),
+);
+
 const layerEnvironmentToolkit = toolkitRegistration(
   EnvironmentToolkit,
   EnvironmentHandlers.layer,
@@ -1062,6 +1070,7 @@ export const layer = Layer.mergeAll(
   layerAttachmentToolkit,
   layerProjectRegistration,
   layerEnvironmentToolkit,
+  layerTerminalToolkit,
   layerPreviewControlsRegistration,
   layerWorktreeToolkitRegistration,
   layerPullRequestsToolkit,
