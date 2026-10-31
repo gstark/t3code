@@ -8395,7 +8395,7 @@ describe("ClaudeAdapterV2 background wake turns", () => {
       ),
   );
 
-  it.effect("stores a Bash result's stdout and stderr as command output", () =>
+  it.effect("stores a Bash result's output, and its description as the command's intent", () =>
     Effect.scoped(
       Effect.gen(function* () {
         const harness = yield* makeWakeHarness;
@@ -8427,7 +8427,7 @@ describe("ClaudeAdapterV2 background wake turns", () => {
                   type: "tool_use",
                   id: bashToolUseId,
                   name: "Bash",
-                  input: { command: "git status" },
+                  input: { command: "git status", description: " Show working tree status " },
                 },
               ],
             },
@@ -8473,6 +8473,13 @@ describe("ClaudeAdapterV2 background wake turns", () => {
             ? bash.turnItem.output
             : undefined,
           "On branch main\nwarning: dirty",
+        );
+        // The Bash tool's description is the agent's stated intent for the command.
+        assert.equal(
+          bash?.type === "turn_item.updated" && bash.turnItem.type === "command_execution"
+            ? bash.turnItem.intent
+            : undefined,
+          "Show working tree status",
         );
       }).pipe(
         Effect.provide(

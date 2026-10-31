@@ -2705,6 +2705,12 @@ function jsonStringifyForTool(value: unknown): string {
   return JSON.stringify(value) ?? String(value);
 }
 
+/** The Bash tool's `description` states why Claude runs the command; clients use it as the label. */
+function commandIntentFromClaudeTool(input: ClaudeNativeToolInput): { intent?: string } {
+  const intent = firstStringInputField(input, ["description"]);
+  return intent ? { intent } : {};
+}
+
 function commandInputFromClaudeTool(toolName: string, input: ClaudeNativeToolInput): string {
   return (
     firstStringInputField(input, ["command", "cmd", "script"]) ??
@@ -5411,6 +5417,7 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
                   ...itemBase,
                   type: "command_execution",
                   input: commandInputFromClaudeTool(input.toolName, input.toolInput),
+                  ...commandIntentFromClaudeTool(input.toolInput),
                   ...(outputText.length === 0 ? {} : { output: outputText }),
                 }
               : itemType === "file_change"
