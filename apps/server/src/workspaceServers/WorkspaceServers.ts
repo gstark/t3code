@@ -453,6 +453,7 @@ export const make = Effect.gen(function* () {
     timeToLive: "30 seconds",
     lookup: Effect.fn("WorkspaceServers.network")(function* (_key: "host") {
       const endpoints = resolveBoundEndpoints({
+        platform,
         host: "0.0.0.0",
         port: 1,
         interfaces: NodeOS.networkInterfaces(),

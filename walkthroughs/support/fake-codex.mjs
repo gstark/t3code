@@ -1,13 +1,7 @@
 // A scripted stand-in for the Codex CLI, so a walkthrough shows real turns
-// without a real account. T3 Code runs it as the Codex binary:
-//
-//   fake-codex.mjs <script.json> --version
-//   fake-codex.mjs <script.json> app-server        JSON-RPC over stdio
-//   fake-codex.mjs <script.json> exec ... -        commit messages, titles
-//
-// Each turn runs its steps for real in the turn's cwd: a `run` step runs the
-// command with bash, and an `edit` step writes the file. So the worktree holds
-// the agent's work when the walkthrough lands it. Plain Node, stdlib only.
+// without a real account. Modes: `--version`, `app-server` (JSON-RPC over
+// stdio), and `exec ... -` (commit messages, titles). Each turn runs its steps
+// in the turn's cwd, so the worktree holds the agent's work when it lands.
 import * as NodeChildProcess from "node:child_process";
 import * as NodeCrypto from "node:crypto";
 import * as NodeFS from "node:fs";

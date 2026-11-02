@@ -133,6 +133,8 @@ function harness(projection: OrchestrationV2ThreadProjection) {
               faviconPath: null,
               projectIcon: null,
               scripts: [],
+              pinnedAt: null,
+              archivedAt: null,
               createdAt: "2026-10-07T12:00:00Z",
               updatedAt: "2026-10-07T12:00:00Z",
               deletedAt: null,

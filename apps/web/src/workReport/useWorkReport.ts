@@ -104,7 +104,7 @@ export function useWorkReportNudge(): {
   const since = workReportCountSince(settings, nowMs);
   const pending = useAtomValue(pendingCountAtom(`${since}|${settings.projectId ?? ""}`));
 
-  // oxlint-disable-next-line t3code/react-effect-budget -- One timer to the moment the nudge becomes due, so nothing repaints until then.
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- One timer to the moment the nudge becomes due, so nothing repaints until then.
   useEffect(() => {
     if (nowMs >= dueAtMs) return;
     const timer = window.setTimeout(

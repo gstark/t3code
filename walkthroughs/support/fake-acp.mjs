@@ -1,12 +1,7 @@
 // A scripted ACP agent, so a walkthrough shows an ACP provider without a real
-// account. T3 Code runs it as a local ACP Registry command:
-//
-//   fake-acp.mjs <script.json>        ACP JSON-RPC over stdio
-//
-// It plays the same AgentScript as fake-codex.mjs. A `run` step runs the
-// command with bash in the session cwd and sends its `reason` as
-// `rawInput.description`, as Grok does. An `edit` step writes the file.
-// `plan` steps and `context` are not sent. Plain Node, stdlib only.
+// account. It plays the same AgentScript as fake-codex.mjs over ACP JSON-RPC.
+// A `run` step sends its `reason` as `rawInput.description`, as Grok does.
+// `plan` steps and `context` are not sent.
 import * as NodeChildProcess from "node:child_process";
 import * as NodeCrypto from "node:crypto";
 import * as NodeFS from "node:fs";

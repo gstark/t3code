@@ -25,18 +25,14 @@ export function AgentTerminalAccessSwitch({ threadRef }: { readonly threadRef: S
         disabled={!canEdit || settings === undefined || saving}
         onCheckedChange={async (enabled) => {
           setSaving(true);
-          try {
-            await updateSettings({
-              environmentId: threadRef.environmentId,
-              input: {
-                patch: {
-                  threadAgentTerminalAccess: { [threadRef.threadId]: enabled || null },
-                },
+          await updateSettings({
+            environmentId: threadRef.environmentId,
+            input: {
+              patch: {
+                threadAgentTerminalAccess: { [threadRef.threadId]: enabled || null },
               },
-            });
-          } finally {
-            setSaving(false);
-          }
+            },
+          }).finally(() => setSaving(false));
         }}
       />
     </label>

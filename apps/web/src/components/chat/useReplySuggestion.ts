@@ -13,7 +13,7 @@ export function useReplySuggestion(input: {
     null,
   );
   const [dismissed, setDismissed] = useState<string | null>(null);
-  // oxlint-disable-next-line t3code/react-effect-budget -- fetches the suggestion from the server when the reply key changes
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- fetches the suggestion from the server when the reply key changes
   useEffect(() => {
     if (!key || !enabled) return;
     if (pending.current?.key !== key || pending.current.revision !== revision) {
