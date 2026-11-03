@@ -89,7 +89,11 @@ homebrew: _require-mine
       exit 1
     fi
 
-    base="$(node -p "require('./apps/desktop/package.json').version")"
+    # package.json keeps the last stable version until upstream cuts the next
+    # one, so take the version from the newest upstream tag mine contains.
+    upstream_tag="$(git describe --tags --abbrev=0 --match 'v[0-9]*' --exclude '*-mine*')"
+    base="${upstream_tag#v}"
+    base="${base%%-*}"
     version="${base}-mine.$(date +%Y%m%d%H%M)"
     tag="v${version}"
     out="release/mine"
@@ -107,7 +111,7 @@ homebrew: _require-mine
     gh release create "$tag" "$dmg" -R {{ fork_repo }} \
       --target "$(git rev-parse HEAD)" \
       --title "G$ Code (mine) $version" \
-      --notes "Build of the mine branch at $(git rev-parse --short HEAD), based on upstream v${base}." \
+      --notes "Build of the mine branch at $(git rev-parse --short HEAD), based on upstream ${upstream_tag}." \
       --latest=false
 
     # The desktop app installs this exact version on SSH hosts. Publish the
