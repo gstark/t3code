@@ -1,6 +1,6 @@
 import { resolveTimelineMinimapPreview, type TimelineMinimapItem } from "./timelineMinimapItems";
 import { useRef, useState, type MouseEvent } from "react";
-import { ChevronDownIcon, ChevronUpIcon } from "lucide-react";
+import { ChevronDownIcon, ChevronUpIcon, Minimize2Icon } from "lucide-react";
 import { Button } from "../ui/button";
 import {
   resolveTimelineMinimapHeightStyle,
@@ -225,8 +225,24 @@ export function TimelineMinimap({
                 <span
                   aria-hidden="true"
                   className={cn(
-                    "pointer-events-none absolute left-0 h-0.5 w-6 origin-left -translate-y-1/2 rounded-full transition-transform duration-150 after:absolute after:inset-0 after:rounded-full after:bg-foreground/55 after:opacity-0 after:transition-opacity after:duration-150 data-[in-view=true]:after:opacity-100",
-                    activeDistance === 0 ? "bg-muted-foreground/60" : "bg-muted-foreground/25",
+                    "pointer-events-none absolute left-0 h-0.5 w-6 origin-left -translate-y-1/2 rounded-full transition-transform duration-150 after:absolute after:inset-0 after:rounded-full after:opacity-0 after:transition-opacity after:duration-150 data-[in-view=true]:after:opacity-100",
+                    item.compaction === null
+                      ? cn(
+                          "after:bg-foreground/55",
+                          activeDistance === 0
+                            ? "bg-muted-foreground/60"
+                            : "bg-muted-foreground/25",
+                        )
+                      : cn(
+                          item.compaction.failed ? "after:bg-destructive" : "after:bg-warning",
+                          activeDistance === 0
+                            ? item.compaction.failed
+                              ? "bg-destructive"
+                              : "bg-warning"
+                            : item.compaction.failed
+                              ? "bg-destructive/60"
+                              : "bg-warning/60",
+                        ),
                     activeDistance === 0
                       ? "scale-x-100"
                       : activeDistance === 1
@@ -273,6 +289,19 @@ export function TimelineMinimap({
                       }}
                     >
                       {activeItem.assistantText}
+                    </span>
+                  ) : null}
+                  {activeItem.compaction ? (
+                    <span
+                      className={cn(
+                        "mt-2 flex items-center gap-1.5 text-xs leading-4",
+                        activeItem.compaction.failed
+                          ? "text-destructive"
+                          : "text-warning-foreground",
+                      )}
+                    >
+                      <Minimize2Icon aria-hidden="true" className="size-3 shrink-0" />
+                      <span className="min-w-0 truncate">{activeItem.compaction.label}</span>
                     </span>
                   ) : null}
                   <TimelineMinimapPreviewMeta

@@ -15,6 +15,12 @@ export interface TimelineMinimapItem {
   readonly runId: RunId | null;
   readonly userText: string | null;
   readonly assistantText: string | null;
+  readonly compaction: TimelineMinimapCompaction | null;
+}
+
+export interface TimelineMinimapCompaction {
+  readonly label: string;
+  readonly failed: boolean;
 }
 
 export function deriveTimelineMinimapItems(
@@ -34,6 +40,7 @@ export function deriveTimelineMinimapItems(
       runId: row.message.runId,
       userText: isAttachmentOnlyBootstrapPrompt(row.message.text) ? "" : row.message.text,
       assistantText: resolveFinalAssistantTextForTurn(rows, index),
+      compaction: resolveCompactionForTurn(rows, index),
     });
   }
   return items;
@@ -57,6 +64,27 @@ function resolveFinalAssistantTextForTurn(
     }
   }
   return finalAssistantText;
+}
+
+function resolveCompactionForTurn(
+  rows: ReadonlyArray<MessagesTimelineRow>,
+  userRowIndex: number,
+): TimelineMinimapCompaction | null {
+  let compaction: TimelineMinimapCompaction | null = null;
+  for (let index = userRowIndex + 1; index < rows.length; index += 1) {
+    const row = rows[index];
+    if (row?.kind === "message" && row.message.role === "user") break;
+    if (row?.kind !== "context-compaction" || row.active) continue;
+    const label =
+      row.title && row.label.startsWith("Context compacted")
+        ? row.title + row.label.slice("Context compacted".length)
+        : row.label;
+    compaction = {
+      label: row.failure ? `${label}: ${row.failure}` : label,
+      failed: row.failed === true,
+    };
+  }
+  return compaction;
 }
 
 const markdownPreviewParser = unified().use(remarkParse).use(remarkGfm).freeze();
