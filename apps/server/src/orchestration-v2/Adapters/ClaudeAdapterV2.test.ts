@@ -6850,6 +6850,42 @@ describe("ClaudeAdapterV2 background wake turns", () => {
     ),
   );
 
+  it.effect("reports an empty context after /clear resets the conversation", () =>
+    Effect.gen(function* () {
+      const harness = yield* makeWakeHarness;
+      yield* harness.runtime.startTurn(
+        makeClaudeTestTurnInput({
+          threadId: harness.threadId,
+          providerThread: harness.providerThread,
+          now: yield* DateTime.now,
+          attemptId: RunAttemptId.make("attempt-clear"),
+          text: "/clear",
+          attachments: [],
+        }),
+      );
+      yield* Queue.offer(
+        harness.sdkMessages,
+        claudeSdkFrame({
+          type: "conversation_reset",
+          new_conversation_id: "00000000-0000-4000-8000-000000000680",
+          uuid: "00000000-0000-4000-8000-000000000680",
+          session_id: WAKE_NATIVE_SESSION,
+        }),
+      );
+      yield* Queue.offer(
+        harness.sdkMessages,
+        makeResultFrame({ uuid: "00000000-0000-4000-8000-000000000681", result: "" }),
+      );
+      const terminal = yield* Queue.take(harness.terminalReceipts);
+      assert.equal(terminal.status, "completed");
+      assert.deepEqual(reportedContextTokens(harness.events), [0]);
+    }).pipe(
+      Effect.provide(
+        Layer.mergeAll(IdAllocator.layer, McpProviderSessions.layer, NodeServices.layer),
+      ),
+    ),
+  );
+
   it.effect("merges cumulative stream usage into the message_start counts", () =>
     Effect.gen(function* () {
       const harness = yield* makeWakeHarnessWithOptions({

@@ -5118,6 +5118,41 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
           });
         });
 
+        // A context size known without a usage report, such as after compaction or /clear.
+        const emitContextTokenCount = Effect.fnUntraced(function* (
+          context: ActiveClaudeTurnContext,
+          usedTokens: number,
+          now: DateTime.Utc,
+        ) {
+          const maxTokens = claudeContextWindow(context.input.modelSelection);
+          yield* emitProviderEvent({
+            type: "provider_turn.updated",
+            driver: CLAUDE_PROVIDER,
+            threadId: context.input.threadId,
+            providerTurn: {
+              id: context.providerTurnId,
+              providerThreadId: context.input.providerThread.id,
+              nodeId: context.input.rootNodeId,
+              runAttemptId: context.input.attemptId,
+              nativeTurnRef: {
+                driver: CLAUDE_PROVIDER,
+                nativeId: context.nativeTurnId,
+                strength: "strong",
+              },
+              ordinal: context.providerTurnOrdinal,
+              status: "running",
+              startedAt: context.startedAt,
+              completedAt: null,
+              tokenUsage: {
+                usedTokens,
+                maxTokens,
+                ...claudeAutoCompactThreshold(adapterOptions.settings.autoCompactWindow, maxTokens),
+                updatedAt: DateTime.formatIso(now),
+              },
+            },
+          });
+        });
+
         // Claude has no recovered frame; the next assistant message proves recovery.
         // Runs on every model output frame and is almost always a no-op; only a pending retry gets a span.
         const completeProviderRetry = Effect.fnUntraced(function* (
@@ -8673,6 +8708,12 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
             }
           }
 
+          if (message.type === "conversation_reset") {
+            if (context.streamUsage !== null) context.streamUsage.usage = null;
+            yield* emitContextTokenCount(context, 0, yield* DateTime.now);
+            return;
+          }
+
           if (
             message.type === "system" &&
             (message.subtype === "compact_boundary" ||
@@ -8743,36 +8784,7 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
                 ? Math.round(postTokens)
                 : undefined;
             if (afterTokenCount !== undefined) {
-              const maxTokens = claudeContextWindow(context.input.modelSelection);
-              yield* emitProviderEvent({
-                type: "provider_turn.updated",
-                driver: CLAUDE_PROVIDER,
-                threadId: context.input.threadId,
-                providerTurn: {
-                  id: context.providerTurnId,
-                  providerThreadId: context.input.providerThread.id,
-                  nodeId: context.input.rootNodeId,
-                  runAttemptId: context.input.attemptId,
-                  nativeTurnRef: {
-                    driver: CLAUDE_PROVIDER,
-                    nativeId: context.nativeTurnId,
-                    strength: "strong",
-                  },
-                  ordinal: context.providerTurnOrdinal,
-                  status: "running",
-                  startedAt: context.startedAt,
-                  completedAt: null,
-                  tokenUsage: {
-                    usedTokens: afterTokenCount,
-                    maxTokens,
-                    ...claudeAutoCompactThreshold(
-                      adapterOptions.settings.autoCompactWindow,
-                      maxTokens,
-                    ),
-                    updatedAt: DateTime.formatIso(now),
-                  },
-                },
-              });
+              yield* emitContextTokenCount(context, afterTokenCount, now);
             }
             yield* emitProviderEvent({
               type: "turn_item.updated",
