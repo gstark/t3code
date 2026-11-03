@@ -439,9 +439,12 @@ export function resolveTimelinePinnedPrompt(input: {
   let pinned: number | null = null;
   for (const [index, rowIndex] of input.rowIndices.entries()) {
     const top = input.positionAtIndex(rowIndex);
+    if (top == null || !Number.isFinite(top)) return null;
+    // Sizes exist only for rendered rows, but every row has an estimated position.
     const size = input.sizeAtIndex(rowIndex);
-    if (top == null || size == null || !Number.isFinite(top) || !Number.isFinite(size)) break;
-    if (top + size > input.scroll) {
+    const bottom = input.positionAtIndex(rowIndex + 1) ?? (size == null ? undefined : top + size);
+    if (bottom == null || !Number.isFinite(bottom)) return null;
+    if (bottom > input.scroll) {
       const latestOnScreen =
         index === input.rowIndices.length - 1 && top < input.scroll + input.scrollLength;
       return pinned === null || latestOnScreen

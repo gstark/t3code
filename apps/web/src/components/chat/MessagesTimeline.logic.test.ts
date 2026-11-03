@@ -4601,13 +4601,24 @@ describe("resolveTimelinePinnedPrompt", () => {
     });
   });
 
-  it("stops at prompts the list has not positioned yet", () => {
+  it("pins nothing past prompts the list has not positioned yet", () => {
     expect(
       resolveTimelinePinnedPrompt({
         ...layout,
         scroll: 1200,
         positionAtIndex: (index) => (index < 10 ? index * 100 : undefined),
       }),
-    ).toEqual({ index: 1, nextTopOffset: null });
+    ).toBeNull();
+  });
+
+  it("measures unrendered prompts by their successor's position", () => {
+    // After a reload at the end, the list never rendered the middle prompts.
+    expect(
+      resolveTimelinePinnedPrompt({
+        ...layout,
+        scroll: 1200,
+        sizeAtIndex: (index) => (index === 10 ? 100 : undefined),
+      }),
+    ).toEqual({ index: 2, nextTopOffset: null });
   });
 });
