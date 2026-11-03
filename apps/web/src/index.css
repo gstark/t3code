@@ -274,6 +274,7 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(t3-mobil
   --color-foreground: var(--contrast-foreground);
   --color-background: var(--background);
   --color-message: var(--message-surface);
+  --color-message-pinned: color-mix(in srgb, var(--primary) 38%, var(--message-surface));
   --color-message-foreground: var(--contrast-message-foreground);
   --color-message-action: var(--message-action);
   --color-message-action-foreground: var(--message-action-foreground);

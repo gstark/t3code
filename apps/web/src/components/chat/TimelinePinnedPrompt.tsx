@@ -22,7 +22,7 @@ export function TimelinePinnedPrompt({
         <button
           type="button"
           aria-description="Jump to this prompt"
-          className="pointer-events-auto max-w-[80%] cursor-pointer rounded-2xl border border-border/70 bg-message px-3 py-1.5 text-left text-xs leading-5 text-message-foreground shadow-md/10 hover:border-border focus-visible:outline-2 focus-visible:outline-ring"
+          className="pointer-events-auto max-w-[80%] cursor-pointer rounded-2xl border border-primary/70 bg-message-pinned px-3 py-1.5 text-left text-xs leading-5 text-message-foreground shadow-md/10 hover:border-primary focus-visible:outline-2 focus-visible:outline-ring"
           onClick={onSelect}
         >
           <span className="line-clamp-2 break-words">{text.slice(0, PINNED_PROMPT_MAX_CHARS)}</span>
