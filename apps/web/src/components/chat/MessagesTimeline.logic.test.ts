@@ -4561,8 +4561,9 @@ describe("history collapses", () => {
 });
 
 describe("resolveTimelinePinnedPrompt", () => {
-  // Prompts at rows 0, 5 and 10; every row is 100px tall.
+  // Prompts at rows 0, 5 and 10; every row is 100px tall; the viewport is 300px tall.
   const layout = {
+    scrollLength: 300,
     rowIndices: [0, 5, 10],
     positionAtIndex: (index: number) => index * 100,
     sizeAtIndex: () => 100,
@@ -4585,6 +4586,12 @@ describe("resolveTimelinePinnedPrompt", () => {
 
   it("keeps the earlier prompt pinned until the next prompt fully leaves the top", () => {
     expect(resolveTimelinePinnedPrompt({ ...layout, scroll: 550 })?.index).toBe(0);
+  });
+
+  it("pins nothing while the latest prompt is on screen", () => {
+    expect(resolveTimelinePinnedPrompt({ ...layout, scroll: 700 })?.index).toBe(1);
+    expect(resolveTimelinePinnedPrompt({ ...layout, scroll: 701 })).toBeNull();
+    expect(resolveTimelinePinnedPrompt({ ...layout, scroll: 1050 })).toBeNull();
   });
 
   it("has no successor for the last turn", () => {

@@ -943,6 +943,7 @@ const ConversationTimeline = memo(function ConversationTimeline({
 
     const pinned = resolveTimelinePinnedPrompt({
       scroll,
+      scrollLength: state.scrollLength,
       rowIndices: minimapRowIndices,
       positionAtIndex: state.positionAtIndex,
       sizeAtIndex: state.sizeAtIndex,

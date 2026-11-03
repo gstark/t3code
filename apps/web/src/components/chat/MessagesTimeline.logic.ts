@@ -425,9 +425,13 @@ export function resolveTimelineMinimapCurrentIndex(input: {
   return precedingIndex;
 }
 
-/** The last prompt scrolled fully above the viewport, and its successor's offset below the top. */
+/**
+ * The last prompt scrolled fully above the viewport, and its successor's offset below the top.
+ * Nothing pins while the latest prompt is on screen: an older pin would compete with it.
+ */
 export function resolveTimelinePinnedPrompt(input: {
   readonly scroll: number;
+  readonly scrollLength: number;
   readonly rowIndices: ReadonlyArray<number>;
   readonly positionAtIndex: (index: number) => number | undefined;
   readonly sizeAtIndex: (index: number) => number | undefined;
@@ -438,7 +442,11 @@ export function resolveTimelinePinnedPrompt(input: {
     const size = input.sizeAtIndex(rowIndex);
     if (top == null || size == null || !Number.isFinite(top) || !Number.isFinite(size)) break;
     if (top + size > input.scroll) {
-      return pinned === null ? null : { index: pinned, nextTopOffset: top - input.scroll };
+      const latestOnScreen =
+        index === input.rowIndices.length - 1 && top < input.scroll + input.scrollLength;
+      return pinned === null || latestOnScreen
+        ? null
+        : { index: pinned, nextTopOffset: top - input.scroll };
     }
     pinned = index;
   }
