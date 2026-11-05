@@ -234,9 +234,14 @@ import { openGuestShareDialog } from "./chat/guestShareDialogState";
 import { ProjectContentSearchDialog } from "./search/ProjectContentSearchDialog";
 import { settingsForThisPlatform, SETTINGS_SECTION_LABELS } from "./settings/settingsSearch";
 import { primaryServerKeybindingsAtom } from "../state/server";
-import { resolveShortcutCommand, threadJumpIndexFromCommand } from "../keybindings";
+import {
+  resolveShortcutCommand,
+  threadJumpCommandForIndex,
+  threadJumpIndexFromCommand,
+} from "../keybindings";
 import { CommandDialog, CommandDialogPopup, CommandFooterAction } from "./ui/command";
 import { Button } from "./ui/button";
+import { Kbd, KbdGroup } from "./ui/kbd";
 import { stackedThreadToast, toastManager } from "./ui/toast";
 import { suggestAppAccessForRemote } from "./sourceControlAppAccessToast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
@@ -373,6 +378,26 @@ function CommandPaletteDialog(props: {
   );
 }
 
+// Whether Shift is down while the palette is open. Rows that can open in a
+// worktree preview that action while it is held.
+function useShiftHeld(): boolean {
+  const [shiftHeld, setShiftHeld] = useState(false);
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- tracks the Shift key through window key listeners while the palette is open
+  useEffect(() => {
+    const sync = (event: globalThis.KeyboardEvent) => setShiftHeld(event.shiftKey);
+    const reset = () => setShiftHeld(false);
+    window.addEventListener("keydown", sync, true);
+    window.addEventListener("keyup", sync, true);
+    window.addEventListener("blur", reset);
+    return () => {
+      window.removeEventListener("keydown", sync, true);
+      window.removeEventListener("keyup", sync, true);
+      window.removeEventListener("blur", reset);
+    };
+  }, []);
+  return shiftHeld;
+}
+
 function OpenCommandPaletteDialog(props: {
   readonly openIntent: CommandPaletteOpenIntent | null;
   readonly setOpen: (open: boolean) => void;
@@ -406,6 +431,7 @@ function OpenCommandPaletteDialog(props: {
   const deferredQuery = useDeferredValue(query);
   const isActionsOnly = deferredQuery.startsWith(">");
   const [highlightedItemValue, setHighlightedItemValue] = useState<string | null>(null);
+  const shiftHeld = useShiftHeld();
   const resultListRef = useRef<LegendListRef | null>(null);
   // A pushed view drops the typed highlight until the user moves it again.
   const highlightClearedRef = useRef(viewStack.length > 0);
@@ -795,6 +821,20 @@ function OpenCommandPaletteDialog(props: {
     true,
   );
 
+  const newThreadProjectRef = (project: CommandPaletteProject) => {
+    const group = projectGroupByTargetKey.get(`${project.environmentId}:${project.id}`);
+    const contextualRefBelongsToGroup =
+      contextualProjectRef !== null &&
+      group?.memberProjectRefs.some(
+        (projectRef) =>
+          projectRef.environmentId === contextualProjectRef.environmentId &&
+          projectRef.projectId === contextualProjectRef.projectId,
+      );
+    return contextualRefBelongsToGroup
+      ? contextualProjectRef
+      : scopeProjectRef(project.environmentId, project.id);
+  };
+
   const openingOrderThreadItems = useOrderWhileOpen(
     (() => {
       const isScratch = (project: CommandPaletteProject) =>
@@ -805,19 +845,10 @@ function OpenCommandPaletteDialog(props: {
         locationByEnvironmentId: projectEnvironmentLocationById,
         pin: projectPin,
         runProject: async (project) => {
-          const group = projectGroupByTargetKey.get(`${project.environmentId}:${project.id}`);
-          const contextualRefBelongsToGroup =
-            contextualProjectRef !== null &&
-            group?.memberProjectRefs.some(
-              (projectRef) =>
-                projectRef.environmentId === contextualProjectRef.environmentId &&
-                projectRef.projectId === contextualProjectRef.projectId,
-            );
-          await handleNewThread(
-            contextualRefBelongsToGroup
-              ? contextualProjectRef
-              : scopeProjectRef(project.environmentId, project.id),
-          );
+          await handleNewThread(newThreadProjectRef(project));
+        },
+        runProjectInWorktree: async (project) => {
+          await handleNewThread(newThreadProjectRef(project), { envMode: "worktree" });
         },
       });
       if (scratchTargetEnvironmentId === null) return projectItems;
@@ -2390,6 +2421,18 @@ function OpenCommandPaletteDialog(props: {
       platform: navigator.platform,
       context: { modelPickerOpen: false, editableFocus: true },
     });
+    const worktreeJumpIndex = worktreeJumpIndexFromEvent(event);
+    if (worktreeJumpIndex !== null) {
+      const worktreeItem = displayedGroups
+        .flatMap((group) => group.items)
+        .find((item) => item.shortcutCommand === threadJumpCommandForIndex(worktreeJumpIndex));
+      if (worktreeItem?.kind === "action" && worktreeItem.runInWorktree) {
+        event.preventDefault();
+        event.stopPropagation();
+        executeItem(worktreeItem, { inWorktree: true });
+        return;
+      }
+    }
     if (command === "thread.pin") {
       const highlightedItem = findHighlightedCommandPaletteItem(
         displayedGroups,
@@ -2447,6 +2490,23 @@ function OpenCommandPaletteDialog(props: {
           description: "Update the server to enable it.",
         });
       return;
+    }
+
+    if (
+      event.key === "Enter" &&
+      event.shiftKey &&
+      !event.altKey &&
+      !isPrimaryModifierPressed(event)
+    ) {
+      const highlightedItem = displayedGroups
+        .flatMap((group) => group.items)
+        .find((item) => item.value === highlightedItemValue);
+      if (highlightedItem?.kind === "action" && highlightedItem.runInWorktree) {
+        event.preventDefault();
+        event.stopPropagation();
+        executeItem(highlightedItem, { inWorktree: true });
+        return;
+      }
     }
 
     if (addProjectCloneFlow?.step === "repository" && event.key === "Enter") {
@@ -2525,7 +2585,17 @@ function OpenCommandPaletteDialog(props: {
     }
   }
 
-  function executeItem(item: CommandPaletteActionItem | CommandPaletteSubmenuItem): void {
+  // Shift plus the jump shortcut (⇧⌘1 to ⇧⌘9) runs a row in a new worktree.
+  function worktreeJumpIndexFromEvent(event: KeyboardEvent<HTMLInputElement>): number | null {
+    if (!event.shiftKey || event.altKey || !isPrimaryModifierPressed(event)) return null;
+    const digit = /^Digit([1-9])$/.exec(event.code)?.[1];
+    return digit ? Number(digit) - 1 : null;
+  }
+
+  function executeItem(
+    item: CommandPaletteActionItem | CommandPaletteSubmenuItem,
+    options?: { readonly inWorktree?: boolean },
+  ): void {
     if (item.disabled) {
       return;
     }
@@ -2539,7 +2609,8 @@ function OpenCommandPaletteDialog(props: {
       setOpen(false);
     }
 
-    void item.run().catch((error: unknown) => {
+    const run = options?.inWorktree && item.runInWorktree ? item.runInWorktree : item.run;
+    void run().catch((error: unknown) => {
       toastManager.add(
         stackedThreadToast({
           type: "error",
@@ -2710,20 +2781,38 @@ function OpenCommandPaletteDialog(props: {
           ? "Select"
           : undefined;
 
-  const footerTrailing = canOpenProjectFromFileManager ? (
-    <CommandFooterAction
-      disabled={isPickingProjectFolder}
-      onClick={() => {
-        void handleOpenProjectFromFileManager();
-      }}
-    >
-      {`Open in ${fileManagerName}`}
-    </CommandFooterAction>
-  ) : isThreadSearchPending && !isLinkedThreadSearch && !isBrowsing ? (
-    // In the footer, so the list keeps its height while message results may
-    // still arrive below it.
-    <span className="text-muted-foreground text-xs">Searching messages…</span>
-  ) : null;
+  const hasWorktreeItems = displayedGroups.some((group) =>
+    group.items.some((item) => item.kind === "action" && item.runInWorktree !== undefined),
+  );
+  // In the footer, so the list keeps its height while message results may
+  // still arrive below it.
+  const isSearchingMessages =
+    !canOpenProjectFromFileManager && isThreadSearchPending && !isLinkedThreadSearch && !isBrowsing;
+  const footerTrailing =
+    canOpenProjectFromFileManager || hasWorktreeItems || isSearchingMessages ? (
+      <div className="flex items-center gap-3">
+        {isSearchingMessages ? (
+          <span className="text-muted-foreground text-xs">Searching messages…</span>
+        ) : null}
+        {hasWorktreeItems ? (
+          <KbdGroup>
+            <span>Hold</span>
+            <Kbd>Shift</Kbd>
+            <span>to open in worktree</span>
+          </KbdGroup>
+        ) : null}
+        {canOpenProjectFromFileManager ? (
+          <CommandFooterAction
+            disabled={isPickingProjectFolder}
+            onClick={() => {
+              void handleOpenProjectFromFileManager();
+            }}
+          >
+            {`Open in ${fileManagerName}`}
+          </CommandFooterAction>
+        ) : null}
+      </div>
+    ) : null;
 
   return (
     <CommandPaletteContent
@@ -2811,6 +2900,7 @@ function OpenCommandPaletteDialog(props: {
         highlightedItemValue={highlightedItemValue}
         isActionsOnly={isActionsOnly}
         keybindings={keybindings}
+        shiftHeld={shiftHeld}
         onExecuteItem={executeItem}
         {...(addProjectCloneFlow?.step === "repository"
           ? {

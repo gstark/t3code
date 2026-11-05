@@ -30,6 +30,7 @@ interface ProjectItemsInput {
   readonly projectGroupByTargetKey: ReadonlyMap<string, SidebarProjectSnapshot>;
   readonly locationByEnvironmentId: ReadonlyMap<EnvironmentId, CommandPaletteProjectLocation>;
   readonly runProject: (project: CommandPaletteProject) => Promise<void>;
+  readonly runProjectInWorktree?: (project: CommandPaletteProject) => Promise<void>;
   readonly pin?: (project: CommandPaletteProject) => CommandPaletteItemPin | null;
 }
 
@@ -93,6 +94,9 @@ export function buildNewThreadInProjectItems(input: ProjectItemsInput) {
     ),
     icon: projectFaviconIcon,
     runProject: input.runProject,
+    ...(input.runProjectInWorktree !== undefined
+      ? { runProjectInWorktree: input.runProjectInWorktree }
+      : {}),
     ...(input.pin ? { pin: input.pin } : {}),
   });
 }
