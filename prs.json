@@ -4,7 +4,7 @@
     {
       "slug": "command-palette-worktrees",
       "number": 1,
-      "title": "feat(web): open command palette threads and actions in a new worktree",
+      "title": "feat(web): start a command palette thread in a new worktree with Shift",
       "body": "A new thread from the command palette always started in the main checkout.\n\n- The \"new thread in project\" rows can start the thread in a new worktree.\n- When you hold Shift, each row that supports it shows \"New worktree\". Its jump shortcut changes from ⌘1 to ⇧⌘1.\n- Shift+Enter, Shift+click, and ⇧⌘1 to ⇧⌘9 run the worktree action.\n- The palette footer shows the Shift hint when the list has rows that can open in a worktree.\n\n---\nKept in sync from mine by fork-prs.",
       "commits": [
         "ab78450290a1cd81ca321927523ae46f6d280a84",
@@ -13,9 +13,9 @@
       "parent": null,
       "parentReason": null,
       "status": "open",
-      "baseTag": "v0.1.3",
-      "builtOn": "d2c440312e5f39d59827ed466838a623516454d6",
-      "head": "a601f40d24c9cb3f26dbde412c6f87376bb37d1a",
+      "baseTag": "v0.1.6",
+      "builtOn": "2359643cffa6ba9ee84d6f2694b935de54a8013e",
+      "head": "d889ecaa95092013e9fa5e3dc05f6b442d7688a4",
       "applied": [
         "ab78450290a1cd81ca321927523ae46f6d280a84",
         "612dfa98e68184319f6c6e60863281cde66895af"
@@ -120,7 +120,7 @@
       "slug": "justfile-recipes-menu",
       "number": 6,
       "title": "feat(web): run justfile recipes from the actions menu",
-      "body": "Projects with a justfile had to copy each recipe into project actions by hand.\n\n- The thread details card's actions menu lists the public recipes from the workspace root `justfile`, or `Justfile` when `justfile` is missing. No setup is needed.\n- A recipe runs in the terminal drawer.\n- A recipe that needs arguments is typed into the terminal without being run, so you can add the arguments.\n- A recipe that is already saved as a `just <name>` action shows once, as that action.\n- The parser is `packages/shared/src/justfile.ts` and has tests.\n- `docs/user/project-settings.md` describes the feature.\n\nPorted to `base/upstream-2026-10-13`. Upstream moved the actions menu from the thread header to the thread details card, so the recipes now attach there.\n\n---\nKept in sync from mine by fork-prs.",
+      "body": "Projects with a justfile had to copy each recipe into project actions by hand.\n\n- The thread details card's actions menu lists the public recipes from the workspace root `justfile`, or `Justfile` when `justfile` is missing. No setup is needed.\n- A recipe runs in the terminal drawer.\n- A recipe that needs arguments is typed into the terminal without being run, so you can add the arguments.\n- A recipe that is already saved as a `just <name>` action shows once, as that action.\n- The actions menu stays reachable when a project has no saved actions but has recipes.\n- The parser is `packages/shared/src/justfile.ts` and has tests.\n- `docs/user/project-settings.md` describes the feature.\n\n---\nKept in sync from mine by fork-prs.",
       "commits": [
         "ad59b8c49cbd2445c787e1acd79a61d3d56bcdba",
         "c1121f8264fd64c66f40ef20ebf8429e4540651d"
@@ -128,9 +128,9 @@
       "parent": null,
       "parentReason": null,
       "status": "open",
-      "baseTag": "v0.1.3",
-      "builtOn": "d2c440312e5f39d59827ed466838a623516454d6",
-      "head": "cd8cd6286b3c498c34d1a1e44c030a221477c3b5",
+      "baseTag": "v0.1.6",
+      "builtOn": "2359643cffa6ba9ee84d6f2694b935de54a8013e",
+      "head": "f5535e1f5048c3461b308a8d1ce7395b1b4bbfe0",
       "applied": [
         "ad59b8c49cbd2445c787e1acd79a61d3d56bcdba",
         "c1121f8264fd64c66f40ef20ebf8429e4540651d"
@@ -481,6 +481,7 @@
       "body": "Landing a worktree failed unless the main checkout was on the base branch: \"The main checkout at … is on other. Switch it to main, then land again.\" You had to switch branches in a checkout you were not using.\n\nLanding now finds the worktree that has the base branch checked out, if one does:\n\n- **No checkout has the base branch.** Landing moves the base branch ref forward. No working tree changes.\n- **A checkout has the base branch.** Landing updates that checkout, as before. It refuses if that checkout has uncommitted changes, and the error names its path.\n- The main checkout keeps its current branch and stays clean.\n- A rebase conflict stays in the worktree being landed, as before.\n- When the main checkout is not on the base branch, the success toast does not offer to push. A push from there would push the wrong branch.\n\nTests in `GitManager.test.ts` cover these cases: landing while main is on another branch, updating a separate checkout of main, refusing when that checkout is dirty, and keeping a conflict in the worktree.\n\nThis PR is stacked on pr/git-timeline-cards because that PR adds the land action, which this PR changes.\n\nClaude Opus 5.5 (claude-opus-5-5) in Claude Code, run through T3 Code.\n\n---\nKept in sync from mine by fork-prs.",
       "commits": [
         "49557d884ea8d048e0628622a61b86b875a25586",
+        "28ecd7f35751fa2d86bb3b6f4fb23ecfad8bfde2",
         "c1ef3547756b343903ed6d007d99d92fed55fac1"
       ],
       "parent": "git-timeline-cards",
@@ -675,7 +676,9 @@
       "title": "feat(web): show timestamps and context usage in minimap previews",
       "body": "The timeline minimap preview showed only the message text. You could not see when a turn happened or how full the context window was at that point.\n\nThe preview now has a footer with two details:\n\n- The time the user message was sent, in the user's timestamp format, plus its age, such as \"3 minutes ago\" or \"4 weeks ago\".\n- The context usage that the turn's run ended with, as a percentage and token count, such as \"Context 12% · 120k/1M\". If the provider does not report a maximum, only the token count shows. If the run has no usage report, the line does not show.\n\n`tokenUsageByRunId` in `lib/contextWindow.ts` maps each run to the newest token usage report across its attempts' provider turns. `ChatView` computes this map and passes it through `MessagesTimeline` to `TimelineMinimap`. `formatApproximateAge` in `timestampFormat.ts` makes the age text. Both functions have tests.\n\n---\nKept in sync from mine by fork-prs.",
       "commits": [
-        "8af608511b56858a53f3f3954ec63e2cd6af39ad"
+        "8af608511b56858a53f3f3954ec63e2cd6af39ad",
+        "8d5b5afb49532e30f74687bd341fb4cf9660434e",
+        "b5c72807007e0cf2a21d7c0a4c9eaba1dcb5bcd5"
       ],
       "parent": null,
       "parentReason": null,
@@ -857,30 +860,17 @@
     {
       "sha": "4e2434535eb8cde53d1ae9e994ebcafe31df394b",
       "reason": "The commit changes only the fork justfile's homebrew release recipe, which derives the mine release version from the upstream tag, so it is fork release tooling."
-    }
-  ],
-  "pending": [
+    },
     {
       "sha": "e6de58bf99ede06d486d402ea9f953fcf141d25f",
-      "question": "Should the node-pty pin go upstream as its own PR, or is it only for fork release installs?"
-    },
-    {
-      "sha": "28ecd7f35751fa2d86bb3b6f4fb23ecfad8bfde2",
-      "question": "This commit changes code from two PRs. Part 1 shortens the prepareLand comment in apps/server/src/git/GitManager.ts, which mentions baseCheckoutPath from land-without-base-checkout. Part 2 removes a stray comment in apps/server/src/ws.ts that git-land-worktree (ab72ac756e) added. Must the whole commit go to land-without-base-checkout? Or must you split it on mine so that the ws.ts part goes to git-land-worktree?"
-    },
-    {
-      "sha": "8d5b5afb49532e30f74687bd341fb4cf9660434e",
-      "question": "In apps/web/src/lib/contextWindow.ts, upstream v0.1.3 has no comment above deriveLatestContextWindowSnapshot. The v0.1.3 merge kept the old upstream comment with '(#8144)', and this commit only removes '(#8144)'. Must this commit go to minimap-preview-details, the only fork PR that changes this file? Or must you remove the whole comment on mine so that the file matches upstream?"
+      "reason": "Pins node-pty for fork release installs."
     },
     {
       "sha": "262e456401da181a5b931e90d7a4ed67b4f955e7",
-      "question": "walkthroughs/support/cursor.ts and explore.ts come from fork commit b774c6ac94 'chore: add scripted feature walkthroughs', and no PR has that commit. Are the walkthroughs fork-only, or must they get a new PR?"
-    },
-    {
-      "sha": "b5c72807007e0cf2a21d7c0a4c9eaba1dcb5bcd5",
-      "question": "The minimap compaction strips and the compaction line in the hover preview build on the preview footer from minimap-preview-details. Should this be part of that PR, or a new PR stacked on it, for example \"feat(web): highlight compactions on the timeline minimap\"?"
+      "reason": "Changes only the fork-only walkthrough tooling."
     }
   ],
+  "pending": [],
   "stacks": [
     {
       "number": 43,
