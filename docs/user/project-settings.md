@@ -46,6 +46,22 @@ Settings that are environment-wide stay read-only while a project is selected. W
 targets disagree, a control shows **Mixed** until you choose one value. Appearance, keyboard,
 and other phone-only settings ignore the filter.
 
+## Pin and archive projects
+
+Pinned projects come first in the project pickers: the project picker on a new thread, the
+new-thread list, the command palette, the sidebar project filter, and mobile. In the boring sidebar, pinned projects get the top
+folders, even with no active threads. Pin or unpin a project from its row in any of those lists,
+or press the thread pin shortcut (`mod+shift+p` by default) on the highlighted row. **Pin
+project** in the command palette and **Settings → Projects** work too. A list keeps its order
+while it is open, so a new pin moves up the next time you open it.
+
+Archive a project you are done with in **Settings → Projects**. It leaves the project pickers.
+Its threads, settings, and files stay as they are, and archived projects still show in the
+Settings project list, marked **Archived**. Choose one there and select **Unarchive** to bring it
+back. On mobile, both are in **Settings → Projects → Organize**.
+
+A project on several machines must have every machine connected to pin or archive it.
+
 ## Worktree branch names
 
 In **Settings → Worktrees → Worktree branch naming**, choose a static prefix,
@@ -154,7 +170,9 @@ project crumb.
 The Projects category, under Code, holds the project's name, icon, actions,
 checkouts and removal. Actions belong to a project: editing them creates the project's own list
 on each selected environment, and reset returns to the environment's shared list. A project's
-`t3.json` actions can be imported there.
+`t3.json` actions can be imported there. Public recipes from the project's `justfile` appear in
+the thread details card's actions menu without setup and run in the terminal drawer. A recipe that
+needs arguments is typed into the terminal without being run, so you can add them.
 
 Settings a repository can also declare in `t3.json`, such as the workspace for new threads,
 resolve in one order: a project override, then the environment setting, then `t3.json`, then the

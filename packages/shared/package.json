@@ -35,6 +35,10 @@
       "types": "./src/projectFavicon.ts",
       "import": "./src/projectFavicon.ts"
     },
+    "./mobileSourceMaps": {
+      "types": "./src/mobileSourceMaps.ts",
+      "import": "./src/mobileSourceMaps.ts"
+    },
     "./model": {
       "types": "./src/model.ts",
       "import": "./src/model.ts"
@@ -155,6 +159,10 @@
       "types": "./src/projectSettings.ts",
       "import": "./src/projectSettings.ts"
     },
+    "./justfile": {
+      "types": "./src/justfile.ts",
+      "import": "./src/justfile.ts"
+    },
     "./t3ProjectFile": {
       "types": "./src/t3ProjectFile.ts",
       "import": "./src/t3ProjectFile.ts"
@@ -270,10 +278,6 @@
     "./composerContextLegacy": {
       "types": "./src/composerContextLegacy.ts",
       "import": "./src/composerContextLegacy.ts"
-    },
-    "./composerContextLegacySend": {
-      "types": "./src/composerContextLegacySend.ts",
-      "import": "./src/composerContextLegacySend.ts"
     },
     "./composerContextClipboard": {
       "types": "./src/composerContextClipboard.ts",
@@ -447,6 +451,10 @@
       "types": "./src/markdownGithubAlerts.ts",
       "import": "./src/markdownGithubAlerts.ts"
     },
+    "./markdownFrontmatter": {
+      "types": "./src/markdownFrontmatter.ts",
+      "import": "./src/markdownFrontmatter.ts"
+    },
     "./markdownListIndentation": {
       "types": "./src/markdownListIndentation.ts",
       "import": "./src/markdownListIndentation.ts"
@@ -454,6 +462,14 @@
     "./proposedPlanText": {
       "types": "./src/proposedPlanText.ts",
       "import": "./src/proposedPlanText.ts"
+    },
+    "./markdownWindowsPaths": {
+      "types": "./src/markdownWindowsPaths.ts",
+      "import": "./src/markdownWindowsPaths.ts"
+    },
+    "./generatedImageMarkdown": {
+      "types": "./src/generatedImageMarkdown.ts",
+      "import": "./src/generatedImageMarkdown.ts"
     },
     "./markdownPipeline": {
       "types": "./src/markdownPipeline.ts",
@@ -518,6 +534,7 @@
     "mdast-util-to-hast": "^13.2.1",
     "micromark-extension-directive": "catalog:",
     "micromark-util-character": "catalog:",
+    "property-information": "^7.2.0",
     "rehype-raw": "catalog:",
     "rehype-sanitize": "catalog:",
     "remark-breaks": "catalog:",
