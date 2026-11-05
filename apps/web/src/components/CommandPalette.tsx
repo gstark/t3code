@@ -382,6 +382,7 @@ function CommandPaletteDialog(props: {
 // worktree preview that action while it is held.
 function useShiftHeld(): boolean {
   const [shiftHeld, setShiftHeld] = useState(false);
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- tracks the Shift key through window key listeners while the palette is open
   useEffect(() => {
     const sync = (event: globalThis.KeyboardEvent) => setShiftHeld(event.shiftKey);
     const reset = () => setShiftHeld(false);
