@@ -197,7 +197,10 @@ const attempt = (ctx: BuildContext, pr: Pr, onto: string): Attempt => {
 
   const files = changedFiles(git, onto).filter((file) => NodeFS.existsSync(`${git.cwd}/${file}`));
   if (files.length > 0) {
-    run("vp", ["fmt", "--no-error-on-unmatched-pattern", ...files], { cwd: git.cwd });
+    const format = run("vp", ["fmt", "--no-error-on-unmatched-pattern", ...files], {
+      cwd: git.cwd,
+    });
+    if (!format.ok) return { ok: false, failure: `vp fmt failed:\n${format.output.slice(-3000)}` };
     if (git.git(["status", "--porcelain"])) {
       git.git(["commit", "-qam", "style: format with vp fmt"]);
     }

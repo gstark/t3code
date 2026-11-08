@@ -7,12 +7,13 @@
 //
 // Work happens in ../t3code-prs. State, the lock, and the report live in
 // ../t3code-prs-state. The ledger also goes to origin/fork-prs on live runs.
+import * as NodeCrypto from "node:crypto";
 import * as NodeFS from "node:fs";
 import * as NodePath from "node:path";
 
 import { classifyCommits, classifyPorts } from "./agent.ts";
 import { buildAll, clip } from "./build.ts";
-import { createGit, gh, type Git } from "./exec.ts";
+import { createGit, gh, run, type Git } from "./exec.ts";
 import {
   applyDecisions,
   emptyLedger,
@@ -76,6 +77,23 @@ if (!NodeFS.existsSync(worktree)) {
   repo.git(["worktree", "add", "-q", "--detach", worktree, tagSha]);
 }
 const git = createGit(worktree);
+
+// vp fmt loads vite.config.ts, which needs the worktree's own node_modules.
+const installMarker = NodePath.join(stateDir, "installed-lockfile");
+const lockHash = NodeCrypto.createHash("sha256")
+  .update(repo.git(["show", `${tagSha}:pnpm-lock.yaml`]))
+  .digest("hex");
+const installed = NodeFS.existsSync(installMarker)
+  ? NodeFS.readFileSync(installMarker, "utf8").trim()
+  : "";
+if (installed !== lockHash || !NodeFS.existsSync(NodePath.join(worktree, "node_modules"))) {
+  console.log(`fork-prs: installing dependencies for ${tag}`);
+  git.git(["checkout", "-q", "-f", "--detach", tagSha]);
+  git.git(["clean", "-fdq"]);
+  const install = run("vp", ["i", "--frozen-lockfile"], { cwd: worktree });
+  if (!install.ok) throw new Error(`vp i failed in ${worktree}:\n${install.output.slice(-3000)}`);
+  NodeFS.writeFileSync(installMarker, lockHash);
+}
 
 const remotePrs = JSON.parse(
   gh(root, [

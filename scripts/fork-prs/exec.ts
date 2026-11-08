@@ -30,8 +30,9 @@ const must = (label: string, result: Run) => {
 };
 
 export const createGit = (cwd: string) => {
+  // The repo's pre-commit hook lints with the worktree's deps; build commits must not depend on it.
   const tryGit = (args: ReadonlyArray<string>, input?: string) =>
-    run("git", ["-c", "core.quotePath=false", ...args], {
+    run("git", ["-c", "core.quotePath=false", "-c", "core.hooksPath=/dev/null", ...args], {
       cwd,
       input,
       env: { GIT_EDITOR: "true" },
