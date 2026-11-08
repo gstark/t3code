@@ -6,7 +6,7 @@ import {
   TurnItemId,
 } from "@t3tools/contracts";
 import * as Cause from "effect/Cause";
-import * as Crypto from "effect/Crypto";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 
 import * as Orchestrator from "../orchestration-v2/Orchestrator.ts";
@@ -39,7 +39,7 @@ export const recordGitAction = Effect.fn("recordGitAction")(
     const record = gitActionRecord(input.result);
     if (record === null) return;
     const engine = yield* Orchestrator.OrchestratorV2;
-    const id = yield* (yield* Crypto.Crypto).randomUUIDv4();
+    const id = yield* (yield* SecureRandom.SecureRandom).uuidV4();
     yield* engine.dispatch({
       type: "thread.git-action.record",
       commandId: CommandId.make(`server:git-action-record:${id}`),

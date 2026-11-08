@@ -1,5 +1,5 @@
 import { CommandId, type GitRebaseConflict, MessageId, type ThreadId } from "@t3tools/contracts";
-import * as Crypto from "effect/Crypto";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 
 import * as Orchestrator from "../orchestration-v2/Orchestrator.ts";
@@ -26,7 +26,7 @@ function rebaseConflictPrompt(conflict: GitRebaseConflict): string {
 export const askAgentToResolveRebase = Effect.fn("askAgentToResolveRebase")(
   function* (input: { readonly threadId: ThreadId; readonly conflict: GitRebaseConflict }) {
     const engine = yield* Orchestrator.OrchestratorV2;
-    const id = yield* (yield* Crypto.Crypto).randomUUIDv4();
+    const id = yield* (yield* SecureRandom.SecureRandom).uuidV4();
     const text = rebaseConflictPrompt(input.conflict);
     yield* engine.dispatch({
       type: "message.dispatch",

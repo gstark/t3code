@@ -85,8 +85,8 @@ const SidebarDraftRow = memo(function SidebarDraftRow(props: {
   };
   return (
     <div
-      role="treeitem"
-      tabIndex={-1}
+      role="button"
+      tabIndex={0}
       data-sidebar-row={`draft:${draftId}`}
       aria-label={accessibility.label}
       aria-current={accessibility.current}
