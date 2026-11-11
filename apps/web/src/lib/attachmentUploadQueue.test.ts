@@ -76,6 +76,7 @@ class TestXmlHttpRequest {
   static requests: TestXmlHttpRequest[] = [];
 
   status = 0;
+  responseText = "";
   timeout = 0;
   method: string | null = null;
   url: string | null = null;
@@ -116,9 +117,14 @@ class TestXmlHttpRequest {
     this.progressListener?.({ lengthComputable: true, loaded, total });
   }
 
-  complete(status = 204): void {
+  complete(status = 204, responseText = ""): void {
     this.status = status;
+    this.responseText = responseText;
     this.listeners.get("load")?.();
+  }
+
+  fail(): void {
+    this.listeners.get("error")?.();
   }
 }
 
@@ -638,6 +644,31 @@ describe("attachmentUploadQueue", () => {
       },
       expect.anything(),
     );
+  });
+
+  it("reports why the server rejected or never received the bytes", async () => {
+    const rejected = makeImage("rejected");
+    startAttachmentUpload({ environmentId: firstEnvironment, image: rejected });
+    await Promise.resolve();
+    let settled = awaitAttachmentUploads([rejected.id]);
+    TestXmlHttpRequest.requests[0]!.complete(500, "Failed to persist upload: EACCES\n");
+    await settled;
+    expect(readAttachmentUpload(rejected.id)).toMatchObject({
+      status: "failed",
+      reason: "Upload rejected (HTTP 500): Failed to persist upload: EACCES",
+    });
+
+    const unreachable = makeImage("unreachable");
+    startAttachmentUpload({ environmentId: firstEnvironment, image: unreachable });
+    await Promise.resolve();
+    settled = awaitAttachmentUploads([unreachable.id]);
+    TestXmlHttpRequest.requests[1]!.fail();
+    await settled;
+    expect(readAttachmentUpload(unreachable.id)).toMatchObject({
+      status: "failed",
+      reason:
+        "Upload could not reach https://environment.test. The connection dropped or the request was blocked.",
+    });
   });
 
   it("restores the previous environment after a replacement upload fails", async () => {

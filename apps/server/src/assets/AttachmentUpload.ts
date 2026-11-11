@@ -266,7 +266,7 @@ export const storeAttachmentUpload = Effect.fn("AttachmentUpload.store")(functio
         Effect.as({
           ok: false,
           status: 500,
-          detail: "Failed to persist upload.",
+          detail: `Failed to persist upload: ${cause.message}`,
         } satisfies StoreAttachmentUploadResult),
       ),
     ),

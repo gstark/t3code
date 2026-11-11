@@ -477,7 +477,7 @@ export const layerAttachmentUploadRoute = HttpRouter.add(
     }
     const claims = yield* validateAttachmentUploadToken(token);
     if (!claims) {
-      return HttpServerResponse.text("Not Found", { status: 404 });
+      return HttpServerResponse.text("Upload link is invalid or expired.", { status: 404 });
     }
 
     const contentLengthHeader = request.headers["content-length"];

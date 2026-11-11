@@ -152,11 +152,21 @@ function uploadBytes(input: {
       if (xhr.status >= 200 && xhr.status < 300) {
         resolve();
       } else {
-        reject(new Error(`Upload rejected (${xhr.status})`));
+        const detail = xhr.responseText.trim().slice(0, 300);
+        reject(new Error(`Upload rejected (HTTP ${xhr.status})${detail ? `: ${detail}` : ""}`));
       }
     });
-    xhr.addEventListener("error", () => reject(new Error("Upload failed")));
-    xhr.addEventListener("timeout", () => reject(new Error("Upload timed out")));
+    // Browsers expose no detail for network errors, so name the server that could not be reached.
+    xhr.addEventListener("error", () =>
+      reject(
+        new Error(
+          `Upload could not reach ${new URL(input.url).origin}. The connection dropped or the request was blocked.`,
+        ),
+      ),
+    );
+    xhr.addEventListener("timeout", () =>
+      reject(new Error(`Upload timed out after ${UPLOAD_TIMEOUT_MS / 60_000} minutes`)),
+    );
     xhr.addEventListener("abort", () => reject(new Error("Upload cancelled")));
     xhr.send(input.file);
   });
@@ -333,7 +343,9 @@ async function runUpload(job: UploadJob): Promise<void> {
     environmentId: job.environmentId,
     reason:
       result.step === "mint"
-        ? "Upload could not start"
+        ? result.error instanceof Error && result.error.message
+          ? `Upload could not start: ${result.error.message}`
+          : "Upload could not start"
         : result.step === "resolve-url"
           ? readEnvironmentScope(job.environmentId, AuthOrchestrationOperateScope)
             ? "Not connected"
