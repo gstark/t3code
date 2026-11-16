@@ -20,7 +20,7 @@ import * as HostProcess from "@t3tools/shared/HostProcess";
 import { readTailscaleStatus } from "@t3tools/tailscale";
 import * as Cache from "effect/Cache";
 import * as Context from "effect/Context";
-import * as Data from "effect/Data";
+import * as Schema from "effect/Schema";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -294,7 +294,9 @@ interface PageResponse {
   readonly body: string;
 }
 
-class PageProbeError extends Data.TaggedError("PageProbeError")<{ readonly cause: unknown }> {}
+class PageProbeError extends Schema.TaggedError<PageProbeError>()("PageProbeError", {
+  cause: Schema.Defect(),
+}) {}
 
 /** One `GET` that accepts self-signed certificates and reads at most the page head. */
 const getPage = (url: URL) =>

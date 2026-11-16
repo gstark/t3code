@@ -11,7 +11,6 @@ import {
   buildCommitMessagePrompt,
   buildHistorySummaryPrompt,
   buildPrContentPrompt,
-  buildReplySuggestionPrompt,
   buildReviewGuidePrompt,
   buildThreadTitlePrompt,
 } from "./textGenerationPrompts.ts";
@@ -19,9 +18,10 @@ import {
   sanitizeCommitSubject,
   sanitizeHistorySummary,
   sanitizePrTitle,
-  sanitizeReplySuggestion,
   sanitizeThreadTitle,
 } from "./textGenerationUtils.ts";
+
+export const TranscriptionPostProcessingOutput = Schema.Struct({ transcription: Schema.String });
 
 export type Operation = keyof ProviderTextGeneration;
 
@@ -160,18 +160,6 @@ export function fromRunner(name: string, run: Runner): ProviderTextGeneration {
     };
   });
 
-  const generateReplySuggestion: ProviderTextGeneration["generateReplySuggestion"] = Effect.fn(
-    `${name}.generateReplySuggestion`,
-  )(function* (input) {
-    const generated = yield* run({
-      operation: "generateReplySuggestion",
-      cwd: input.cwd,
-      modelSelection: input.modelSelection,
-      ...buildReplySuggestionPrompt(input.message),
-    });
-    return { reply: sanitizeReplySuggestion(generated.reply) };
-  });
-
   const generateHistorySummary: ProviderTextGeneration["generateHistorySummary"] = Effect.fn(
     `${name}.generateHistorySummary`,
   )(function* (input) {
@@ -183,6 +171,16 @@ export function fromRunner(name: string, run: Runner): ProviderTextGeneration {
     });
     return { summary: sanitizeHistorySummary(generated.summary) };
   });
+  const generateTranscriptionPostProcessing: ProviderTextGeneration["generateTranscriptionPostProcessing"] =
+    Effect.fn(`${name}.generateTranscriptionPostProcessing`)(function* (input) {
+      return yield* run({
+        operation: "generateTranscriptionPostProcessing",
+        cwd: input.cwd,
+        prompt: input.prompt,
+        outputSchema: TranscriptionPostProcessingOutput,
+        modelSelection: input.modelSelection,
+      });
+    });
 
   const generateReviewGuide: ProviderTextGeneration["generateReviewGuide"] = Effect.fn(
     `${name}.generateReviewGuide`,
@@ -201,8 +199,8 @@ export function fromRunner(name: string, run: Runner): ProviderTextGeneration {
     generatePrContent,
     generateBranchName,
     generateThreadTitle,
-    generateReplySuggestion,
     generateHistorySummary,
     generateReviewGuide,
+    generateTranscriptionPostProcessing,
   } satisfies ProviderTextGeneration;
 }

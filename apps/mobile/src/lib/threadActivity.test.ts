@@ -369,50 +369,7 @@ function assistantMessage(updatedAt = "2026-06-20T00:00:03.000Z") {
   };
 }
 
-it("labels a command with the agent's stated intent", () => {
-  const item: OrchestrationV2TurnItem = { ...command(), intent: "Rerun the failed specs" };
-  const activity = buildThreadFeed([projected(item, 0)]).flatMap((entry) =>
-    entry.type === "activity-group" ? entry.activities : [],
-  )[0];
-
-  expect(activity?.summary).toBe("Rerun the failed specs");
-});
-
 describe("buildThreadFeed", () => {
-  it("shows each tool call as its own row when grouping is off", () => {
-    const commands = [1, 2, 3].map((index) =>
-      projected(
-        {
-          ...command(`2026-06-20T00:00:0${index}.000Z`),
-          id: TurnItemId.make(`item-command-${index}`),
-          ordinal: index,
-        },
-        index - 1,
-      ),
-    );
-    const feed = buildThreadFeed(commands);
-    const cache = createThreadFeedCache();
-    const present = (groupToolCalls: boolean) =>
-      deriveThreadFeedPresentation(
-        feed,
-        { runId, status: "running", startedAt: null, completedAt: null },
-        new Set(),
-        new Set(),
-        null,
-        false,
-        cache,
-        groupToolCalls,
-      ).map((entry) => entry.id);
-
-    expect(present(true)).toEqual(["work-toggle:work-group:local:thread-1:item-command-1"]);
-    expect(present(false)).toEqual([
-      "work-toggle:work-group:local:thread-1:item-command-1",
-      "work-toggle:work-group:local:thread-1:item-command-2",
-      "work-toggle:work-group:local:thread-1:item-command-3",
-    ]);
-    expect(present(true)).toEqual(["work-toggle:work-group:local:thread-1:item-command-1"]);
-  });
-
   it("keeps async answers in question history instead of user bubbles", () => {
     const requestId = RuntimeRequestId.make("question");
     const question: OrchestrationV2TurnItem = {
@@ -1299,6 +1256,90 @@ describe("buildThreadFeed", () => {
         startedAt,
       ),
     ).toEqual([]);
+  });
+  it("hides tool calls or everything but the final answer", () => {
+    const at = (second: number) => `2026-06-20T00:00:${String(second).padStart(2, "0")}.000Z`;
+    const say = (name: string, second: number, user = false, steer = false) => ({
+      ...(user ? userMessage(at(second)) : assistantMessage(at(second))),
+      id: TurnItemId.make(name),
+      messageId: MessageId.make(name),
+      text: name,
+      ...(steer ? { inputIntent: "steer" as const } : {}),
+    });
+    const ran = (name: string, second: number, status: "completed" | "failed") => ({
+      ...command(at(second)),
+      id: TurnItemId.make(name),
+      status,
+    });
+    const [user, step, passed, failed, final] = [
+      say("user", 1, true),
+      say("step", 2),
+      ran("passed", 3, "completed"),
+      ran("failed", 4, "failed"),
+      say("final", 5),
+    ];
+    const running = { runId, status: "running" as const, startedAt: at(1), completedAt: null };
+    const rows = (
+      items: ReadonlyArray<OrchestrationV2TurnItem>,
+      toolCallVisibility: "hideSuccessful" | "hideAll" | "zen",
+      latestRun: ThreadFeedLatestRun | null = null,
+    ) =>
+      deriveThreadFeedPresentation(
+        buildThreadFeed(items.map((item, index) => projected(item, index))),
+        latestRun,
+        new Set([runId]),
+        new Set(),
+        latestRun ? at(1) : null,
+        false,
+        undefined,
+        { toolCallVisibility, revealedMessageId: null },
+      ).map((row) =>
+        row.type === "activity-group"
+          ? row.activities.map((activity) => activity.projectedItem.item.id).join("+")
+          : row.type === "thinking"
+            ? `thinking:${row.label ?? ""}`
+            : row.type === "run-fold"
+              ? "fold"
+              : row.id,
+      );
+
+    const turn = [user, step, passed, failed, final];
+    expect(rows(turn, "hideSuccessful")).toEqual(["user", "fold", "step", "failed", "final"]);
+    expect(rows(turn, "hideAll")).toEqual(["user", "fold", "step", "final"]);
+    expect(rows(turn, "zen")).toEqual(["user", "final"]);
+    const [steer, answer] = [say("steer", 2, true, true), say("answer", 3)];
+    expect(rows([user, steer, answer, final], "zen")).toEqual(["user", "steer", "answer", "final"]);
+    expect(rows([user, steer, step, passed, final], "zen")).toEqual(["user", "steer", "final"]);
+    expect(rows([user, steer, answer, step], "zen", running)).toEqual([
+      "user",
+      "steer",
+      "answer",
+      "thinking:step",
+    ]);
+    expect(rows([user, step, passed], "zen", running)).toEqual(["user", "thinking:step"]);
+    expect(rows(turn, "zen", { ...running, turnEnded: true })).toEqual(["user", "final"]);
+    const nextRun = { ...running, runId: RunId.make("run-2") };
+    const followUp = { ...say("follow-up", 6, true), runId: nextRun.runId };
+    expect(rows([...turn, followUp], "zen", nextRun)).toEqual([
+      "user",
+      "final",
+      "follow-up",
+      "thinking:",
+    ]);
+    const wake: OrchestrationV2TurnItem = {
+      ...base("wake", at(6), 5),
+      runId: nextRun.runId,
+      type: "notification",
+      source: { kind: "background_task" },
+      outcome: "completed",
+      summary: "Task finished",
+    };
+    expect(rows([user, final, wake], "zen", nextRun)).toEqual([
+      "user",
+      "final",
+      "wake",
+      "thinking:",
+    ]);
   });
 });
 

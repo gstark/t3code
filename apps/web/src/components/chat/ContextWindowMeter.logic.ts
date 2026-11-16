@@ -1,88 +1,6 @@
-import type { ModelSelection, ProviderDriverKind, ProviderInstanceId } from "@t3tools/contracts";
-import {
-  CLAUDE_RESUME_COMPACTION_NEVER_ANSWER,
-  COMPACTION_SUGGESTION_MIN_TOKENS,
-  isClaudeResumeCompactionQuestion,
-} from "@t3tools/shared/claudeCompaction";
-import {
-  resolveSelectableProviderInstanceEntry,
-  type ProviderInstanceEntry,
-} from "../../providerInstances";
+import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/shell";
+import type { ModelSelection, ProviderInstanceId } from "@t3tools/contracts";
 import { getDisplayModelName, type ModelEsque } from "./providerIconUtils";
-
-// Fallback TTL: Claude's 1h cache plus slack.
-const CLAUDE_RESUME_COMPACTION_FALLBACK_MS = 70 * 60_000;
-
-export function providerSupportsManualCompaction(
-  provider: ProviderInstanceEntry | null | undefined,
-): boolean {
-  return provider?.snapshot.slashCommands.some((command) => command.name === "compact") ?? false;
-}
-
-export function hasAvailableCompactionProvider(input: {
-  readonly providers: ReadonlyArray<ProviderInstanceEntry>;
-  readonly driverKind: ProviderDriverKind;
-  readonly instanceId: ProviderInstanceId | null;
-  readonly lockedInstanceId: ProviderInstanceId | null;
-}): boolean {
-  const driverProviders = input.providers.filter(
-    (provider) => provider.driverKind === input.driverKind,
-  );
-  const lockedContinuationGroupKey = input.lockedInstanceId
-    ? driverProviders.find((provider) => provider.instanceId === input.lockedInstanceId)
-        ?.continuationGroupKey
-    : undefined;
-  const compatibleProviders = lockedContinuationGroupKey
-    ? driverProviders.filter(
-        (provider) => provider.continuationGroupKey === lockedContinuationGroupKey,
-      )
-    : driverProviders;
-
-  return providerSupportsManualCompaction(
-    resolveSelectableProviderInstanceEntry(compatibleProviders, input.instanceId ?? undefined),
-  );
-}
-
-export function hasDismissedResumeCompaction(
-  activities: ReadonlyArray<{ readonly kind: string; readonly payload: unknown }>,
-): boolean {
-  return activities.some((activity) => {
-    if (activity.kind !== "user-input.resolved") return false;
-    const payload = activity.payload;
-    if (!payload || typeof payload !== "object") return false;
-    const answers = (payload as { readonly answers?: unknown }).answers;
-    if (!answers || typeof answers !== "object" || Array.isArray(answers)) return false;
-
-    return Object.entries(answers).some(
-      ([question, answer]) =>
-        isClaudeResumeCompactionQuestion(question) &&
-        answer === CLAUDE_RESUME_COMPACTION_NEVER_ANSWER,
-    );
-  });
-}
-
-export function shouldOfferResumeCompaction(input: {
-  readonly provider: string | null | undefined;
-  readonly usedTokens: number | null | undefined;
-  readonly updatedAt: string | null | undefined;
-  readonly promptCacheTtlMs?: number | undefined;
-  readonly now: string;
-}): boolean {
-  if (
-    input.provider !== "claudeAgent" ||
-    (input.usedTokens ?? 0) < COMPACTION_SUGGESTION_MIN_TOKENS
-  ) {
-    return false;
-  }
-
-  const updatedAt = Date.parse(input.updatedAt ?? "");
-  const now = Date.parse(input.now);
-  return (
-    Number.isFinite(updatedAt) &&
-    Number.isFinite(now) &&
-    now - updatedAt >= (input.promptCacheTtlMs ?? CLAUDE_RESUME_COMPACTION_FALLBACK_MS)
-  );
-}
 
 export function resolveContextWindowModelDisplayName(
   selection: ModelSelection | null | undefined,
@@ -111,18 +29,24 @@ export function formatContextWindowCompactionMessage(
     : "Context compacts automatically when needed.";
 }
 
+export function threadShellHasStarted(
+  shell:
+    | Pick<EnvironmentThreadShell, "latestRun" | "latestUserMessageAt" | "runtime">
+    | null
+    | undefined,
+): boolean {
+  return Boolean(
+    shell &&
+    (shell.latestRun !== null || shell.latestUserMessageAt !== null || shell.runtime !== null),
+  );
+}
+
 export function shouldReserveContextWindowMeter(input: {
-  readonly meterEnabled: boolean;
-  readonly detailLoading: boolean;
-  readonly threadStarted: boolean;
+  /** A started thread whose detail is still loading. */
+  readonly threadLoading: boolean;
   readonly providerReportsContextWindow: boolean | null;
 }): boolean {
-  return (
-    input.meterEnabled &&
-    input.detailLoading &&
-    input.threadStarted &&
-    input.providerReportsContextWindow !== false
-  );
+  return input.threadLoading && input.providerReportsContextWindow !== false;
 }
 
 /**
@@ -142,7 +66,6 @@ export function resolveCompactDisabledReason(input: {
   readonly isRevertingCheckpoint: boolean;
   readonly hasPendingApproval: boolean;
   readonly hasPendingUserInput: boolean;
-  readonly hasPlanFollowUp: boolean;
   readonly feedbackUploading: boolean;
 }): string | null {
   if (!input.canOperateThread) return "This connection cannot change threads.";
@@ -158,7 +81,6 @@ export function resolveCompactDisabledReason(input: {
   if (input.isRevertingCheckpoint) return "Wait for the checkpoint restore to finish";
   if (input.hasPendingApproval) return "Answer the pending approval before compacting";
   if (input.hasPendingUserInput) return "Answer the agent's question before compacting";
-  if (input.hasPlanFollowUp) return "Respond to the plan before compacting";
   if (input.feedbackUploading) return "Wait for the feedback upload to finish";
   return null;
 }

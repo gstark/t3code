@@ -39,7 +39,10 @@ const make = Effect.gen(function* () {
 
   const keeps = Effect.fn("ThreadTempDirs.keeps")(
     function* (name: string) {
-      const threadId = yield* Effect.try(() => decodeURIComponent(name));
+      const threadId = yield* Effect.try({
+        try: () => decodeURIComponent(name),
+        catch: () => "malformed thread directory name",
+      });
       const thread = yield* projections.getThreadShell(ThreadId.make(threadId));
       return thread !== null && thread.archivedAt === null;
     },

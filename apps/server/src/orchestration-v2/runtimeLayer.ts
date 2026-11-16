@@ -1,5 +1,5 @@
+import * as WorktreeBranchSync from "./WorktreeBranchSync.ts";
 import * as GuestShareService from "../guest/GuestShareService.ts";
-import * as ThreadReplySuggestionService from "./ThreadReplySuggestionService.ts";
 import * as UsageLimitRecoveryWorker from "./UsageLimitRecoveryWorker.ts";
 import * as Scheduler from "../scheduling/Scheduler.ts";
 import * as Layer from "effect/Layer";
@@ -316,11 +316,6 @@ const layerThreadTitleRegenerationProvided = ThreadTitleRegenerationService.laye
     Layer.mergeAll(layerThreadManagementProvided, ProjectStore.layer, TextGeneration.layer),
   ),
 );
-const layerThreadReplySuggestionProvided = ThreadReplySuggestionService.layer.pipe(
-  Layer.provide(
-    Layer.mergeAll(layerThreadManagementProvided, ProjectStore.layer, TextGeneration.layer),
-  ),
-);
 const layerHistoryCollapseSummaryProvided = HistoryCollapseSummaryService.layer.pipe(
   Layer.provide(
     Layer.mergeAll(layerThreadManagementProvided, ProjectStore.layer, TextGeneration.layer),
@@ -369,7 +364,6 @@ const layerMcpAppRequestsProvided = McpAppRequests.layer.pipe(
 
 export const layer = Layer.mergeAll(
   layerCommandOutputHubProvided,
-  layerThreadReplySuggestionProvided,
   layerOrchestratorProvided,
   layerMcpAppRequestsProvided,
   layerThreadManagementProvided,
@@ -382,6 +376,9 @@ export const layer = Layer.mergeAll(
 );
 
 export const layerProduction = Layer.mergeAll(
+  WorktreeBranchSync.layer.pipe(
+    Layer.provide(Layer.merge(layerThreadManagementProvided, ProjectionStore.layer)),
+  ),
   layer.pipe(Layer.provide(layerProjectService)),
   layerProjectService,
   layerManagedProjectFoldersProvided,
